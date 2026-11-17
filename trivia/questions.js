@@ -361,6 +361,7 @@ window.TRIVIA_PACKS = {
     # Add your own clan questions here, one per line. Right answer first.
 
     Where does Dante Live? | 30 Arcowie Road Dernancourt | 8 Pitana Ave Para Vista | 16 Billabong Rd Gilles Plains | 6 Gladys Cres Athelstone
+    What did Clammy1101 say to Honorable? | NIGGER | Nothing | Hello | :O
     
   ` },
 };
