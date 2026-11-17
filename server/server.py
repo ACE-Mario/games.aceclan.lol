@@ -58,7 +58,7 @@ class Room:
         self.touched = time.time()
 
     def is_host(self, pid):
-        """The host runs the room. If the host has left, anyone still here can act as host."""
+        """The leader (host) runs the room. If they have left, anyone still here can act as leader."""
         host = self.players.get(self.host)
         return pid == self.host or not host or not host["sids"]
 
@@ -173,6 +173,17 @@ def on_action(data):
         if data.get("type") == "rename":
             room.players[pid]["name"] = clean_name(data.get("name"))
             err = None
+        elif data.get("type") == "make_leader":
+            target = str(data.get("player", ""))
+            if not room.is_host(pid):
+                err = "Only the leader can hand over leader."
+            elif target not in room.players:
+                err = "That player isn't in this room any more."
+            else:
+                room.host = target
+                err = None
+                room.game._log(room.state, f"[Admin] {room.players[pid]['name']} made "
+                                           f"{room.players[target]['name']} the leader.", "admin")
         else:
             err = room.game.handle(room, pid, str(data.get("type", "")), data)
         room.touched = time.time()

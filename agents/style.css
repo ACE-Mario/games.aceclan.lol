@@ -1,9 +1,13 @@
 /* Ace Agents. Layout: the board on the left, controls in a side panel; they stack on phones. */
 :root {
-  --neutral: #3a3f4d;
-  --neutral-text: #b9bdc8;
+  /* Team colours are far apart in hue AND brightness, so they read apart at a glance:
+     bright warm red vs deep blue-violet vs sandy bystander vs black bomb. */
+  --team-red: #ff3d52;
+  --team-purple: #5b2be0;
+  --neutral: #c8b48c;
+  --neutral-text: #3b3324;
   --bomb: #050507;
-  --card-face: #e9e4d8;
+  --card-face: #ece8de;
   --card-ink: #15171d;
 }
 
@@ -64,9 +68,10 @@
 
 /* Revealed cards */
 .card.revealed { box-shadow: none; transform: none; }
-.card.revealed.red { background: var(--red); color: #fff; }
-.card.revealed.purple { background: var(--purple); color: #fff; }
+.card.revealed.red { background: var(--team-red); color: #fff; }
+.card.revealed.purple { background: var(--team-purple); color: #fff; }
 .card.revealed.neutral { background: var(--neutral); color: var(--neutral-text); }
+.card.revealed.red .coord, .card.revealed.purple .coord { color: #fff; opacity: .7; }
 .card.revealed.bomb {
   background: repeating-linear-gradient(135deg, var(--bomb) 0 10px, #2a0a0e 10px 20px); color: var(--red);
   box-shadow: inset 0 0 0 2px var(--red);
@@ -76,10 +81,37 @@
 @keyframes flip { from { transform: rotateX(90deg); } to { transform: rotateX(0); } }
 
 /* Key shown on the board (spymaster mode, or after the game ends) */
-.grid.show-key .card:not(.revealed).red { background: color-mix(in srgb, var(--red) 34%, var(--card-face)); }
-.grid.show-key .card:not(.revealed).purple { background: color-mix(in srgb, var(--purple) 34%, var(--card-face)); }
-.grid.show-key .card:not(.revealed).neutral { background: #c9c5bb; }
-.grid.show-key .card:not(.revealed).bomb { background: #2b2b31; color: var(--red); }
+/* Unrevealed cards: strong tint plus a thick team-coloured frame. Revealed cards fade back
+   so the spymaster can see at a glance which agents are still out. */
+.grid.show-key .card:not(.revealed).red {
+  background: color-mix(in srgb, var(--team-red) 45%, var(--card-face));
+  box-shadow: inset 0 0 0 4px var(--team-red), 0 3px 0 #9d988c;
+}
+.grid.show-key .card:not(.revealed).purple {
+  background: color-mix(in srgb, var(--team-purple) 40%, var(--card-face));
+  box-shadow: inset 0 0 0 4px var(--team-purple), 0 3px 0 #9d988c;
+}
+.grid.show-key .card:not(.revealed).neutral { background: color-mix(in srgb, var(--neutral) 45%, var(--card-face)); }
+.grid.show-key .card:not(.revealed).bomb { background: #1a1a1f; color: var(--red); box-shadow: inset 0 0 0 4px var(--red); }
+.grid.show-key .card.revealed { opacity: .45; }
+
+/* Lobby: the board stays dark until the host presses Start game */
+.grid.unlit .card {
+  background: var(--card2); color: transparent; box-shadow: inset 0 0 0 1px var(--line); cursor: default;
+}
+.grid.unlit .card .coord { color: var(--muted); opacity: .6; }
+.grid.light-up .card { animation: light-up .55s ease-out both; animation-delay: calc(var(--i, 0) * 55ms); }
+@keyframes light-up {
+  0% { background: var(--card2); color: transparent; transform: rotateX(90deg); }
+  60% { filter: brightness(1.25); }
+  100% { transform: rotateX(0); filter: none; }
+}
+.lobby-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 10px 14px; border: 1px dashed var(--line); border-radius: var(--radius); background: var(--card);
+}
+.lobby-bar p { margin: 0; color: var(--muted); }
+.start-btn { font-size: 1.1rem; padding: 12px 22px; box-shadow: 0 0 18px color-mix(in srgb, var(--purple) 55%, transparent); }
 
 .board-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 #spyToggle[aria-pressed="true"] { border-color: var(--red); color: var(--red); }
@@ -127,8 +159,8 @@
   font: 700 clamp(.55rem, 2.4vw, .95rem)/1.05 var(--display); text-transform: uppercase; letter-spacing: .04em; overflow-wrap: anywhere;
 }
 .key-cell small { font: 600 .6rem/1 var(--body); opacity: .7; margin-bottom: 3px; }
-.key-cell.red, .sw.red { background: var(--red); color: #fff; }
-.key-cell.purple, .sw.purple { background: var(--purple); color: #fff; }
+.key-cell.red, .sw.red { background: var(--team-red); color: #fff; }
+.key-cell.purple, .sw.purple { background: var(--team-purple); color: #fff; }
 .key-cell.neutral, .sw.neutral { background: var(--neutral); color: var(--neutral-text); }
 .key-cell.bomb, .sw.bomb { background: var(--bomb); color: var(--red); box-shadow: inset 0 0 0 2px var(--red); }
 .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .9rem; color: var(--muted); }
@@ -141,7 +173,7 @@
   .status-main { font-size: 1.2rem; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .card, .card.just { transition: none; animation: none; }
+  .card, .card.just, .grid.light-up .card { transition: none; animation: none; }
 }
 
 /* ---- Start screen ---- */
@@ -193,3 +225,20 @@
 .seat.on { color: var(--text); background: var(--card2); border-color: var(--accent); }
 .seat:disabled { opacity: .4; cursor: not-allowed; }
 .watching { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* Leader controls */
+.tag.leader { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+.promote {
+  margin-left: auto; background: none; border: 1px solid var(--line); border-radius: 999px; cursor: pointer;
+  color: var(--muted); font: 600 .65rem/1 var(--body); letter-spacing: .5px; text-transform: uppercase; padding: 3px 7px;
+}
+.promote:hover { color: var(--text); border-color: var(--accent); }
+.seat.random { border-color: color-mix(in srgb, var(--gold) 45%, var(--line)); color: var(--gold); }
+
+/* Admin panel and locked teams */
+.admin-box { border-color: color-mix(in srgb, var(--gold) 45%, var(--line)); }
+.admin-box h2 { color: var(--gold); }
+.admin-box select { width: 100%; }
+.lock-note { margin: 0; color: var(--gold); }
+.log li.admin { color: var(--gold); }
+.log li.admin::before { background: var(--gold); }

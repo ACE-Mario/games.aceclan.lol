@@ -35,9 +35,16 @@ stops both. Rooms live in memory, so restarting the server ends any games in pro
 
 ## Online rooms
 
-The room creator is the host: they can start a new game, shuffle teams and undo. If the host leaves, anyone
-still in the room can do those. Players get a random id saved in their browser, so refreshing the page puts them
-back in the same seat. Rooms close after 6 hours without activity.
+The room creator is the **leader** (called "host" in the code). Each game starts in a lobby with the board dark;
+players pick a team (or press Random team) and the leader presses **Start game** to light up the board.
+
+Once a game starts, teams are locked: players can't switch. The leader's **Admin panel** can still move anyone
+to any team or role, or hand over leader, and every admin action is written to the game log as `[Admin] ...`
+so everyone can see it. The leader can also deal a new game (back to the lobby, teams kept), make random teams
+(lobby only) and undo. If the leader leaves, anyone still in the room can do those.
+
+Players who join mid-game start out watching until the leader moves them in. Players get a random id saved in
+their browser, so refreshing the page puts them back in the same seat. Rooms close after 6 hours without activity.
 
 ## Adding another game
 

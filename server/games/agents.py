@@ -53,14 +53,21 @@ class Agents:
         random.shuffle(roles)
         return {
             "pack": pack, "words": words, "roles": roles, "first": first,
-            "revealed": [], "turn": first, "clue": None, "left": None,
-            "log": [{"text": f"New board. {NAMES[first]} goes first with 9 agents.", "kind": first}],
+            "revealed": [], "turn": first, "clue": None, "left": None, "started": False,
+            "log": [{"text": "New board dealt. Pick your teams, then the leader starts the game.", "kind": ""}],
             "winner": None, "reason": "", "history": [],
         }
 
     # ---- Seats ---------------------------------------------------------------------------
+    def locked(self, s):
+        """Teams are locked from Start game until the game ends."""
+        return s.get("started") and not s.get("winner")
+
     def default_seat(self, room):
-        """Put a new player on the smaller team as an operative."""
+        """Put a new player on the smaller team as an operative. During a game, they watch
+        until the leader puts them on a team with the admin panel."""
+        if self.locked(room.state):
+            return {"team": None, "role": None}
         counts = {t: sum(1 for p in room.players.values() if p.get("team") == t) for t in TEAMS}
         team = min(TEAMS, key=lambda t: (counts[t], random.random()))
         return {"team": team, "role": "operative"}
@@ -107,11 +114,41 @@ class Agents:
         me = room.players[pid]
         team, role, name = me.get("team"), me.get("role"), me["name"]
 
+        if action == "admin_seat":
+            # Leader-only force move. Allowed any time, and always written to the log.
+            if not room.is_host(pid):
+                return "Only the leader can use the admin panel."
+            target = room.players.get(str(data.get("player", "")))
+            want_team, want_role = data.get("team"), data.get("role")
+            if not target:
+                return "That player isn't in this room any more."
+            if want_team is not None and (want_team not in TEAMS or want_role not in ROLES):
+                return "Pick a team and a role."
+            if want_role == "spymaster" and want_team:
+                for q, p in room.players.items():
+                    if p is not target and p.get("team") == want_team and p.get("role") == "spymaster":
+                        p["role"] = "operative"
+                        self._log(s, f"[Admin] {name} moved {p['name']} to {NAMES[want_team]} operative.", "admin")
+            target["team"], target["role"] = (want_team, want_role) if want_team else (None, None)
+            where = f"{NAMES[want_team]} {want_role}" if want_team else "watching"
+            self._log(s, f"[Admin] {name} moved {target['name']} to {where}.", "admin")
+            return None
+
+        if action == "seat" and self.locked(s):
+            return "Teams are locked while the game is on. Ask the leader if you need to switch."
+
         if action == "seat":
             want_team = data.get("team")
             want_role = data.get("role")
             if want_team is None:
                 me["team"], me["role"] = None, None
+                return None
+            if want_team == "random":
+                # Join whichever team has fewer players (a coin flip if they're even).
+                counts = {t: sum(1 for q, p in room.players.items() if q != pid and p.get("team") == t)
+                          for t in TEAMS}
+                me["team"] = min(TEAMS, key=lambda t: (counts[t], random.random()))
+                me["role"] = "operative"
                 return None
             if want_team not in TEAMS or want_role not in ROLES:
                 return "Pick a team and a role."
@@ -125,20 +162,22 @@ class Agents:
 
         if action == "shuffle":
             if not room.is_host(pid):
-                return "Only the host can shuffle teams."
+                return "Only the leader can make random teams."
+            if self.locked(s):
+                return "Teams are locked while the game is on. Use the admin panel to move someone."
             self.shuffle_teams(room)
-            self._log(s, f"{name} shuffled the teams.")
+            self._log(s, f"{name} made random teams.")
             return None
 
         if action == "new_game":
             if not room.is_host(pid):
-                return "Only the host can start a new game."
+                return "Only the leader can deal a new game."
             room.state = self.new_state(data, old=s)
             return None
 
         if action == "undo":
             if not room.is_host(pid):
-                return "Only the host can undo."
+                return "Only the leader can undo."
             if not s["history"]:
                 return "Nothing to undo."
             prev = s["history"].pop()
@@ -147,8 +186,26 @@ class Agents:
             self._log(room.state, f"{name} undid the last move.")
             return None
 
+        if action == "start":
+            if not room.is_host(pid):
+                return "Only the leader can start the game."
+            if s["started"]:
+                return "The game has already started."
+            for t in TEAMS:
+                members = [p for p in room.players.values() if p.get("team") == t]
+                if not any(p.get("role") == "spymaster" for p in members):
+                    return f"{NAMES[t]} needs a spymaster before you can start."
+                if not any(p.get("role") == "operative" for p in members):
+                    return f"{NAMES[t]} needs at least one operative before you can start."
+            s["started"] = True
+            self._log(s, f"Game started. {NAMES[s['first']]} goes first with 9 agents.", s["first"])
+            return None
+
+        if not s["started"]:
+            return "The game hasn't started yet. Waiting for the leader."
+
         if s["winner"]:
-            return "This game is over. The host can start a new one."
+            return "This game is over. The leader can deal a new one."
 
         if action == "clue":
             if team != s["turn"] or role != "spymaster":
@@ -224,14 +281,16 @@ class Agents:
     def view(self, room, pid):
         s = room.state
         me = room.players.get(pid, {})
-        show_key = bool(s["winner"]) or me.get("role") == "spymaster" and me.get("team") in TEAMS
+        started = s.get("started", True)
+        show_key = started and (bool(s["winner"]) or me.get("role") == "spymaster" and me.get("team") in TEAMS)
         cards = []
         for i, w in enumerate(s["words"]):
             revealed = i in s["revealed"]
-            cards.append({"word": w, "revealed": revealed, "role": s["roles"][i] if revealed or show_key else None})
+            cards.append({"word": w if started else "", "revealed": revealed,
+                          "role": s["roles"][i] if revealed or show_key else None})
         return {
             "pack": s["pack"], "packs": {k: v["name"] for k, v in load_packs().items()},
-            "cards": cards, "showKey": show_key, "first": s["first"], "turn": s["turn"],
+            "cards": cards, "showKey": show_key, "started": started, "locked": bool(self.locked(s)), "first": s["first"], "turn": s["turn"],
             "clue": s["clue"], "left": s["left"], "winner": s["winner"], "reason": s["reason"],
             "log": s["log"][-60:], "canUndo": bool(s["history"]),
             "remaining": {t: self.left_for(s, t) for t in TEAMS},

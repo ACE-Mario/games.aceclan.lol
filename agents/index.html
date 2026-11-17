@@ -71,6 +71,10 @@
     </div>
     <div id="grid" class="grid"></div>
     <p id="actionError" class="error" hidden></p>
+    <div id="lobbyBar" class="lobby-bar" hidden>
+      <p id="lobbyText" class="small"></p>
+      <button id="startGame" class="btn primary start-btn" type="button" hidden>Start game</button>
+    </div>
     <div class="board-actions">
       <button id="endTurn" class="btn" type="button">End turn</button>
       <button id="undo" class="btn" type="button">Undo</button>
@@ -145,22 +149,47 @@
           </div>
         </div>
       </div>
+      <div class="row">
+        <button class="seat random" type="button" data-seat="random">Random team</button>
+        <button class="seat" type="button" data-seat="watch">Just watch</button>
+      </div>
+      <p id="lockNote" class="lock-note small" hidden>Teams are locked while the game is on. Only the leader can move players, from the admin panel.</p>
       <div class="watching">
         <span class="small muted">Watching</span>
         <ul id="watchers" class="players inline"></ul>
-        <button class="seat" type="button" data-seat="watch">Just watch</button>
       </div>
     </div>
 
     <div id="hostBox" class="box only-online" hidden>
-      <h2>Host</h2>
+      <h2>Leader</h2>
       <div class="row">
         <label class="small muted" for="roomPack">Words</label>
         <select id="roomPack"></select>
         <button id="newGame" class="btn" type="button">New game</button>
       </div>
-      <button id="shuffleTeams" class="btn" type="button">Shuffle teams</button>
-      <p class="muted small">New game keeps everyone's teams. Shuffle splits everyone online into two teams and picks spymasters.</p>
+      <button id="shuffleTeams" class="btn" type="button">Random teams for everyone</button>
+      <p class="muted small">New game deals a fresh board and keeps everyone's teams; press Start game when you're ready. Random teams splits everyone online into two teams and picks spymasters (only before the game starts).</p>
+    </div>
+
+    <div id="adminBox" class="box admin-box only-online" hidden>
+      <h2>Admin panel</h2>
+      <p class="muted small">Force-move a player or hand over leader, even mid-game. Everything you do here shows in the log for everyone.</p>
+      <label class="field" for="adminPlayer">Player
+        <select id="adminPlayer"></select>
+      </label>
+      <label class="field" for="adminSeat">Move to
+        <select id="adminSeat">
+          <option value="red:operative">Red operative</option>
+          <option value="red:spymaster">Red spymaster</option>
+          <option value="purple:operative">Purple operative</option>
+          <option value="purple:spymaster">Purple spymaster</option>
+          <option value="watch">Watching</option>
+        </select>
+      </label>
+      <div class="row">
+        <button id="adminMove" class="btn" type="button">Move player</button>
+        <button id="adminLeader" class="btn" type="button">Make leader</button>
+      </div>
     </div>
 
     <!-- One screen: game code and links -->
