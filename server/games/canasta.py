@@ -62,6 +62,7 @@ class Canasta(SeatedGame):
     min_players = 2
     max_players = 4
     teams = {"A": "Team A", "B": "Team B"}
+    bots = True
     lobby_text = "Take a seat: 4 players play in two teams of 2; 2 or 3 play for themselves."
     options = {
         "target": [("5000", "First to 5,000"), ("2500", "First to 2,500"), ("1500", "First to 1,500")],
@@ -419,6 +420,118 @@ class Canasta(SeatedGame):
         s["turn"] = (seat + 1) % len(s["seats"])
         s["phase"] = "draw"
         s["melded_before"] = s["melded"][s["turn"]]
+
+    # ---- Bots --------------------------------------------------------------------------------
+    def _bot_sets(self, s, seat):
+        """Natural cards in hand grouped by rank, the wild cards, and this side's melds."""
+        hand = s["hands"][seat]
+        by = {}
+        for c in hand:
+            if not wild(c) and rank(c) in NATURAL:
+                by.setdefault(rank(c), []).append(c)
+        wilds = [c for c in hand if wild(c)]
+        melded = {m["rank"]: m for m in s["melds"][self.side(s, seat)]}
+        return by, wilds, melded
+
+    def _bot_groups(self, s, seat, use_wilds):
+        """Melds the bot could make: new sets of 3+, additions to its melds, and (when it needs
+        points for a first meld) pairs and sets padded with wild cards."""
+        by, wilds, melded = self._bot_sets(s, seat)
+        wilds = list(wilds)
+        groups = []
+        for r, cs in sorted(by.items(), key=lambda kv: -len(kv[1])):
+            if r in melded or len(cs) >= 3:
+                groups.append({"cards": list(cs)})
+            elif use_wilds and len(cs) == 2 and wilds:
+                groups.append({"cards": cs + [wilds.pop()]})
+        if use_wilds:
+            for g in groups:
+                nat = sum(1 for c in g["cards"] if not wild(c))
+                while wilds and sum(1 for c in g["cards"] if wild(c)) < min(3, nat):
+                    g["cards"].append(wilds.pop())
+        return groups
+
+    def _bot_take(self, room, s, seat):
+        if not s["pile"]:
+            return False
+        top = s["pile"][-1]
+        if wild(top) or rank(top) not in NATURAL:
+            return False
+        by, wilds, melded = self._bot_sets(s, seat)
+        r = rank(top)
+        nats = by.get(r, [])
+        frozen = self.frozen(s) or not melded
+        tries = []
+        if len(nats) >= 2:
+            tries.append([{"cards": [top] + nats}])
+        if not frozen and r in melded:
+            tries.append([{"cards": [top], "rank": r}])
+        if not frozen and len(nats) == 1 and wilds:
+            tries.append([{"cards": [top, nats[0], wilds[0]]}])
+        for base in tries:
+            used = {c for g in base for c in g["cards"]}
+            for extra_wilds in (False, True):
+                more = [g for g in self._bot_groups(s, seat, extra_wilds)
+                        if not any(c in used for c in g["cards"]) and rank(g["cards"][0]) != r]
+                for groups in (base, base + more):
+                    if self.play(room, s, seat, "take", {"groups": groups}) is None:
+                        return True
+        return False
+
+    def _bot_meld(self, room, s, seat):
+        sd = self.side(s, seat)
+        for use_wilds in (False, True):
+            groups = self._bot_groups(s, seat, use_wilds)
+            # Try everything, then drop the smallest groups one at a time until it's allowed.
+            groups.sort(key=lambda g: -len(g["cards"]))
+            while groups:
+                if self.play(room, s, seat, "meld", {"groups": groups}) is None:
+                    break
+                groups = groups[:-1]
+            if s["melds"][sd] or s["phase"] != "play":
+                break
+        # Finish off a canasta with wild cards when a meld is close.
+        if s["phase"] == "play" and s["melds"][sd]:
+            by, wilds, melded = self._bot_sets(s, seat)
+            for m in sorted(s["melds"][sd], key=lambda m: -len(m["cards"])):
+                need = 7 - len(m["cards"])
+                if 0 < need <= len(wilds) and len(s["hands"][seat]) - need >= 2:
+                    if self.play(room, s, seat, "meld", {"groups": [{"cards": wilds[:need], "rank": m["rank"]}]}) is None:
+                        break
+
+    def _bot_discard(self, room, s, seat):
+        hand = s["hands"][seat]
+        n = len(s["seats"])
+        nxt_side = self.side(s, (seat + 1) % n)
+        theirs = {m["rank"] for m in s["melds"][nxt_side]} if nxt_side != self.side(s, seat) else set()
+        counts = {}
+        for c in hand:
+            counts[rank(c)] = counts.get(rank(c), 0) + 1
+
+        def keep(c):
+            if black3(c):
+                return -100                                  # blocks the pile for the next player
+            if wild(c):
+                return 100
+            score = 20 * (counts[rank(c)] - 1)
+            if rank(c) in theirs and not self.frozen(s):
+                score += 40                                  # don't hand them the pile
+            return score - value(c) / 100
+        card = min(hand, key=keep)
+        return self.play(room, s, seat, "discard", {"card": card})
+
+    def bot_seat(self, room, s):
+        return None if s.get("phase") == "between" else super().bot_seat(room, s)
+
+    def bot_move(self, room, s, seat):
+        if s["phase"] == "draw":
+            if self._bot_take(room, s, seat):
+                return None
+            return self.play(room, s, seat, "draw", {})
+        self._bot_meld(room, s, seat)
+        if s["phase"] != "play" or s["turn"] != seat:       # went out while melding
+            return None
+        return self._bot_discard(room, s, seat)
 
     def skip_label(self, room, s):
         if s.get("phase") == "between":

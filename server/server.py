@@ -60,11 +60,14 @@ class Room:
     def is_host(self, pid):
         """The leader (host) runs the room. If they have left, anyone still here can act as leader."""
         host = self.players.get(self.host)
+        if self.players.get(pid, {}).get("bot"):
+            return False
         return pid == self.host or not host or not host["sids"]
 
     def public_players(self):
         return [{"id": pid, "name": p["name"], "team": p.get("team"), "role": p.get("role"),
-                 "online": bool(p["sids"])} for pid, p in self.players.items()]
+                 "online": bool(p["sids"]) or bool(p.get("bot")), "bot": bool(p.get("bot"))}
+                for pid, p in self.players.items()]
 
 
 rooms = {}
@@ -199,6 +202,8 @@ def on_action(data):
                 err = "Only the leader can hand over leader."
             elif target not in room.players:
                 err = "That player isn't in this room any more."
+            elif room.players[target].get("bot"):
+                err = "A bot can't be the leader."
             else:
                 room.host = target
                 err = None

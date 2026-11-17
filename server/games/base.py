@@ -14,6 +14,10 @@ A game subclasses SeatedGame and fills in:
     skip(room, s)   optional: the leader's "Skip turn" for someone who has gone away
 """
 import random
+import string
+import time
+
+BOT_DELAY = 1.2           # seconds a bot waits before each move, so people can follow along
 
 
 class SeatedGame:
@@ -23,6 +27,7 @@ class SeatedGame:
     max_players = 6
     teams = None          # e.g. {"A": "Team A", "B": "Team B"} for partnership games
     late_join = False     # True: people can take a seat while a game is running (trivia)
+    bots = False          # True: the leader can add computer players (the game writes bot_move)
     options = {}
     lobby_text = "Take a seat, then the leader starts the game."
 
@@ -125,6 +130,11 @@ class SeatedGame:
                 self.joined(room, s, pid)
             return None
 
+        if action == "add_bot":
+            if not leader:
+                return "Only the leader can add bots."
+            return self.add_bot(room, s, name, data)
+
         if action in ("admin_seat", "admin_give_seat", "admin_skip", "admin_end"):
             if not leader:
                 return "Only the leader can use the admin panel."
@@ -136,6 +146,10 @@ class SeatedGame:
             if self.in_game(s) and not self.late_join:
                 return "The game is on. Use Give seat to swap someone in for a player."
             play = bool(data.get("play"))
+            if target.get("bot") and not play:              # a bot sent to watch just leaves
+                del room.players[str(data.get("player"))]
+                self._log(s, f"[Admin] {name} removed {target['name']}.", "admin")
+                return None
             if play and target.get("role") != "player" and len(self.playing(room)) >= self.max_players:
                 return f"All {self.max_players} seats are taken."
             target["role"] = "player" if play else None
@@ -172,6 +186,8 @@ class SeatedGame:
             if old:
                 target["team"] = old.get("team")
                 old["role"], old["team"] = None, None
+                if old.get("bot"):
+                    room.players.pop(next(q for q, p in room.players.items() if p is old), None)
             self._log(s, f"[Admin] {name} gave {old_name}'s seat to {target['name']}.", "admin")
             return None
 
@@ -233,6 +249,86 @@ class SeatedGame:
         # Late-join games (trivia) keep scores by player id, the others by seat number.
         return self.play(room, s, pid if self.late_join else seat, action, data)
 
+    # ---- Bots ----------------------------------------------------------------------------
+    def is_bot(self, room, pid):
+        return bool(room.players.get(pid, {}).get("bot"))
+
+    def add_bot(self, room, s, leader_name, data):
+        """Add a computer player: to a free seat in the lobby, or mid-game into seat `seat`
+        (taking over from someone who has gone away)."""
+        if not self.bots:
+            return f"{self.name} doesn't have bots."
+        if len(room.players) >= 30:
+            return "This room is full."
+        taken = {p["name"] for p in room.players.values()}
+        n = 1
+        while f"Bot {n}" in taken:
+            n += 1
+        pid = "bot" + "".join(random.choice(string.ascii_letters) for _ in range(12))
+        bot = {"name": f"Bot {n}", "sids": set(), "bot": True, "role": None, "team": None}
+        if self.in_game(s):
+            try:
+                seat = int(data.get("seat"))
+            except (TypeError, ValueError):
+                return "Pick the seat the bot should take over."
+            if not 0 <= seat < len(s["seats"]):
+                return "Pick the seat the bot should take over."
+            old_pid = s["seats"][seat]
+            old = room.players.get(old_pid)
+            old_name = self.seat_name(room, s, seat)
+            bot["role"] = "player"
+            room.players[pid] = bot
+            s["seats"][seat] = pid
+            if old:
+                bot["team"] = old.get("team")
+                old["role"], old["team"] = None, None
+                if old.get("bot"):
+                    del room.players[old_pid]
+            self._log(s, f"[Admin] {leader_name} gave {old_name}'s seat to {bot['name']}.", "admin")
+            return None
+        if len(self.playing(room)) >= self.max_players:
+            return f"All {self.max_players} seats are taken."
+        bot["role"] = "player"
+        team = data.get("team")
+        bot["team"] = (team if team in self.teams else self.pick_team(room)) if self.teams else None
+        room.players[pid] = bot
+        where = f" to {self.teams[bot['team']]}" if self.teams else ""
+        self._log(s, f"{leader_name} added {bot['name']}{where}.")
+        return None
+
+    def bot_seat(self, room, s):
+        """The seat a bot should move for now, or None. Games with simultaneous turns override it."""
+        turn = s.get("turn")
+        if isinstance(turn, int) and 0 <= turn < len(s["seats"]) and self.is_bot(room, s["seats"][turn]):
+            return turn
+        return None
+
+    def tick(self, room, now):
+        """Play bots' turns, one move every BOT_DELAY seconds."""
+        s = room.state
+        if not self.bots or not self.in_game(s):
+            return False
+        seat = self.bot_seat(room, s)
+        if seat is None:
+            s.pop("bot_key", None)
+            return False
+        key = [seat, s.get("phase"), len(s["log"]), s["log"][-1]["text"] if s["log"] else ""]
+        if s.get("bot_key") != key:
+            s["bot_key"] = key
+            s["bot_due"] = now + BOT_DELAY
+            return False
+        if now < s.get("bot_due", 0):
+            return False
+        s.pop("bot_key", None)
+        err = self.bot_move(room, s, seat)
+        if err:                                   # a bot should never get stuck: skip it instead
+            self._log(s, f"{self.seat_name(room, s, seat)} is stuck ({err}) and skips.", "bad")
+            self.skip(room, s)
+        return True
+
+    def bot_move(self, room, s, seat):
+        return "This game has no bots."
+
     # ---- Hooks (games override these) ----------------------------------------------------
     def begin(self, room, s):
         return None
@@ -268,11 +364,12 @@ class SeatedGame:
             "options": s["options"],
             "choices": {k: [[str(v), label] for v, label in c] for k, c in self.options.items()},
             "seats": [{"id": q, "name": room.players.get(q, {}).get("name", "Someone"),
-                       "online": bool(room.players.get(q, {}).get("sids")),
+                       "online": bool(room.players.get(q, {}).get("sids")) or self.is_bot(room, q),
+                       "bot": self.is_bot(room, q),
                        "team": room.players.get(q, {}).get("team")} for q in s["seats"]],
             "mySeat": seat, "log": s["log"][-80:],
             "minPlayers": self.min_players, "maxPlayers": self.max_players,
-            "teams": self.teams, "lateJoin": self.late_join,
+            "teams": self.teams, "lateJoin": self.late_join, "botsAllowed": self.bots,
         }
         out.update(self.game_view(room, s, pid if self.late_join else seat))
         return out

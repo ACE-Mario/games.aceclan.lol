@@ -142,7 +142,10 @@ window.AceRoom = (() => {
       <p id="connNote" class="conn-note" hidden></p>
       <div id="lobbyBar" class="lobby-bar" hidden>
         <p id="lobbyText" class="small"></p>
-        <button id="startGame" class="btn primary start-btn" type="button" hidden>Start game</button>
+        <div class="actions">
+          <button id="addBot" class="btn" type="button" hidden>Add bot</button>
+          <button id="startGame" class="btn primary start-btn" type="button" hidden>Start game</button>
+        </div>
       </div>
       <p id="actionError" class="error" role="alert" hidden></p>`;
     col.prepend(top);
@@ -185,13 +188,14 @@ window.AceRoom = (() => {
         <label class="field" for="adminPlayer">Player <select id="adminPlayer"></select></label>
         <div class="row" id="adminLobbyRow">
           <button id="adminSeatIn" class="btn" type="button">Give a seat</button>
-          <button id="adminSeatOut" class="btn" type="button">Move to watching</button>
+          <button id="adminSeatOut" class="btn" type="button" title="A bot moved to watching leaves the room">Move to watching</button>
         </div>
         <div id="adminTeamRow" class="row" hidden></div>
         <div class="row" id="adminGameRow">
           <label class="sr" for="adminSeatPick">Seat</label>
           <select id="adminSeatPick"></select>
           <button id="adminGive" class="btn" type="button">Take this seat</button>
+          <button id="adminBot" class="btn" type="button" hidden>Give it to a bot</button>
         </div>
         <div class="row">
           <button id="adminSkip" class="btn" type="button" hidden>Skip turn</button>
@@ -258,6 +262,8 @@ window.AceRoom = (() => {
 
     // ---- Panel controls ----
     $("startGame").addEventListener("click", () => send("start", { options: hostOptions() }));
+    $("addBot").addEventListener("click", () => send("add_bot"));
+    $("adminBot").addEventListener("click", () => send("add_bot", { seat: $("adminSeatPick").value }));
     $("newGame").addEventListener("click", () => send("new_game", { options: hostOptions() }));
     const adminTarget = () => $("adminPlayer").value;
     $("adminSeatIn").addEventListener("click", () => adminTarget() && send("admin_seat", { player: adminTarget(), play: true }));
@@ -329,6 +335,7 @@ window.AceRoom = (() => {
       const seated = s.players.filter(p => p.role === "player");
       $("lobbyBar").hidden = inGame;
       $("startGame").hidden = !s.isHost;
+      $("addBot").hidden = !(s.isHost && s.botsAllowed && seated.length < s.maxPlayers);
       $("startGame").textContent = s.over ? "Play again" : "Start game";
       if (!inGame) {
         const need = s.minPlayers - seated.length;
@@ -442,7 +449,8 @@ window.AceRoom = (() => {
         const pick = $("adminSeatPick");
         const keepSeat = pick.value;
         pick.innerHTML = "";
-        s.seats.forEach((x, i) => pick.add(new Option(`Seat ${i + 1}: ${x.name}${x.online ? "" : " (away)"}`, i)));
+        s.seats.forEach((x, i) => pick.add(new Option(`Seat ${i + 1}: ${x.name}${x.bot ? " (bot)" : x.online ? "" : " (away)"}`, i)));
+        $("adminBot").hidden = !s.botsAllowed;
         if ([...pick.options].some(o => o.value === keepSeat)) pick.value = keepSeat;
         $("adminSkip").hidden = !(cfg.canSkip && inGame);
         $("adminEnd").hidden = !inGame;
@@ -464,13 +472,14 @@ window.AceRoom = (() => {
       if (seat != null && s.teams && p.team) tags.push([s.teams[p.team], "team"]);
       if (p.id === s.host) tags.push(["leader", "leader"]);
       if (p.id === s.you) tags.push(["you", "you"]);
-      if (p.online === false) tags.push(["away", "away"]);
+      if (p.bot) tags.push(["bot", "bot"]);
+      else if (p.online === false) tags.push(["away", "away"]);
       for (const [t, c] of tags) li.appendChild(el("small", "tag " + c, t));
       if (seat != null && cfg.seatTag) {
         const extra = cfg.seatTag(seat, s);
         if (extra) li.appendChild(el("small", "seat-extra", extra));
       }
-      if (s.isHost && p.id !== s.you && p.id !== s.host) {
+      if (s.isHost && p.id !== s.you && p.id !== s.host && !p.bot) {
         const b = el("button", "promote", "Make leader");
         b.type = "button";
         b.title = `Make ${p.name} the leader`;

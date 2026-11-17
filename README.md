@@ -66,7 +66,9 @@ their browser, so refreshing the page puts them back in the same seat. Rooms clo
 Poker, trivia, canasta and snakes & ladders share one lobby and room panel (`shared/room.js`,
 `server/games/base.py`). Players take a seat or watch; the leader picks the settings and presses **Start game**,
 which fixes the seat order. Mid-game, seats are locked: the leader's admin panel can hand an away player's seat to
-someone watching, skip a turn, or end the game, and each of these is logged as `[Admin] ...`. In Clan Trivia,
+someone watching, skip a turn, or end the game, and each of these is logged as `[Admin] ...`. In Snakes & Ladders, Ace Poker Night and Canasta
+the leader can **Add bot** in the lobby, or hand an away player's seat to a bot from the admin panel; bots
+play from the server (`bot_move` in each game's rules), and a bot moved to watching leaves. In Clan Trivia,
 anyone can take a seat mid-quiz and starts on 0 points. Hidden things (cards in hand, the trivia answer before
 time's up) never leave the server except to the player allowed to see them.
 

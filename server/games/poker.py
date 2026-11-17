@@ -87,6 +87,7 @@ class Poker(SeatedGame):
     name = "Ace Poker Night"
     min_players = 2
     max_players = 9
+    bots = True
     lobby_text = "Take a seat (2 to 9 players), then the leader deals the first hand. Points only, no real money."
     options = {
         "stack": [("1000", "1,000 points each"), ("500", "500 points each"), ("2000", "2,000 points each"),
@@ -300,7 +301,80 @@ class Poker(SeatedGame):
         if self.in_game(s) and s.get("phase") == "between" and s.get("next_at") and now >= s["next_at"]:
             self._deal(room, s)
             return True
-        return False
+        return super().tick(room, now)          # bots' turns
+
+    # ---- Bots --------------------------------------------------------------------------------
+    def _strength(self, hole, board):
+        """Roughly how good a hand is, from 0 (hopeless) to 1 (the nuts)."""
+        a, b = sorted((RANKS.index(c[0]) for c in hole), reverse=True)
+        if not board:
+            if a == b:
+                return 0.5 + a / 24                       # 22 = 0.5 ... AA = 1.0
+            st = (a + b) / 24 * 0.6
+            if hole[0][1] == hole[1][1]:
+                st += 0.08
+            if a - b == 1:
+                st += 0.05
+            return st
+        score = best_hand(hole + board)[0]
+        cat = score[0]
+        if len(board) == 5 and best_hand(board)[0][0] >= cat:
+            return 0.25                                   # the board is doing all the work
+        if cat >= 4:
+            return 0.9
+        if cat == 3:
+            return 0.8
+        if cat == 2:
+            return 0.7
+        if cat == 1:
+            pair = score[1]
+            if pair in (a, b):
+                return 0.45 + pair / 12 * 0.2
+            return 0.25
+        return 0.12 + a / 12 * 0.1
+
+    def bot_move(self, room, s, i):
+        owe = max(0, s["to_call"] - s["bet"][i])
+        stack = s["chips"][i]
+        pot = sum(s["put"])
+        big = s["big"]
+        st = self._strength(s["hands"][i], s["board"]) + random.uniform(-0.05, 0.05)
+        blocked = bool(s.get("no_reraise")) and i in s["no_reraise"] and s["acted"][i]
+        can_raise = stack > owe and not blocked
+        r = random.random()
+
+        def raise_by(frac):
+            target = s["to_call"] + max(s["min_raise"], int(pot * frac))
+            step = max(1, big // 2)
+            target = -(-target // step) * step
+            if target >= s["bet"][i] + stack:
+                return self.play(room, s, i, "allin", {})
+            return self.play(room, s, i, "raise", {"to": target})
+
+        def passive():
+            return self.play(room, s, i, "check" if owe == 0 else "call", {})
+
+        if st >= 0.75:
+            if can_raise and r < 0.8:
+                return raise_by(0.75)
+            return passive()
+        if st >= 0.55:
+            if owe == 0:
+                return raise_by(0.5) if can_raise and r < 0.5 else passive()
+            if owe <= max(pot * 0.75, big * 3):
+                return passive()
+            return self.play(room, s, i, "fold", {})
+        if st >= 0.35:
+            if owe == 0:
+                return raise_by(0.4) if can_raise and r < 0.15 else passive()
+            if owe <= max(big, pot * 0.35):
+                return passive()
+            return self.play(room, s, i, "fold", {})
+        if owe == 0:
+            return passive()
+        if s["street"] == "preflop" and owe <= big // 2:
+            return passive()
+        return self.play(room, s, i, "fold", {})
 
     # ---- Actions ---------------------------------------------------------------------------
     def play(self, room, s, seat, action, data):

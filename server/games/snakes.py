@@ -17,6 +17,7 @@ class Snakes(SeatedGame):
     name = "Snakes & Ladders"
     min_players = 2
     max_players = 6
+    bots = True
     lobby_text = "Take a seat (2 to 6 players), then the leader starts the game."
     options = {
         "finish": [("bounce", "Exact roll, bounce back"), ("exact", "Exact roll, or stay put"),
@@ -80,6 +81,9 @@ class Snakes(SeatedGame):
         else:
             self._next(room, s)
         return None
+
+    def bot_move(self, room, s, seat):
+        return self.play(room, s, seat, "roll", {})
 
     def skip(self, room, s):
         self._next(room, s)
