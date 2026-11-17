@@ -1,0 +1,50 @@
+/* Canasta: other players along the top, each side's melds, the stock and pile, then your hand. */
+.others { display: flex; flex-wrap: wrap; gap: 8px; }
+.other {
+  flex: 1 1 140px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0;
+}
+.other b { overflow-wrap: anywhere; }
+.other.turn { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.other.partner { background: color-mix(in srgb, var(--gold) 8%, var(--card)); }
+
+.sides { display: flex; flex-direction: column; gap: 10px; }
+.side { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.side.mine { border-color: color-mix(in srgb, var(--gold) 55%, var(--line)); }
+.side-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+.side-score { color: var(--gold); font: 700 1rem/1 var(--display); letter-spacing: .5px; }
+.melds { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+.meld {
+  display: flex; flex-direction: column; gap: 4px; align-items: flex-start; padding: 6px; border-radius: 8px;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--text); font: inherit;
+}
+button.meld { cursor: pointer; }
+button.meld:hover { border-color: var(--accent); }
+.meld small { color: var(--muted); font-size: .72rem; }
+.meld.canasta.natural { border-color: var(--red); box-shadow: 0 0 0 1px var(--red); }
+.meld.canasta.mixed { border-color: #888; box-shadow: 0 0 0 1px #888; }
+.meld.red3 small { color: var(--red); }
+.fan { display: flex; }
+.fan .pcard + .pcard { margin-left: calc(var(--w, 34px) * -0.55); }
+.fan.tight .pcard + .pcard { margin-left: calc(var(--w, 26px) * -0.7); }
+
+.middle { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 12px; border-radius: var(--radius); background: radial-gradient(ellipse at 50% 30%, #1f6b47, #12432d 80%); }
+.pile-spot { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.pile-spot .muted { color: #cfe3d6; }
+#pile.frozen .pcard { transform: rotate(90deg); margin-block: 12px; }
+#pile.frozen .pcard.picked { transform: rotate(90deg) translateX(-10px); }
+.staged { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; flex: 1; min-width: 0; }
+.group { display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,.35); border-radius: 8px; padding: 4px 8px; }
+.group .link-btn { color: #f2e3b3; }
+.staged > .muted { color: #cfe3d6; }
+
+.controls { justify-content: flex-start; }
+.help-text { margin: 0; }
+.hand { display: flex; flex-wrap: wrap; gap: 4px; padding-top: 12px; min-height: 90px; }
+
+.score-wrap { overflow-x: auto; }
+.score-table { border-collapse: collapse; width: 100%; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.score-table th, .score-table td { padding: 4px 6px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.score-table th:first-child, .score-table td:first-child { text-align: left; white-space: normal; }
+.score-table th { color: var(--muted); font-weight: 600; }
+#scores .btn { align-self: flex-start; margin-top: 8px; }

@@ -33,6 +33,7 @@ stops both. Rooms live in memory, so restarting the server ends any games in pro
   - `questions.js`: the question packs (General knowledge, and Clan & gaming for your own questions). One
     question per line, right answer first. The server reads this file too; restart it after editing.
 - `poker/`: Ace Poker Night, Texas hold'em for points (never real money), 2 to 9 players.
+- `canasta/`: Canasta, classic rules for 2 to 4 players (4 play as two teams of 2).
 - `shared/cards.js`: draws playing cards for poker and canasta.
 - `server/`: the live server.
   - `server.py`: rooms, players and the Socket.IO connection. Also serves this folder for local testing.
@@ -42,6 +43,7 @@ stops both. Rooms live in memory, so restarting the server ends any games in pro
   - `games/trivia.py`: Clan Trivia rules. The server runs the timers and keeps answers secret until time's up.
   - `games/poker.py`: poker rules: dealing, blinds, betting rounds, side pots and hand ranking. Hole cards
     only go to their owner until a showdown.
+  - `games/canasta.py`: Canasta rules: melds, wild cards, the frozen pile, red and black 3s, going out and scoring.
   - `games/__init__.py`: list of games the server can host.
   - `cloudflared.yml`: tunnel settings for play.aceclan.lol. The tunnel's secret credentials stay in
     `C:\Users\User\.cloudflared`, not here.
