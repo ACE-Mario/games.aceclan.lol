@@ -26,18 +26,6 @@ window.WORD_PACKS = {
       torch tower track train trap tree triangle truck trunk tube tunnel turtle umbrella unicorn vacuum van
       violin volcano wall watch water wave web well whale wheel whip wind window wing wire witch wolf worm
       yard zebra`
-  },
-  gamer: {
-    name: "Gamer",
-    words: `ace aim ammo armor arena avatar boss bot buff bunker camper carry checkpoint clan clutch combo
-      console controller cooldown crate crit crosshair defuse dungeon emote flank frag glitch grind guild
-      headshot healer hitbox inventory joystick keyboard lag lobby loot mana map mod mouse nerf noob patch
-      ping pixel portal potion quest queue rage rank raid respawn rush sandbox scope server shield skin
-      smoke sniper spawn speedrun squad stream tank teleport trophy turret ultimate vault ward zombie
-      achievement admin agent bounty cheat coin diamond dragon elixir flag grenade hotbar island jump knife
-      lava level minion ore pickaxe recoil reload ruby save sword totem upgrade warp wipe zone headset mic
-      tournament trade ranked replay kit perk pet gold gem forge bow party leaderboard champion rookie
-      ghost hacker wizard castle treasure boost combo shop chest pvp map tutorial`
   }
 };
 

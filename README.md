@@ -24,7 +24,7 @@ stops both. Rooms live in memory, so restarting the server ends any games in pro
   - `main.js`: picks the mode from the link (`?room=KQTZ` online, `?code=FALCON-42` one screen).
   - `online.js`: online mode; sends moves to the server and draws what it sends back.
   - `local.js`: one-screen mode; works without the server.
-  - `words.js`: word packs (Classic, Gamer). The server reads this file too, so edit packs only here.
+  - `words.js`: word packs (Classic). The server reads this file too, so edit packs only here.
   - `style.css`: styles for this game only.
 - `server/`: the live server.
   - `server.py`: rooms, players and the Socket.IO connection. Also serves this folder for local testing.
