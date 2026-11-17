@@ -26,9 +26,14 @@ stops both. Rooms live in memory, so restarting the server ends any games in pro
   - `local.js`: one-screen mode; works without the server.
   - `words.js`: word packs (Classic). The server reads this file too, so edit packs only here.
   - `style.css`: styles for this game only.
+- `shared/room.js` and `shared/room.css`: the start screen, lobby and room panel (players, leader, admin panel,
+  log) for the seated games below. Each of those games only draws its own board.
+- `snakes/`: Snakes & Ladders, the classic race game for 2 to 6 players (`snakes.js` draws the board).
 - `server/`: the live server.
   - `server.py`: rooms, players and the Socket.IO connection. Also serves this folder for local testing.
   - `games/agents.py`: Ace Agents rules. The server checks every move and only sends the key to spymasters.
+  - `games/base.py`: lobby, seats and admin panel shared by the seated games.
+  - `games/snakes.py`: Snakes & Ladders rules. The server rolls the die.
   - `games/__init__.py`: list of games the server can host.
   - `cloudflared.yml`: tunnel settings for play.aceclan.lol. The tunnel's secret credentials stay in
     `C:\Users\User\.cloudflared`, not here.

@@ -113,6 +113,26 @@ def seat_player(room, pid, name, sid):
     return None
 
 
+def tick_loop():
+    """Games with a clock (trivia timers, the pause between poker hands) get a tick a few
+    times a second. A game's tick returns True when something changed and everyone needs
+    a fresh view."""
+    while True:
+        socketio.sleep(0.25)
+        with lock:
+            now = time.time()
+            for room in list(rooms.values()):
+                tick = getattr(room.game, "tick", None)
+                if tick:
+                    try:
+                        changed = tick(room, now)
+                    except Exception as e:                   # a bug in one game must not stop the clock
+                        log(f"room {room.code} tick error: {e!r}")
+                        changed = False
+                    if changed:
+                        broadcast(room)
+
+
 def cleanup_loop():
     while True:
         socketio.sleep(600)
@@ -282,6 +302,7 @@ if __name__ == "__main__":
     if not local:
         start_tunnel()
     socketio.start_background_task(cleanup_loop)
+    socketio.start_background_task(tick_loop)
     log(f"ACE Games server on http://localhost:{PORT}  (games: {', '.join(g.name for g in GAMES.values())})")
     log("Close this window to stop the server" + ("" if local else " and the tunnel") + ".")
     socketio.run(app, host="127.0.0.1", port=PORT, debug=False, use_reloader=False,

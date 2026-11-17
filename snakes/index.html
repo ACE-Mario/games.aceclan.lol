@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Snakes &amp; Ladders</title>
+<meta name="description" content="The classic race board game for ACE Clan game nights.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/site.css">
+<link rel="stylesheet" href="../shared/room.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="sitebar">
+  <div class="wrap sitebar-inner">
+    <a class="ace" href="../">ACE<span>.</span><small>Games</small></a>
+    <nav>
+      <a href="../">Games</a>
+    </nav>
+  </div>
+</header>
+
+<main id="startView" class="wrap start" hidden></main>
+
+<main id="gameView" class="wrap layout" hidden>
+  <section class="board-col" aria-label="Board">
+    <div class="board-wrap">
+      <div id="board" class="board"></div>
+    </div>
+    <div class="actions roll-row">
+      <div id="die" class="die" aria-live="polite"></div>
+      <button id="rollBtn" class="btn primary roll-btn" type="button">Roll the die</button>
+      <ul id="racers" class="racers"></ul>
+    </div>
+  </section>
+  <aside id="panel" class="panel"></aside>
+</main>
+
+<footer class="site-foot wrap">ACE Clan · Snakes &amp; Ladders</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<script src="../shared/live.js"></script>
+<script src="../shared/room.js"></script>
+<script src="snakes.js"></script>
+</body>
+</html>

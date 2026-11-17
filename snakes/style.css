@@ -1,0 +1,42 @@
+/* Snakes & Ladders board: a 10 x 10 grid of squares with the snakes and ladders drawn in SVG on top. */
+.board-wrap { width: min(100%, 640px); margin-inline: auto; }
+.board {
+  position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden;
+  border: 3px solid #3a2e1c; box-shadow: 0 8px 24px rgba(0,0,0,.45);
+}
+.squares { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(10, 1fr); grid-template-rows: repeat(10, 1fr); }
+.sq {
+  position: relative; background: #efe4c8; color: #5b4a2c;
+  font: 700 clamp(.5rem, 1.6vw, .85rem)/1 var(--display); padding: 3px 4px;
+}
+.sq:nth-child(odd) { background: #e2d2a8; }
+.sq.c1 { background: #f2d9a0; } .sq.c2 { background: #cfe0b8; } .sq.c3 { background: #f0c7b4; } .sq.c4 { background: #c7d8e6; }
+.sq.end { background: #c89b3c; color: #fff; }
+.sq.end::after { content: "★"; position: absolute; right: 4px; bottom: 2px; font-size: clamp(.7rem, 2.2vw, 1.2rem); }
+.art { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.rail { stroke: #7a4b1c; stroke-width: .9; stroke-linecap: round; }
+.rung { stroke: #a8692b; stroke-width: .7; stroke-linecap: round; }
+.snake { fill: none; stroke-linecap: round; }
+.snake-eye { fill: #fff; }
+.token {
+  position: absolute; width: 5.2%; aspect-ratio: 1; border-radius: 50%; translate: -50% -50%;
+  border: 2px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,.5);
+  transition: left .45s ease-in-out, top .45s ease-in-out; z-index: 2;
+}
+.token.mine { box-shadow: 0 0 0 3px var(--gold), 0 2px 6px rgba(0,0,0,.5); }
+.token.turn { animation: bob 1s ease-in-out infinite; }
+@keyframes bob { 50% { translate: -50% -70%; } }
+
+.roll-row { justify-content: center; }
+.die {
+  width: 56px; height: 56px; border-radius: 12px; background: #f4f1ea; color: #15171d;
+  display: grid; place-items: center; font: 700 2rem/1 var(--display); box-shadow: 0 3px 0 #9d988c;
+}
+.die.spin { animation: spin .5s ease-out; }
+@keyframes spin { from { transform: rotate(-200deg) scale(.6); } to { transform: none; } }
+.roll-btn { font-size: 1.1rem; padding: 14px 22px; }
+.racers { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: .9rem; }
+.racers li { display: flex; align-items: center; gap: 6px; }
+.racers li.turn { font-weight: 700; color: var(--text); }
+.dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid #fff; display: inline-block; }
+@media (prefers-reduced-motion: reduce) { .token { transition: none; } .token.turn, .die.spin { animation: none; } }
