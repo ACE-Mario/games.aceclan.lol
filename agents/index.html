@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Ace Agents</title>
+<meta name="description" content="A team word game for ACE Clan game nights.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/site.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="sitebar">
+  <div class="wrap sitebar-inner">
+    <a class="ace" href="../">ACE<span>.</span><small>Games</small></a>
+    <nav>
+      <a href="../">Games</a>
+      <a href="https://aceclan.lol">Clan site</a>
+    </nav>
+  </div>
+</header>
+
+<!-- Board view: the shared screen everyone sees -->
+<main id="boardView" class="wrap layout">
+  <section class="board-col" aria-label="Board">
+    <div id="status" class="status" aria-live="polite">
+      <div class="status-main"><span id="turnText"></span></div>
+      <div id="clueText" class="status-clue"></div>
+    </div>
+    <div class="scores">
+      <div class="score red"><b id="redLeft">9</b><span>Red left</span></div>
+      <div class="score purple"><b id="purpleLeft">8</b><span>Purple left</span></div>
+    </div>
+    <div id="grid" class="grid"></div>
+    <div class="board-actions">
+      <button id="endTurn" class="btn" type="button">End turn</button>
+      <button id="undo" class="btn" type="button">Undo</button>
+      <button id="spyToggle" class="btn" type="button" aria-pressed="false">Show key here</button>
+    </div>
+    <div id="spyConfirm" class="confirm" hidden>
+      <p>Show every card's colour on this screen? Operatives should look away, and stop sharing your screen first.</p>
+      <div class="row">
+        <button id="spyYes" class="btn danger" type="button">Show key</button>
+        <button id="spyNo" class="btn" type="button">Cancel</button>
+      </div>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <form id="clueForm" class="box" autocomplete="off">
+      <h2>Give a clue</h2>
+      <p class="muted small">The spymaster says a clue out loud. Type it here so everyone can see it.</p>
+      <div class="row">
+        <label class="sr" for="clueWord">Clue word</label>
+        <input id="clueWord" maxlength="24" placeholder="One word">
+        <label class="sr" for="clueNum">Number</label>
+        <select id="clueNum">
+          <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+          <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+          <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+          <option value="0">0</option><option value="inf">∞</option>
+        </select>
+        <button class="btn primary" type="submit">Give</button>
+      </div>
+      <p id="clueError" class="error" hidden></p>
+    </form>
+
+    <div class="box">
+      <h2>This game</h2>
+      <div class="code-row">
+        <span class="muted small">Game code</span>
+        <b id="gameCode" class="code"></b>
+      </div>
+      <div class="stack">
+        <button id="copySpy" class="btn primary" type="button">Copy spymaster link</button>
+        <button id="copyBoard" class="btn" type="button">Copy board link</button>
+        <span id="copyNote" class="muted small" aria-live="polite"></span>
+        <input id="copyFallback" class="copy-fallback" readonly hidden>
+      </div>
+      <form id="newForm" class="stack">
+        <div class="row">
+          <label class="small muted" for="pack">Words</label>
+          <select id="pack"></select>
+          <button class="btn" type="submit">New game</button>
+        </div>
+      </form>
+      <form id="joinForm" class="row">
+        <label class="sr" for="joinCode">Join with a code</label>
+        <input id="joinCode" placeholder="Code, e.g. FALCON-42">
+        <button class="btn" type="submit">Join</button>
+      </form>
+    </div>
+
+    <div class="box">
+      <h2>Log</h2>
+      <ol id="log" class="log"></ol>
+    </div>
+
+    <details class="box rules">
+      <summary><h2>How to play</h2></summary>
+      <ol>
+        <li>Split into <b class="t-red">Red</b> and <b class="t-purple">Purple</b>. Each team picks one spymaster.</li>
+        <li>One person shares this board in Discord. Send each spymaster the <b>spymaster link</b>, which shows the key: which words belong to which team.</li>
+        <li>On your turn, your spymaster gives a one-word clue and a number, like <i>Ocean 2</i>. The number is how many cards it points at.</li>
+        <li>Your team guesses by calling a card (for example "B3"), and the board host taps it. You get the number plus one guesses.</li>
+        <li>Your colour: keep guessing. Grey bystander or the other team's card: your turn ends. The <b class="t-bomb">bomb</b>: your team loses on the spot.</li>
+        <li>The first team to find all its cards wins. The team that goes first has 9 cards, the other has 8.</li>
+      </ol>
+      <p class="muted small">Clues can't be a word on the board or part of one. A clue of 0 or ∞ means guess as many as you like.</p>
+    </details>
+  </aside>
+</main>
+
+<!-- Key view: opened from the spymaster link -->
+<main id="keyView" class="wrap key-view" hidden>
+  <div class="key-head">
+    <h1>Spymaster key</h1>
+    <p class="muted">Game <b id="keyCode" class="code"></b> · keep this screen hidden from your team.</p>
+    <p id="keyFirst" class="key-first"></p>
+  </div>
+  <div id="keyGrid" class="key-grid"></div>
+  <div class="legend">
+    <span><i class="sw red"></i>Red</span><span><i class="sw purple"></i>Purple</span>
+    <span><i class="sw neutral"></i>Bystander</span><span><i class="sw bomb"></i>Bomb</span>
+  </div>
+  <p class="muted small">This key doesn't change during the game. Cards revealed on the board aren't crossed off here.</p>
+  <a id="toBoard" class="btn" href="./">Open the board instead</a>
+</main>
+
+<footer class="site-foot wrap">ACE Clan · Ace Agents</footer>
+
+<script src="words.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
