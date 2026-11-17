@@ -1,4 +1,4 @@
-/* Shared layout for the seated games (poker, trivia, canasta, snakes & ladders, the mansion):
+/* Shared layout for the seated games (poker, trivia, canasta, snakes & ladders):
    the game on the left, the room panel on the right; they stack on phones. Built by room.js. */
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .small { font-size: .85rem; }

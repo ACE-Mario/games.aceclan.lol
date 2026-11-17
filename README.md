@@ -34,7 +34,6 @@ stops both. Rooms live in memory, so restarting the server ends any games in pro
     question per line, right answer first. The server reads this file too; restart it after editing.
 - `poker/`: Ace Poker Night, Texas hold'em for points (never real money), 2 to 9 players.
 - `canasta/`: Canasta, classic rules for 2 to 4 players (4 play as two teams of 2).
-- `mansion/`: Haunted Mansion, an original co-op exploration game for 3 to 6 players with a hidden traitor.
 - `shared/cards.js`: draws playing cards for poker and canasta.
 - `server/`: the live server.
   - `server.py`: rooms, players and the Socket.IO connection. Also serves this folder for local testing.
@@ -45,8 +44,6 @@ stops both. Rooms live in memory, so restarting the server ends any games in pro
   - `games/poker.py`: poker rules: dealing, blinds, betting rounds, side pots and hand ranking. Hole cards
     only go to their owner until a showdown.
   - `games/canasta.py`: Canasta rules: melds, wild cards, the frozen pile, red and black 3s, going out and scoring.
-  - `games/mansion.py`: Haunted Mansion rules. The server keeps the room deck, the dice and the traitor's
-    identity; only the traitor is told, and their curses land anonymously at the end of each round.
   - `games/__init__.py`: list of games the server can host.
   - `cloudflared.yml`: tunnel settings for play.aceclan.lol. The tunnel's secret credentials stay in
     `C:\Users\User\.cloudflared`, not here.
@@ -64,11 +61,22 @@ so everyone can see it. The leader can also deal a new game (back to the lobby, 
 Players who join mid-game start out watching until the leader moves them in. Players get a random id saved in
 their browser, so refreshing the page puts them back in the same seat. Rooms close after 6 hours without activity.
 
+### The seated games
+
+Poker, trivia, canasta and snakes & ladders share one lobby and room panel (`shared/room.js`,
+`server/games/base.py`). Players take a seat or watch; the leader picks the settings and presses **Start game**,
+which fixes the seat order. Mid-game, seats are locked: the leader's admin panel can hand an away player's seat to
+someone watching, skip a turn, or end the game, and each of these is logged as `[Admin] ...`. In Clan Trivia,
+anyone can take a seat mid-quiz and starts on 0 points. Hidden things (cards in hand, the trivia answer before
+time's up) never leave the server except to the player allowed to see them.
+
 ## Adding another game
 
 1. Make a folder next to `agents/` with its own `index.html`, linking `../shared/site.css` and `../shared/live.js`.
 2. For online play, write a rules module in `server/games/` (with `new_state`, `default_seat`, `handle` and
-   `view`, like `agents.py`) and add it to `server/games/__init__.py`.
+   `view`, like `agents.py`) and add it to `server/games/__init__.py`. A turn-based game with seats can
+   subclass `base.SeatedGame` and use `shared/room.js` on the page, like `snakes.py` and `snakes/`.
+   A game with a clock can add a `tick(room, now)` method; the server calls it a few times a second.
 3. Add a card for it in the root `index.html`.
 
 ## Running it locally

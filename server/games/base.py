@@ -1,4 +1,4 @@
-"""Shared room rules for the seated games (poker, trivia, canasta, snakes & ladders, the mansion).
+"""Shared room rules for the seated games (poker, trivia, canasta, snakes & ladders).
 
 Each player in a room is either playing (role "player") or watching (role None). In the lobby
 anyone can take a seat or step out; the leader presses Start, which fixes the seat order for

@@ -1,4 +1,4 @@
-// Online rooms for the seated games (poker, trivia, canasta, snakes & ladders, the mansion).
+// Online rooms for the seated games (poker, trivia, canasta, snakes & ladders).
 // Builds the start screen, the lobby bar and the side panel (room, players, leader, admin, log,
 // rules), talks to the live server, and hands every state update to the game's own render().
 //
