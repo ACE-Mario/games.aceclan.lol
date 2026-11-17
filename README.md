@@ -34,6 +34,7 @@ stops both. Rooms live in memory, so restarting the server ends any games in pro
     question per line, right answer first. The server reads this file too; restart it after editing.
 - `poker/`: Ace Poker Night, Texas hold'em for points (never real money), 2 to 9 players.
 - `canasta/`: Canasta, classic rules for 2 to 4 players (4 play as two teams of 2).
+- `mansion/`: Haunted Mansion, an original co-op exploration game for 3 to 6 players with a hidden traitor.
 - `shared/cards.js`: draws playing cards for poker and canasta.
 - `server/`: the live server.
   - `server.py`: rooms, players and the Socket.IO connection. Also serves this folder for local testing.
@@ -44,6 +45,8 @@ stops both. Rooms live in memory, so restarting the server ends any games in pro
   - `games/poker.py`: poker rules: dealing, blinds, betting rounds, side pots and hand ranking. Hole cards
     only go to their owner until a showdown.
   - `games/canasta.py`: Canasta rules: melds, wild cards, the frozen pile, red and black 3s, going out and scoring.
+  - `games/mansion.py`: Haunted Mansion rules. The server keeps the room deck, the dice and the traitor's
+    identity; only the traitor is told, and their curses land anonymously at the end of each round.
   - `games/__init__.py`: list of games the server can host.
   - `cloudflared.yml`: tunnel settings for play.aceclan.lol. The tunnel's secret credentials stay in
     `C:\Users\User\.cloudflared`, not here.
