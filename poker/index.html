@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Ace Poker Night</title>
+<meta name="description" content="Texas hold'em for points at ACE Clan game nights.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/site.css">
+<link rel="stylesheet" href="../shared/room.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="sitebar">
+  <div class="wrap sitebar-inner">
+    <a class="ace" href="../">ACE<span>.</span><small>Games</small></a>
+    <nav>
+      <a href="../">Games</a>
+    </nav>
+  </div>
+</header>
+
+<main id="startView" class="wrap start" hidden></main>
+
+<main id="gameView" class="wrap layout" hidden>
+  <section class="board-col" aria-label="Table">
+    <div id="table" class="table">
+      <div class="felt">
+        <div id="boardCards" class="board-cards"></div>
+        <div id="potText" class="pot-text"></div>
+      </div>
+      <div id="seatsRing"></div>
+    </div>
+    <div id="myHand" class="my-hand" hidden></div>
+    <div id="actionBar" class="action-bar" hidden>
+      <button id="foldBtn" class="btn danger" type="button">Fold</button>
+      <button id="checkBtn" class="btn" type="button">Check</button>
+      <div id="raiseBox" class="raise-box">
+        <input id="raiseRange" type="range" aria-label="Raise amount">
+        <input id="raiseInput" type="number" inputmode="numeric" aria-label="Raise to">
+        <button id="raiseBtn" class="btn primary" type="button">Raise</button>
+      </div>
+      <button id="allinBtn" class="btn" type="button">All in</button>
+    </div>
+    <div id="afterBar" class="actions" hidden>
+      <button id="showBtn" class="btn" type="button">Show my cards</button>
+      <button id="nextBtn" class="btn primary" type="button">Deal next hand</button>
+      <span id="nextNote" class="muted small"></span>
+    </div>
+  </section>
+  <aside id="panel" class="panel"></aside>
+</main>
+
+<footer class="site-foot wrap">ACE Clan · Ace Poker Night · points only, no real money</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<script src="../shared/live.js"></script>
+<script src="../shared/room.js"></script>
+<script src="../shared/cards.js"></script>
+<script src="poker.js"></script>
+</body>
+</html>

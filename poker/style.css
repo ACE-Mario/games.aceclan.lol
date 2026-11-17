@@ -1,0 +1,59 @@
+/* Ace Poker Night: an oval felt table with the seats round the edge. */
+.table { position: relative; width: 100%; aspect-ratio: 16 / 10; min-height: 340px; margin-block: 44px 24px; }
+.felt {
+  position: absolute; inset: 12% 10%; border-radius: 50% / 50%;
+  background: radial-gradient(ellipse at 50% 40%, #1f6b47, #12432d 70%);
+  border: 10px solid #3a2616; box-shadow: inset 0 0 40px rgba(0,0,0,.55), 0 10px 30px rgba(0,0,0,.5);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 10px;
+}
+.board-cards { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.board-cards .pcard.blank { border-color: rgba(255,255,255,.18); }
+.pot-text { font: 700 1rem/1.2 var(--display); letter-spacing: 1px; color: #f2e3b3; text-align: center; max-width: 90%; }
+
+.pseat {
+  position: absolute; translate: -50% -50%; width: 128px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; z-index: 1;
+}
+.pseat-cards { display: flex; gap: 2px; min-height: 0; }
+.plate {
+  width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: 5px 8px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.4);
+}
+.plate b { font-size: .85rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plate .chips { font: 700 .95rem/1.1 var(--display); color: var(--gold); font-variant-numeric: tabular-nums; }
+.plate .act { font-size: .72rem; color: var(--muted); min-height: 1em; }
+.pseat.turn .plate { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), 0 0 18px color-mix(in srgb, var(--accent) 60%, transparent); }
+.pseat.mine .plate { border-color: var(--gold); }
+.pseat.folded { opacity: .5; }
+.pseat.out { opacity: .35; }
+.pseat.won .plate { background: color-mix(in srgb, var(--gold) 25%, var(--card)); }
+.chip-tag {
+  position: absolute; top: -6px; right: 4px; width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center; font: 700 .7rem/1 var(--display);
+  background: #f4f1ea; color: #15171d; border: 2px solid #c9c3b6;
+}
+.chip-tag.blind { right: auto; left: 4px; background: var(--purple); color: #fff; border-color: var(--accent); }
+.bet {
+  font: 700 .85rem/1 var(--display); color: #fff; background: rgba(0,0,0,.55); border: 1px solid var(--gold);
+  padding: 3px 8px; border-radius: 999px; font-variant-numeric: tabular-nums;
+}
+
+.my-hand { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.my-label { font: 700 1.1rem/1.2 var(--display); letter-spacing: 1px; color: var(--gold); margin-left: 8px; }
+.action-bar {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center;
+  padding: 12px; border-radius: var(--radius); background: var(--card); border: 1px solid var(--accent);
+}
+.raise-box { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.raise-box input[type="range"] { width: 150px; padding: 0; accent-color: var(--accent); }
+.raise-box input[type="number"] { width: 100px; }
+#afterBar { justify-content: center; }
+
+@media (max-width: 640px) {
+  .table { aspect-ratio: 3 / 4; min-height: 420px; }
+  .felt { inset: 16% 14%; border-width: 6px; }
+  .pseat { width: 92px; }
+  .plate b { font-size: .75rem; }
+  .board-cards .pcard { --w: 38px !important; }
+}
