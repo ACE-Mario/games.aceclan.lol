@@ -8,6 +8,7 @@ without the game losing track of anything.
 
 A game subclasses SeatedGame and fills in:
     options         {key: [(value, label), ...]} the leader can pick from (first is the default)
+    multi           option keys that allow several choices at once (sent as "a,b,c"; ticked boxes)
     begin(room, s)  deal / set up when the leader presses Start
     play(room, s, seat, action, data)   one move by the player in `seat`; return an error or None
     game_view(room, s, seat)            what that seat may see (seat is None for watchers)
@@ -29,6 +30,7 @@ class SeatedGame:
     late_join = False     # True: people can take a seat while a game is running (trivia)
     bots = False          # True: the leader can add computer players (the game writes bot_move)
     options = {}
+    multi = ()
     lobby_text = "Take a seat, then the leader starts the game."
 
     # ---- Log ---------------------------------------------------------------------------
@@ -41,6 +43,9 @@ class SeatedGame:
         out = {}
         for key, choices in self.options.items():
             allowed = [str(v) for v, _ in choices]
+            if key in self.multi:
+                out[key] = self._clean_multi(allowed, (options or {}).get(key), (old or {}).get(key))
+                continue
             want = str((options or {}).get(key, ""))
             if want in allowed:
                 out[key] = want
@@ -49,6 +54,15 @@ class SeatedGame:
             else:
                 out[key] = allowed[0]
         return out
+
+    @staticmethod
+    def _clean_multi(allowed, want, old):
+        for pick in (want, old):
+            vals = pick if isinstance(pick, list) else str(pick or "").split(",")
+            keep = [v for v in allowed if v in {str(x).strip() for x in vals}]
+            if keep:
+                return ",".join(keep)
+        return allowed[0]
 
     def new_state(self, options=None, old=None):
         return {
@@ -363,6 +377,7 @@ class SeatedGame:
             "started": s["started"], "over": s["over"], "winner": s["winner"], "result": s["result"],
             "options": s["options"],
             "choices": {k: [[str(v), label] for v, label in c] for k, c in self.options.items()},
+            "multi": list(self.multi),
             "seats": [{"id": q, "name": room.players.get(q, {}).get("name", "Someone"),
                        "online": bool(room.players.get(q, {}).get("sids")) or self.is_bot(room, q),
                        "bot": self.is_bot(room, q),

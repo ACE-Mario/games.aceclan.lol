@@ -4,7 +4,8 @@
 //
 //   AceRoom.start({
 //     game: "snakes", title: "Snakes & Ladders", blurb: "...",
-//     options: [{ key, label, choices: [[value, label], ...] }],   // start screen; the server checks them
+//     options: [{ key, label, choices: [[value, label], ...], multi }],   // start screen; the server checks them
+//                                          // multi: true shows tick boxes and sends "a,b" (first ticked by default)
 //     rules: "<ol>...</ol>",                // trusted HTML written in the game's own file
 //     canSkip: true,                        // show the leader's Skip turn button
 //     seatTag: (seat, s) => "120 pts",      // optional extra text after each player's name
@@ -33,6 +34,27 @@ window.AceRoom = (() => {
   }
 
   // ---- Start screen -----------------------------------------------------------------------
+  // One option on the start screen or in the leader box: a drop-down, or tick boxes when multi.
+  function optField(key, label, choices, multi) {
+    if (!multi) {
+      return `<label class="field">${esc(label)}
+          <select data-opt="${esc(key)}">${choices.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("")}</select>
+        </label>`;
+    }
+    return `<fieldset class="field multi" data-opt="${esc(key)}" data-multi="1"><legend>${esc(label)}</legend>
+        ${choices.map(([v, l], i) => `<label class="tick"><input type="checkbox" value="${esc(v)}"${i ? "" : " checked"}> ${esc(l)}</label>`).join("")}
+      </fieldset>`;
+  }
+  function optValue(el) {
+    if (!el.dataset.multi) return el.value;
+    return [...el.querySelectorAll("input:checked")].map(b => b.value).join(",");
+  }
+  function setOptValue(el, value) {
+    if (!el.dataset.multi) { el.value = value; return; }
+    const on = String(value || "").split(",");
+    el.querySelectorAll("input").forEach(b => { b.checked = on.includes(b.value); });
+  }
+
   let startBuilt = false;
   function showStart(cfg, room, error) {
     $("gameView").hidden = true;
@@ -40,10 +62,7 @@ window.AceRoom = (() => {
     history.replaceState(null, "", room ? "?room=" + room : location.pathname);
     if (!startBuilt) {
       startBuilt = true;
-      const opts = (cfg.options || []).map(o => `
-        <label class="field">${esc(o.label)}
-          <select data-opt="${esc(o.key)}">${o.choices.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("")}</select>
-        </label>`).join("");
+      const opts = (cfg.options || []).map(o => optField(o.key, o.label, o.choices, o.multi)).join("");
       $("startView").innerHTML = `
         <section class="start-hero">
           <h1>${esc(cfg.title)}</h1>
@@ -94,7 +113,7 @@ window.AceRoom = (() => {
         e.preventDefault();
         if (!needName()) return;
         const options = {};
-        document.querySelectorAll("#startView [data-opt]").forEach(s => { options[s.dataset.opt] = s.value; });
+        document.querySelectorAll("#startView [data-opt]").forEach(s => { options[s.dataset.opt] = optValue(s); });
         play(cfg, { create: options });
       });
       $("joinBtn").addEventListener("click", () => {
@@ -301,7 +320,7 @@ window.AceRoom = (() => {
 
     function hostOptions() {
       const out = {};
-      document.querySelectorAll("#hostOpts [data-opt]").forEach(s => { out[s.dataset.opt] = s.value; });
+      document.querySelectorAll("#hostOpts [data-opt]").forEach(s => { out[s.dataset.opt] = optValue(s); });
       return out;
     }
 
@@ -415,11 +434,11 @@ window.AceRoom = (() => {
           ho.dataset.built = keys.join(",");
           ho.innerHTML = keys.map(k => {
             const label = ((cfg.options || []).find(o => o.key === k) || {}).label || k;
-            return `<label class="field">${esc(label)}<select data-opt="${esc(k)}">${s.choices[k].map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("")}</select></label>`;
+            return optField(k, label, s.choices[k], (s.multi || []).includes(k));
           }).join("");
         }
         ho.querySelectorAll("[data-opt]").forEach(sel => {
-          if (document.activeElement !== sel && !sel.dataset.touched) sel.value = s.options[sel.dataset.opt];
+          if (!sel.contains(document.activeElement) && !sel.dataset.touched) setOptValue(sel, s.options[sel.dataset.opt]);
           sel.onchange = () => { sel.dataset.touched = "1"; };
         });
         $("newGame").hidden = inGame;

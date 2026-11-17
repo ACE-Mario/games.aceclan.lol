@@ -11,7 +11,6 @@
     const n = p.questions.split("\n").filter(l => l.includes("|") && !l.trim().startsWith("#")).length;
     return [k, `${p.name} (${n})`];
   });
-  if (packChoices.length > 1) packChoices.push(["all", "Everything mixed"]);
 
   function tickClock() {
     const s = state;
@@ -114,7 +113,7 @@
     players: "Any number of players; late arrivals can jump in mid-quiz.",
     canSkip: true,
     options: [
-      { key: "pack", label: "Questions", choices: packChoices },
+      { key: "pack", label: "Question categories (tick as many as you like)", choices: packChoices, multi: true },
       { key: "count", label: "How many", choices: [["10", "10 questions"], ["5", "5 questions"], ["15", "15 questions"], ["20", "20 questions"], ["30", "30 questions"]] },
       { key: "time", label: "Time limit", choices: [["20", "20 seconds each"], ["10", "10 seconds each"], ["15", "15 seconds each"], ["30", "30 seconds each"]] },
     ],
@@ -130,7 +129,7 @@
       <li>When time runs out, or everyone has answered, the right answer is shown and the next question follows.</li>
       <li>Most points after the last question wins. You can join mid-quiz from the Players panel.</li>
     </ol>
-    <p class="muted small">The leader picks the pack, the number of questions and the time limit. Add your own clan questions to <code>trivia/questions.js</code>.</p>`,
+    <p class="muted small">The leader picks the categories (any mix), the number of questions and the time limit. Add your own clan questions to <code>trivia/questions.js</code>.</p>`,
     render(s, api) {
       send = api.send;
       render(s, api);

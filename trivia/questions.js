@@ -252,6 +252,110 @@ window.TRIVIA_PACKS = {
     What does the abbreviation Wi-Fi let devices do? | Connect to a network wirelessly | Charge without a cable | Print in colour | Record sound
   ` },
 
+  games: { name: "Video games", questions: `
+    Which company created the Super Mario series? | Nintendo | Sega | Sony | Atari
+    What is the name of Mario's brother? | Luigi | Wario | Toad | Yoshi
+    Which princess does Mario usually rescue? | Peach | Daisy | Zelda | Rosalina
+    What is the name of the spiky turtle king who fights Mario? | Bowser | Ganon | Wario | Kamek
+    What is the name of Mario's green dinosaur friend? | Yoshi | Birdo | Rex | Dino
+    In Super Mario games, which item makes Mario grow bigger? | Super Mushroom | Fire Flower | Super Star | 1-Up Mushroom
+    In Mario Kart, which item chases down the racer in first place? | Spiny Shell | Red Shell | Banana | Bullet Bill
+    Which company created Sonic the Hedgehog? | Sega | Nintendo | Capcom | Namco
+    What does Sonic collect as he runs? | Gold rings | Coins | Stars | Gems
+    What is the name of Sonic's two-tailed fox friend? | Tails | Knuckles | Shadow | Amy
+    In Tetris, how many squares make up each falling piece? | 4 | 3 | 5 | 6
+    In which country was Tetris first made? | Soviet Union | Japan | United States | United Kingdom
+    Which Pokémon is number 1 in the National Pokédex? | Bulbasaur | Pikachu | Mew | Charmander
+    What does Charmander evolve into first? | Charmeleon | Charizard | Dragonite | Ivysaur
+    In Pokémon, which type is super effective against Grass? | Fire | Water | Ground | Electric
+    Which game series stars the super soldier Master Chief? | Halo | Gears of War | Destiny | Call of Duty
+    Which company makes the Xbox consoles? | Microsoft | Sony | Nintendo | Valve
+    In which city is Grand Theft Auto V set? | Los Santos | Liberty City | Vice City | San Fierro
+    Which game has you farming and making friends in Pelican Town? | Stardew Valley | Animal Crossing | Terraria | Harvest Moon
+    In Animal Crossing, which tanuki sells you your island home? | Tom Nook | Isabelle | K.K. Slider | Blathers
+    On which map is League of Legends usually played? | Summoner's Rift | Ascent | Dust II | Erangel
+    Who is the Spartan warrior hero of the God of War series? | Kratos | Atreus | Ares | Zeus
+    What is the name of the land in most Legend of Zelda games? | Hyrule | Termina | Tamriel | Azeroth
+    Which game series is set in the world of Tamriel? | The Elder Scrolls | Fallout | The Witcher | Dragon Age
+    Who is the monster-hunting hero of The Witcher games? | Geralt of Rivia | Ciri | Yennefer | Dandelion
+    In which game series do survivors live in underground Vaults? | Fallout | Metro | BioShock | Borderlands
+    In Rocket League, what do players drive while playing football? | Cars | Robots | Horses | Bikes
+    Which 1972 Atari game, a simple bat-and-ball game, was the first big arcade hit? | Pong | Space Invaders | Asteroids | Breakout
+    In which 1978 arcade game do rows of aliens march down the screen? | Space Invaders | Galaga | Asteroids | Defender
+    In the original Donkey Kong arcade game, what does Donkey Kong throw? | Barrels | Bananas | Rocks | Coconuts
+    What is the name of Nintendo's round pink hero who swallows enemies? | Kirby | Jigglypuff | Toad | Yoshi
+    Which company publishes the Call of Duty games? | Activision | EA | Ubisoft | Valve
+    In Fortnite, what is the shrinking danger zone called? | The Storm | The Gas | The Ring | The Fog
+    In Portal, what is the name of the AI that runs the test chambers? | GLaDOS | HAL 9000 | SHODAN | Cortana
+    In Portal, what treat are you promised at the end of the tests? | Cake | Pie | Ice cream | Cookies
+    Which game series has the Animus, a machine for reliving ancestors' memories? | Assassin's Creed | Hitman | Dishonored | Far Cry
+    Which company makes the Assassin's Creed games? | Ubisoft | EA | Activision | Square Enix
+    Which fighting game series features Ryu and Chun-Li? | Street Fighter | Tekken | Mortal Kombat | Soulcalibur
+    In which game do you play a goose causing trouble in a village? | Untitled Goose Game | Goat Simulator | Duck Game | Overcooked
+    Which handheld console did Nintendo release in 1989? | Game Boy | Game Gear | Nintendo DS | Atari Lynx
+    What does RPG stand for? | Role-playing game | Rapid play game | Real person game | Random points game
+    In gaming, what does FPS stand for as a type of game? | First-person shooter | Fast player speed | Final power strike | Free play session
+    What does MMO stand for? | Massively multiplayer online | Multi mode online | Many monsters online | Mega match online
+    Which company makes the Resident Evil series? | Capcom | Konami | Square Enix | Sega
+    In the Final Fantasy series, what are the big yellow birds you can ride? | Chocobos | Moogles | Cactuars | Tonberries
+    In which game do you explore the underwater city of Rapture? | BioShock | Subnautica | Prey | Dead Space
+    Which Nintendo console, released in 2006, brought in the motion-sensing Wii Remote? | Wii | GameCube | Switch | Nintendo 64
+    Which company made the Half-Life games? | Valve | id Software | Bungie | Epic Games
+    What is the name of the scientist hero of Half-Life? | Gordon Freeman | Isaac Clarke | Alyx Vance | Barney Calhoun
+    Which game has you sneaking around as an agent known only as 47? | Hitman | Splinter Cell | Metal Gear Solid | Deus Ex
+  ` },
+  history: { name: "History", questions: `
+    Who was the first emperor of Rome? | Augustus | Julius Caesar | Nero | Caligula
+    In which year did Christopher Columbus first reach the Americas? | 1492 | 1488 | 1501 | 1520
+    In which year was the Battle of Hastings? | 1066 | 1086 | 1016 | 1166
+    Who won the Battle of Hastings? | William the Conqueror | Harold Godwinson | Edward the Confessor | Alfred the Great
+    Which king of England had six wives? | Henry VIII | Henry VII | Edward VI | Richard III
+    Which charter, sealed by King John in 1215, limited the king's power? | Magna Carta | Domesday Book | Bill of Rights | Act of Union
+    In which year did the French Revolution begin? | 1789 | 1776 | 1799 | 1815
+    Which French queen was executed during the French Revolution? | Marie Antoinette | Joséphine | Catherine de' Medici | Eleanor of Aquitaine
+    Who was defeated at the Battle of Waterloo in 1815? | Napoleon Bonaparte | The Duke of Wellington | Louis XVI | Horatio Nelson
+    In which year was the American Declaration of Independence adopted? | 1776 | 1789 | 1765 | 1812
+    Who was the US president during the American Civil War? | Abraham Lincoln | Ulysses S. Grant | Andrew Johnson | James Buchanan
+    Which plague killed around a third of Europe's people in the 1300s? | The Black Death | Smallpox | Cholera | Spanish flu
+    Who led the Soviet Union during World War II? | Joseph Stalin | Vladimir Lenin | Nikita Khrushchev | Leon Trotsky
+    Which Anglo-Saxon king of Wessex fought off the Vikings and is called the Great? | Alfred | Æthelred | Edward | Cnut
+    Which ancient wonder was a giant statue at the harbour of Rhodes? | The Colossus | The Lighthouse | The Hanging Gardens | The Mausoleum
+    Whose tomb did Howard Carter find in Egypt's Valley of the Kings in 1922? | Tutankhamun | Ramesses II | Khufu | Akhenaten
+    Which queen of Egypt was allied with Julius Caesar and Mark Antony? | Cleopatra | Nefertiti | Hatshepsut | Nefertari
+    Which Roman town was buried by the eruption of Mount Vesuvius in AD 79? | Pompeii | Ostia | Ravenna | Carthage
+    Which Carthaginian general crossed the Alps with war elephants? | Hannibal | Hamilcar | Scipio | Spartacus
+    Who founded the Mongol Empire? | Genghis Khan | Kublai Khan | Attila the Hun | Tamerlane
+    Which Norse explorer is thought to have reached North America around the year 1000? | Leif Erikson | Erik the Red | Ragnar Lothbrok | Harald Hardrada
+    In which year did the Great Fire of London happen? | 1666 | 1605 | 1688 | 1702
+    What did Guy Fawkes and his plotters try to blow up in 1605? | The Houses of Parliament | The Tower of London | St Paul's Cathedral | Buckingham Palace
+    Who was queen of England when the Spanish Armada was defeated in 1588? | Elizabeth I | Mary I | Victoria | Anne
+    Which explorer led the first expedition to sail around the world, though he died on the way? | Ferdinand Magellan | Francis Drake | Vasco da Gama | James Cook
+    Who was the first European to sail to India around the south of Africa? | Vasco da Gama | Christopher Columbus | Ferdinand Magellan | John Cabot
+    Who brought printing with movable type to Europe around 1450? | Johannes Gutenberg | William Caxton | Martin Luther | Leonardo da Vinci
+    Who started the Protestant Reformation in 1517? | Martin Luther | John Calvin | Henry VIII | Thomas Cranmer
+    Whose assassination in 1914 sparked World War I? | Archduke Franz Ferdinand | Tsar Nicholas II | Kaiser Wilhelm II | King Edward VII
+    Which country did Germany invade on 1 September 1939, starting World War II in Europe? | Poland | France | Belgium | Norway
+    Which US naval base did Japan attack in December 1941? | Pearl Harbor | San Diego | Midway | Norfolk
+    What was the code name for the Allied invasion of Normandy in 1944? | Operation Overlord | Operation Barbarossa | Operation Market Garden | Operation Sea Lion
+    Who was the first woman to be UK prime minister? | Margaret Thatcher | Theresa May | Barbara Castle | Indira Gandhi
+    Who led India's non-violent campaign for independence from Britain? | Mahatma Gandhi | Jawaharlal Nehru | Muhammad Ali Jinnah | Subhas Chandra Bose
+    In which year did India gain independence? | 1947 | 1950 | 1939 | 1962
+    Who was freed from prison in 1990 and became South Africa's president in 1994? | Nelson Mandela | Desmond Tutu | F. W. de Klerk | Thabo Mbeki
+    Who gave the I Have a Dream speech in Washington in 1963? | Martin Luther King Jr. | Malcolm X | John F. Kennedy | Frederick Douglass
+    Which people built the city of Tenochtitlan, where Mexico City is today? | Aztecs | Maya | Inca | Olmecs
+    Which Spanish conquistador brought down the Aztec Empire? | Hernán Cortés | Francisco Pizarro | Juan Ponce de León | Hernando de Soto
+    Under which Chinese dynasty was most of today's Great Wall built? | Ming | Qin | Han | Tang
+    Which Chinese emperor was buried with the Terracotta Army? | Qin Shi Huang | Kublai Khan | Puyi | Wu of Han
+    Which Macedonian king conquered the Persian Empire? | Alexander the Great | Philip II | Darius III | Leonidas
+    Which Spartan king led the stand at Thermopylae in 480 BC? | Leonidas | Xerxes | Pericles | Themistocles
+    Who was assassinated on the Ides of March in 44 BC? | Julius Caesar | Augustus | Mark Antony | Pompey
+    What was the network of trade routes linking China with the Mediterranean called? | The Silk Road | The Amber Road | The Royal Road | The Salt Road
+    In which country did the Industrial Revolution begin? | Great Britain | France | Germany | United States
+    Which nurse was called the Lady with the Lamp in the Crimean War? | Florence Nightingale | Mary Seacole | Edith Cavell | Clara Barton
+    What was the name of the first artificial satellite, launched in 1957? | Sputnik 1 | Vostok 1 | Explorer 1 | Luna 1
+    In which year did the Soviet Union break up? | 1991 | 1989 | 1985 | 1995
+    Which US president resigned after the Watergate scandal? | Richard Nixon | Gerald Ford | Lyndon B. Johnson | Jimmy Carter
+  ` },
   clan: { name: "Clan & gaming", questions: `
     # Add your own clan questions here, one per line. Right answer first.
     Where does ACE Clan play its party games online? | games.aceclan.lol | play.aceclan.lol | hypixel.aceclan.lol | aceclan.gg

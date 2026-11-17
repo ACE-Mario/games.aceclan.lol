@@ -30,8 +30,9 @@ stops both. Rooms live in memory, so restarting the server ends any games in pro
   log) for the seated games below. Each of those games only draws its own board.
 - `snakes/`: Snakes & Ladders, the classic race game for 2 to 6 players (`snakes.js` draws the board).
 - `trivia/`: Clan Trivia, multiple-choice questions against the clock.
-  - `questions.js`: the question packs (General knowledge, and Clan & gaming for your own questions). One
-    question per line, right answer first. The server reads this file too; restart it after editing.
+  - `questions.js`: the question packs (General knowledge, Video games, History, and Clan & gaming for your
+    own questions). The leader ticks any mix of packs. One question per line, right answer first. The server
+    reads this file too; restart it after editing.
 - `poker/`: Ace Poker Night, Texas hold'em for points (never real money), 2 to 9 players.
 - `canasta/`: Canasta, classic rules for 2 to 4 players (4 play as two teams of 2).
 - `shared/cards.js`: draws playing cards for poker and canasta.

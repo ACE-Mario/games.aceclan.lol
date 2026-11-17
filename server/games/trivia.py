@@ -49,14 +49,13 @@ class Trivia(SeatedGame):
     min_players = 1
     max_players = 30
     late_join = True
+    multi = ("pack",)
     lobby_text = "Take a seat to play. The leader picks the questions and starts the quiz."
 
     @property
     def options(self):
         packs = load_packs()
         choices = [(k, f"{p['name']} ({len(p['questions'])})") for k, p in packs.items()]
-        if len(packs) > 1:
-            choices.append(("all", "Everything mixed"))
         return {
             "pack": choices or [("none", "No questions found")],
             "count": [("10", "10 questions"), ("5", "5 questions"), ("15", "15 questions"), ("20", "20 questions"),
@@ -68,10 +67,10 @@ class Trivia(SeatedGame):
     # ---- Game flow -------------------------------------------------------------------------
     def begin(self, room, s):
         packs = load_packs()
-        pick = s["options"]["pack"]
-        pool = [q for k, p in packs.items() if pick in (k, "all") for q in p["questions"]]
+        pick = [k for k in s["options"]["pack"].split(",") if k in packs]
+        pool = [q for k in pick for q in packs[k]["questions"]]
         if not pool:
-            return "There are no questions in that pack. Add some to trivia/questions.js."
+            return "There are no questions in those packs. Add some to trivia/questions.js."
         count = min(int(s["options"]["count"]), len(pool))
         quiz = []
         for q in random.sample(pool, count):
@@ -83,7 +82,8 @@ class Trivia(SeatedGame):
             "limit": int(s["options"]["time"]), "scores": {pid: 0 for pid in s["seats"]},
             "streaks": {}, "answers": {}, "gained": {}, "correct": {},
         })
-        pack_name = "everything" if pick == "all" else packs[pick]["name"]
+        names = [packs[k]["name"] for k in pick]
+        pack_name = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
         self._log(s, f"Quiz started: {count} questions from {pack_name}. Get ready!", "go")
         return None
 
