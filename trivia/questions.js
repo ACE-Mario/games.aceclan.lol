@@ -67,6 +67,189 @@ window.TRIVIA_PACKS = {
     Which famous ship's captain hunted the white whale Moby Dick? | Captain Ahab | Captain Hook | Captain Nemo | Captain Flint
     How many hours are in a week? | 168 | 144 | 172 | 186
     Which country invented pizza as we know it today? | Italy | Greece | France | USA
+
+    # Geography
+    What is the capital of France? | Paris | Lyon | Marseille | Nice
+    What is the capital of Norway? | Oslo | Bergen | Stockholm | Helsinki
+    What is the capital of Portugal? | Lisbon | Porto | Madrid | Faro
+    What is the capital of Brazil? | Brasília | Rio de Janeiro | São Paulo | Salvador
+    What is the capital of Argentina? | Buenos Aires | Córdoba | Santiago | Montevideo
+    What is the capital of Turkey? | Ankara | Istanbul | Izmir | Antalya
+    What is the capital of New Zealand? | Wellington | Auckland | Christchurch | Queenstown
+    What is the capital of South Korea? | Seoul | Busan | Incheon | Pyongyang
+    What is the capital of Ireland? | Dublin | Cork | Galway | Belfast
+    What is the capital of Scotland? | Edinburgh | Glasgow | Aberdeen | Dundee
+    What is the capital of Wales? | Cardiff | Swansea | Newport | Bangor
+    What is the capital of Greece? | Athens | Thessaloniki | Sparta | Corinth
+    What is the capital of the Netherlands? | Amsterdam | Rotterdam | The Hague | Utrecht
+    What is the capital of Switzerland? | Bern | Zurich | Geneva | Basel
+    What is the capital of Kenya? | Nairobi | Mombasa | Kampala | Addis Ababa
+    What is the capital of India? | New Delhi | Mumbai | Kolkata | Bangalore
+    What is the capital of Mexico? | Mexico City | Guadalajara | Cancún | Monterrey
+    What is the capital of Poland? | Warsaw | Kraków | Gdańsk | Prague
+    Which is the longest river in Europe? | Volga | Danube | Rhine | Thames
+    Which is the longest river in the United Kingdom? | Severn | Thames | Trent | Tyne
+    Which country has the most people? | India | China | United States | Indonesia
+    Which is the smallest country in the world by area? | Vatican City | Monaco | San Marino | Malta
+    Which is the largest island in the world? | Greenland | Australia | Borneo | Madagascar
+    Mount Kilimanjaro is in which country? | Tanzania | Kenya | Uganda | Ethiopia
+    The Great Barrier Reef lies off the coast of which country? | Australia | Indonesia | Philippines | Fiji
+    Which country is shaped like a boot? | Italy | Greece | Chile | Portugal
+    Which river flows through Paris? | Seine | Loire | Rhône | Thames
+    Which river flows through London? | Thames | Severn | Mersey | Avon
+    Which river flows through Egypt? | Nile | Congo | Niger | Zambezi
+    The Andes mountain range is on which continent? | South America | Africa | Asia | Europe
+    In which country would you find the ancient city of Machu Picchu? | Peru | Mexico | Bolivia | Chile
+    In which city is the Colosseum? | Rome | Athens | Naples | Istanbul
+    Which country has the most islands? | Sweden | Indonesia | Philippines | Japan
+    Which US state is the largest by area? | Alaska | Texas | California | Montana
+    Which ocean is the smallest? | Arctic | Indian | Southern | Atlantic
+    Which country does the island of Sicily belong to? | Italy | Greece | Malta | Spain
+    How many states are there in the USA? | 50 | 48 | 52 | 51
+    What is the deepest point in the world's oceans? | Mariana Trench | Puerto Rico Trench | Java Trench | Tonga Trench
+    Which line of latitude runs round the middle of the Earth? | Equator | Tropic of Cancer | Prime Meridian | Arctic Circle
+    Which city is known as the Big Apple? | New York | Los Angeles | Chicago | Boston
+
+    # Science and nature
+    What is the chemical symbol for iron? | Fe | Ir | In | F
+    What is the chemical symbol for sodium? | Na | So | Sd | S
+    What is the chemical symbol for silver? | Ag | Si | Sv | Au
+    What is the most common gas in the Earth's air? | Nitrogen | Oxygen | Carbon dioxide | Argon
+    Which planet is the hottest in our solar system? | Venus | Mercury | Mars | Jupiter
+    Which planet spins on its side? | Uranus | Neptune | Saturn | Mars
+    How many planets are in our solar system? | 8 | 9 | 7 | 10
+    What is the name of the galaxy we live in? | Milky Way | Andromeda | Whirlpool | Sombrero
+    How long does light from the Sun take to reach Earth, roughly? | 8 minutes | 8 seconds | 1 hour | 1 day
+    What force keeps us on the ground? | Gravity | Magnetism | Friction | Inertia
+    What do bees make? | Honey | Silk | Wax paper | Milk
+    What is the fastest land animal? | Cheetah | Lion | Pronghorn | Greyhound
+    What is the tallest animal? | Giraffe | Elephant | Ostrich | Moose
+    Which animal is known as the king of the jungle? | Lion | Tiger | Gorilla | Elephant
+    How many legs does an insect have? | 6 | 8 | 4 | 10
+    A baby kangaroo is called a what? | Joey | Cub | Kid | Pup
+    A group of lions is called a what? | Pride | Pack | Herd | Flock
+    What is a male duck called? | Drake | Gander | Cob | Buck
+    Which bird can fly backwards? | Hummingbird | Swallow | Kingfisher | Sparrow
+    What is the largest bird in the world? | Ostrich | Emu | Albatross | Condor
+    Which mammal can truly fly? | Bat | Flying squirrel | Sugar glider | Flying lemur
+    Spiders belong to which group of animals? | Arachnids | Insects | Crustaceans | Reptiles
+    What do caterpillars turn into? | Butterflies or moths | Beetles | Dragonflies | Bees
+    How many teeth does an adult human usually have? | 32 | 28 | 30 | 36
+    Which part of the body has the smallest bone? | Ear | Toe | Finger | Nose
+    Which vitamin does your skin make in sunlight? | Vitamin D | Vitamin C | Vitamin A | Vitamin B12
+    Which organ cleans your blood and makes urine? | Kidneys | Liver | Lungs | Stomach
+    What is the normal human body temperature in Celsius, roughly? | 37 | 35 | 39 | 40
+    What does DNA carry? | Genetic information | Oxygen | Electricity | Hormones only
+    What kind of animal is a Komodo dragon? | Lizard | Snake | Crocodile | Dinosaur
+    Which gas do humans breathe out more of than they breathe in? | Carbon dioxide | Oxygen | Nitrogen | Hydrogen
+    What is the centre of an atom called? | Nucleus | Electron | Proton shell | Core cloud
+    What is the boiling point of water in Fahrenheit at sea level? | 212 | 100 | 180 | 220
+    Which colour has the longest wavelength of visible light? | Red | Violet | Green | Blue
+    What does a thermometer measure? | Temperature | Air pressure | Humidity | Wind speed
+    What shape is a snowflake usually? | Six-sided | Four-sided | Eight-sided | Round
+    Which planet has a moon called Titan? | Saturn | Jupiter | Neptune | Mars
+    What is the Earth's natural satellite called? | The Moon | Phobos | Europa | Titan
+    What is a scientist who studies rocks called? | Geologist | Biologist | Astronomer | Botanist
+
+    # History
+    In which year did World War II end? | 1945 | 1944 | 1946 | 1939
+    In which year did World War I begin? | 1914 | 1912 | 1916 | 1918
+    In which year did humans first land on the Moon? | 1969 | 1965 | 1972 | 1959
+    In which year did the Berlin Wall fall? | 1989 | 1991 | 1985 | 1979
+    Who was the first President of the United States? | George Washington | Abraham Lincoln | Thomas Jefferson | John Adams
+    Which ancient people built the pyramids at Giza? | Egyptians | Romans | Greeks | Persians
+    Who was the first person to travel into space? | Yuri Gagarin | Neil Armstrong | Alan Shepard | John Glenn
+    Which ship carried the Pilgrims to America in 1620? | Mayflower | Endeavour | Santa Maria | Golden Hind
+    Which empire was ruled by Julius Caesar? | Roman | Greek | Ottoman | Persian
+    Who was the British prime minister for most of World War II? | Winston Churchill | Neville Chamberlain | Clement Attlee | Margaret Thatcher
+    Which British queen reigned for 70 years? | Elizabeth II | Victoria | Elizabeth I | Anne
+    Who is credited with inventing the telephone? | Alexander Graham Bell | Thomas Edison | Nikola Tesla | Guglielmo Marconi
+    Who invented the World Wide Web? | Tim Berners-Lee | Bill Gates | Steve Jobs | Alan Turing
+    Which famous wall was built across northern England by the Romans? | Hadrian's Wall | Offa's Dyke | The Antonine Wall | The Long Wall
+    Who painted the ceiling of the Sistine Chapel? | Michelangelo | Leonardo da Vinci | Raphael | Botticelli
+    In which country did the Olympic Games begin? | Greece | Italy | Egypt | France
+    Who made the first successful powered aeroplane flight, in 1903? | The Wright brothers | The Montgolfier brothers | The Lumière brothers | The Grimm brothers
+    Which civilisation built Machu Picchu? | Inca | Aztec | Maya | Olmec
+    Who discovered penicillin? | Alexander Fleming | Louis Pasteur | Marie Curie | Joseph Lister
+    Who was the first woman to win a Nobel Prize? | Marie Curie | Rosalind Franklin | Florence Nightingale | Ada Lovelace
+    Who is often called the first computer programmer? | Ada Lovelace | Alan Turing | Grace Hopper | Charles Babbage
+
+    # Maths and numbers
+    What is 12 times 12? | 144 | 124 | 132 | 154
+    What is 15% of 200? | 30 | 15 | 20 | 35
+    How many seconds are in an hour? | 3600 | 360 | 6000 | 1200
+    What is the next prime number after 7? | 11 | 9 | 13 | 10
+    How many sides does a pentagon have? | 5 | 6 | 4 | 7
+    What is the value of pi to two decimal places? | 3.14 | 3.41 | 3.12 | 3.16
+    What is 2 to the power of 10? | 1024 | 1000 | 512 | 2048
+    How many degrees are in a full circle? | 360 | 180 | 90 | 400
+    What is the Roman numeral for 50? | L | C | D | X
+    What is the Roman numeral for 100? | C | M | L | D
+    How many zeros are in one million? | 6 | 5 | 7 | 9
+    What is half of a quarter? | An eighth | A third | A sixth | A tenth
+    How many centimetres are in a metre? | 100 | 10 | 1000 | 50
+    How many grams are in a kilogram? | 1000 | 100 | 10 | 10,000
+    What do the angles in a triangle add up to? | 180 degrees | 90 degrees | 360 degrees | 270 degrees
+    How many weeks are in a year? | 52 | 48 | 50 | 56
+
+    # Language, books and arts
+    Who wrote Harry Potter? | J.K. Rowling | Roald Dahl | C.S. Lewis | J.R.R. Tolkien
+    Who wrote The Lord of the Rings? | J.R.R. Tolkien | C.S. Lewis | George R.R. Martin | Terry Pratchett
+    Who wrote Charlie and the Chocolate Factory? | Roald Dahl | Enid Blyton | David Walliams | Dr. Seuss
+    Who wrote Pride and Prejudice? | Jane Austen | Charlotte Brontë | Emily Brontë | Mary Shelley
+    Who wrote A Christmas Carol? | Charles Dickens | Lewis Carroll | Oscar Wilde | Thomas Hardy
+    Who wrote Frankenstein? | Mary Shelley | Bram Stoker | Edgar Allan Poe | H.G. Wells
+    In which book does a girl called Alice fall down a rabbit hole? | Alice's Adventures in Wonderland | The Wizard of Oz | Peter Pan | The Secret Garden
+    Who painted The Starry Night? | Vincent van Gogh | Claude Monet | Pablo Picasso | Salvador Dalí
+    How many letters are in the English alphabet? | 26 | 24 | 25 | 28
+    What is the opposite of the word ancient? | Modern | Old | Antique | Historic
+    How many strings does a violin usually have? | 4 | 5 | 6 | 3
+    Which composer wrote the Moonlight Sonata? | Beethoven | Mozart | Bach | Chopin
+    Which famous playwright wrote Hamlet? | William Shakespeare | Christopher Marlowe | Ben Jonson | Oscar Wilde
+    What is a word that means the same as another word called? | Synonym | Antonym | Homophone | Acronym
+
+    # Sport
+    How many players are on a basketball team on the court? | 5 | 6 | 7 | 4
+    How often are the Summer Olympic Games usually held? | Every 4 years | Every 2 years | Every 3 years | Every 5 years
+    How many rings are on the Olympic flag? | 5 | 4 | 6 | 7
+    In tennis, what is a score of zero called? | Love | Nil | Duck | Zero
+    How many holes are played in a standard round of golf? | 18 | 9 | 12 | 20
+    In which sport would you hit a shuttlecock? | Badminton | Squash | Table tennis | Tennis
+    How long is a marathon, roughly? | 42 km | 26 km | 50 km | 32 km
+    In snooker, which ball is worth the most points? | Black | Pink | Blue | Red
+    How many players are on a rugby union team on the pitch? | 15 | 13 | 11 | 12
+    Which country won the first football World Cup in 1930? | Uruguay | Brazil | Argentina | Italy
+    In darts, what is the highest score with three darts? | 180 | 150 | 200 | 160
+    How many points is a touchdown worth in American football? | 6 | 7 | 3 | 5
+    What colour is the centre of an archery target? | Gold (yellow) | Red | Blue | Black
+    In chess, which piece can jump over others? | Knight | Bishop | Rook | Queen
+
+    # Food, everyday and miscellaneous
+    Which fruit is known for keeping the doctor away? | Apple | Banana | Orange | Grape
+    Sushi comes from which country? | Japan | China | Korea | Thailand
+    Which nut is used to make marzipan? | Almond | Walnut | Cashew | Hazelnut
+    What is the main ingredient of hummus? | Chickpeas | Lentils | Peas | Beans
+    Which country is famous for maple syrup? | Canada | Norway | USA | Sweden
+    Paella is a traditional dish from which country? | Spain | Italy | Mexico | Portugal
+    What colour is a ripe banana? | Yellow | Green | Red | Orange
+    Which vegetable is used to make chips? | Potato | Carrot | Parsnip | Turnip
+    What is the main ingredient of bread? | Flour | Rice | Sugar | Oats
+    How many pieces does each player start with in chess? | 16 | 12 | 20 | 18
+    How many squares are on a chessboard? | 64 | 81 | 100 | 49
+    How many cards are in a standard deck, without jokers? | 52 | 54 | 48 | 50
+    How many dots are on a standard six-sided die in total? | 21 | 18 | 24 | 36
+    What do you call a word that reads the same backwards, like level? | Palindrome | Anagram | Acronym | Homonym
+    Which month has the fewest days? | February | April | June | November
+    In which month is Halloween? | October | November | September | December
+    How many months have 31 days? | 7 | 6 | 5 | 8
+    Which is the first sign of the zodiac in the usual order? | Aries | Capricorn | Pisces | Leo
+    What are the three primary colours of light? | Red, green and blue | Red, yellow and blue | Red, green and yellow | Cyan, magenta and yellow
+    What does a compass needle point towards? | Magnetic north | The Sun | True south | The equator
+    What does USB stand for? | Universal Serial Bus | United System Board | Universal Signal Bridge | User Service Bus
+    In computing, what does RAM stand for? | Random Access Memory | Read And Modify | Rapid Access Module | Runtime Application Memory
+    What is 1,024 megabytes? | 1 gigabyte | 1 terabyte | 1 kilobyte | 10 gigabytes
+    Which company makes the iPhone? | Apple | Samsung | Google | Microsoft
+    What does the abbreviation Wi-Fi let devices do? | Connect to a network wirelessly | Charge without a cable | Print in colour | Record sound
   ` },
 
   clan: { name: "Clan & gaming", questions: `
