@@ -1,0 +1,11 @@
+# Cloudflare Tunnel for the ACE Games live server.
+# Only play.aceclan.lol goes to this PC; games.aceclan.lol itself stays on GitHub Pages.
+# server.py starts and stops this tunnel by itself. The credentials file is private and
+# stays in C:\Users\User\.cloudflared (never put it in this folder).
+tunnel: 90d4af26-0f60-4d29-b394-b9f2f33a0bec
+credentials-file: C:\Users\User\.cloudflared\90d4af26-0f60-4d29-b394-b9f2f33a0bec.json
+
+ingress:
+  - hostname: play.aceclan.lol
+    service: http://127.0.0.1:5050
+  - service: http_status:404

@@ -1,8 +1,9 @@
-// Ace Agents game logic.
+// Ace Agents, one-screen mode.
 // The board comes from the game code + word pack, so everyone who opens the same link
 // (?code=FALCON-42&pack=classic) gets the same words and the same key. Only the board host's
 // browser tracks which cards are revealed; that state is saved in localStorage per game.
-(() => {
+// Started by main.js when the link has ?code= (or ?view=key for the spymaster key).
+window.startLocalGame = function () {
   "use strict";
 
   const TEAMS = { red: "Red", purple: "Purple" };
@@ -312,4 +313,4 @@
     });
     $("toBoard").href = linkFor(code, pack);
   }
-})();
+};
