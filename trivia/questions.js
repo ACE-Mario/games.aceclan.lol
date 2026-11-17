@@ -11,7 +11,8 @@ window.TRIVIA_PACKS = {
     Which planet is known as the Red Planet? | Mars | Venus | Jupiter | Mercury
     How many continents are there? | 7 | 5 | 6 | 8
     What is the largest ocean on Earth? | Pacific | Atlantic | Indian | Arctic
-    Which gas do plants take in from the air to make food? | Carbon dioxide | Oxygen | Nitrogen | Helium
+    Which gas do plants take in from the air to make food? | Carbon dioxide | Oxygen | Nitrogen | Glucose
+    Is glucose a gas? | No | yes | possible | could be 
     Who painted the Mona Lisa? | Leonardo da Vinci | Michelangelo | Raphael | Vincent van Gogh
     What is the chemical symbol for gold? | Au | Ag | Gd | Go
     How many sides does a hexagon have? | 6 | 5 | 7 | 8
@@ -356,37 +357,10 @@ window.TRIVIA_PACKS = {
     In which year did the Soviet Union break up? | 1991 | 1989 | 1985 | 1995
     Which US president resigned after the Watergate scandal? | Richard Nixon | Gerald Ford | Lyndon B. Johnson | Jimmy Carter
   ` },
-  clan: { name: "Clan & gaming", questions: `
+  clan: { name: "Family Friendly", questions: `
     # Add your own clan questions here, one per line. Right answer first.
-    Where does ACE Clan play its party games online? | games.aceclan.lol | play.aceclan.lol | hypixel.aceclan.lol | aceclan.gg
-    Which ACE game has spymasters giving one-word clues? | Ace Agents | Clan Trivia | Snakes & Ladders | Ace Poker Night
-    In Minecraft, what block do you need to build a Nether portal frame? | Obsidian | Cobblestone | Netherrack | Bedrock
-    In Minecraft, which green mob sneaks up and explodes? | Creeper | Zombie | Skeleton | Enderman
-    In Minecraft, how many obsidian blocks make the smallest Nether portal frame without corners? | 10 | 8 | 12 | 14
-    In Minecraft, what do you give a wolf to tame it? | Bones | Fish | Wheat | Carrots
-    In Minecraft, what is the dimension with the Ender Dragon called? | The End | The Nether | The Void | The Deep Dark
-    In Minecraft, what is the weakest pickaxe that can mine diamond ore and drop diamonds? | Iron | Stone | Wood | Gold
-    In Bed Wars, what does your team have to protect? | Its bed | Its flag | Its crystal | Its chest
-    Which company makes the PlayStation consoles? | Sony | Microsoft | Nintendo | Sega
-    Which company makes Fortnite? | Epic Games | Riot Games | Valve | Blizzard
-    Which company makes League of Legends and Valorant? | Riot Games | Valve | Blizzard | Epic Games
-    In Valorant, how many players are on each team? | 5 | 4 | 6 | 3
-    In Valorant, how many rounds do you need to win a standard match before overtime? | 13 | 12 | 16 | 15
-    In Valorant, what is the bomb-like device called? | Spike | Core | Charge | Orb
-    What colour is Mario's cap? | Red | Green | Blue | Yellow
-    What does GG mean in game chat? | Good game | Get going | Great goal | Go green
-    What does AFK stand for? | Away from keyboard | Always fighting kills | Aim for kills | Another free kill
-    What does NPC stand for? | Non-player character | New player challenge | Next power cycle | No player control
-    Which console is made by Nintendo? | Switch | Xbox | PlayStation | Steam Deck
-    Who is the green-clad hero of The Legend of Zelda games? | Link | Zelda | Ganon | Navi
-    What is the name of Valve's PC game store? | Steam | Origin | Uplay | Battle.net
-    In Among Us, what are the saboteurs called? | Impostors | Traitors | Spies | Agents
-    Which battle royale drops players from a flying Battle Bus? | Fortnite | Apex Legends | PUBG | Warzone
-    What is the in-game currency of Fortnite called? | V-Bucks | Robux | Coins | Gems
-    What is the in-game currency of Roblox called? | Robux | V-Bucks | Diamonds | Credits
-    In Pokémon, which of these types is super effective against Water? | Electric | Fire | Rock | Ground
-    How many ghosts chase Pac-Man in the original arcade game? | 4 | 3 | 5 | 6
-    In chess, which piece only ever moves diagonally? | Bishop | Rook | Knight | King
-    Which game is the best-selling video game of all time? | Minecraft | Tetris | Grand Theft Auto V | Wii Sports
+
+    Where does Dante Live? | 30 Arcowie Road Dernancourt | 8 Pitana Ave Para Vista | 16 Billabong Rd Gilles Plains | 6 Gladys Cres Athelstone
+    
   ` },
 };
