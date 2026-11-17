@@ -178,11 +178,11 @@ class SeatedGame:
         if action == "admin_skip":
             if not self.in_game(s):
                 return "There's no game on."
-            who = self.seat_name(room, s, s.get("turn")) if isinstance(s.get("turn"), int) else "someone"
+            what = self.skip_label(room, s)
             mark = len(s["log"])
             err = self.skip(room, s)
             if not err:                       # put the admin line before whatever the skip logged
-                s["log"].insert(min(mark, len(s["log"])), {"text": f"[Admin] {name} skipped {who}'s turn.", "kind": "admin"})
+                s["log"].insert(min(mark, len(s["log"])), {"text": f"[Admin] {name} skipped {what}.", "kind": "admin"})
             return err
 
         if action == "admin_end":
@@ -242,6 +242,10 @@ class SeatedGame:
 
     def skip(self, room, s):
         return "This game has no turns to skip."
+
+    def skip_label(self, room, s):
+        turn = s.get("turn")
+        return f"{self.seat_name(room, s, turn)}'s turn" if isinstance(turn, int) else "a turn"
 
     def joined(self, room, s, pid):
         pass

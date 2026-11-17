@@ -1,0 +1,52 @@
+/* Clan Trivia: question card with a timer bar, four answer buttons, and the leaderboard. */
+.quiz {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 18px; display: flex; flex-direction: column; gap: 14px;
+}
+.q-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.q-num { font: 700 1rem/1 var(--display); letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.q-clock { font: 700 1.4rem/1 var(--display); color: var(--gold); font-variant-numeric: tabular-nums; }
+.timer { height: 8px; background: var(--bg2); border-radius: 999px; overflow: hidden; }
+.timer i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--purple), var(--accent)); transition: width .2s linear; }
+.timer i.low { background: var(--red); }
+.q-text { margin: 4px 0; font: 700 clamp(1.3rem, 3.2vw, 1.9rem)/1.2 var(--display); letter-spacing: .5px; text-wrap: balance; min-height: 2.4em; }
+.answers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 560px) { .answers { grid-template-columns: minmax(0, 1fr); } }
+.answer {
+  --c: var(--purple);
+  display: flex; align-items: center; gap: 12px; text-align: left; min-height: 64px;
+  padding: 12px 14px; border-radius: 10px; cursor: pointer; color: var(--text);
+  background: color-mix(in srgb, var(--c) 22%, var(--card2)); border: 2px solid color-mix(in srgb, var(--c) 60%, var(--line));
+  font: 600 1.05rem/1.2 var(--body); transition: transform .1s, filter .15s, opacity .2s;
+}
+.answer b {
+  flex: none; width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center;
+  background: var(--c); color: #fff; font: 700 1.1rem/1 var(--display);
+}
+.answer span { flex: 1; overflow-wrap: anywhere; }
+.answer small { flex: none; color: var(--muted); font-size: .85rem; }
+.answer.a0 { --c: #e5484d; } .answer.a1 { --c: #3e7bfa; } .answer.a2 { --c: #d9a21b; } .answer.a3 { --c: #2fa565; }
+.answer:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.15); }
+.answer:disabled { cursor: default; }
+.answer.mine { box-shadow: 0 0 0 3px var(--text); }
+.answer.right { background: color-mix(in srgb, #2fa565 45%, var(--card2)); border-color: #3fdc8a; }
+.answer.right::after { content: "✓"; font-size: 1.4rem; color: #3fdc8a; }
+.answer.wrong { opacity: .45; }
+.q-note { margin: 0; color: var(--muted); min-height: 1.4em; }
+.q-note.good { color: #3fdc8a; font-weight: 600; }
+
+.leaderboard { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.leaderboard li {
+  display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px; background: var(--bg2);
+  border: 1px solid transparent;
+}
+.leaderboard li.me { border-color: var(--accent); }
+.leaderboard li.away { opacity: .55; }
+.leaderboard li.answered .who::after { content: " ✔"; color: var(--accent); }
+.leaderboard li.winner { background: color-mix(in srgb, var(--gold) 20%, var(--bg2)); }
+.leaderboard li.winner .rank { color: var(--gold); }
+.leaderboard .rank { width: 1.5em; font: 700 1.1rem/1 var(--display); color: var(--muted); }
+.leaderboard .who { flex: 1; overflow-wrap: anywhere; white-space: pre-wrap; }
+.leaderboard .pts { font: 700 1.05rem/1 var(--display); font-variant-numeric: tabular-nums; white-space: pre; }
+.leaderboard .gain { color: #3fdc8a; font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { .answer, .timer i { transition: none; } }
