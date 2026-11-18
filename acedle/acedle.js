@@ -3,7 +3,7 @@
 // each is worth up to 100 points (fewer guesses = more), and finished runs go on a clan leaderboard
 // kept by RIOT API (riot.aceclan.lol), which works the points out again itself from the guess counts.
 // Progress is saved in this browser, so a refresh carries on where you were.
-(() => {
+(async () => {
   "use strict";
   const FX = window.AceFX || { sound() {}, confetti() {}, soundButton() {} };
   const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
@@ -12,10 +12,27 @@
 
   // The clan's day: midnight in Adelaide (UTC+10:30), the same as the leaderboard uses.
   const START = Date.UTC(2026, 10, 18), OFFSET = 10.5 * 3600e3, DAY_MS = 86400e3;
-  // On this PC (localhost) ?day=N shows puzzle N, for testing. The real site always uses today.
+  const CALENDAR_DAY = Math.floor((Date.now() + OFFSET - START) / DAY_MS) + 1;
+  const NEXT = START + CALENDAR_DAY * DAY_MS - OFFSET;          // next midnight
+  // The puzzle number comes from RIOT API, because a new day can be started early from Jerry's control
+  // panel. If it can't be reached, use the date plus the last early start this browser heard about.
+  async function puzzleDay() {
+    const remembered = () => { try { return +localStorage.getItem("acedle-skipped") || 0; } catch { return 0; } };
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 3000);
+      const r = await fetch(RIOT + "/acedle/today", { signal: ctl.signal, cache: "no-store" });
+      clearTimeout(timer);
+      const d = await r.json();
+      try { localStorage.setItem("acedle-skipped", String(d.skipped || 0)); } catch { /* fine */ }
+      return d.day;
+    } catch {
+      return CALENDAR_DAY + remembered();
+    }
+  }
+  // On this PC (localhost) ?day=N shows puzzle N, for testing. The real site always uses today's puzzle.
   const TEST_DAY = LOCAL && +new URLSearchParams(location.search).get("day");
-  const DAY = TEST_DAY || Math.floor((Date.now() + OFFSET - START) / DAY_MS) + 1;
-  const NEXT = START + DAY * DAY_MS - OFFSET;
+  const DAY = TEST_DAY || await puzzleDay();
 
   const STAGES = [
     { key: "word", name: "Word", icon: "🔤", max: 6 },
