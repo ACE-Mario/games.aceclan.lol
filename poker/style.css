@@ -1,49 +1,92 @@
-/* Ace Poker Night: an oval felt table with the seats round the edge. */
+/* Ace Poker Night: an oval felt table with a padded wooden rail and the seats round the edge. */
 .table { position: relative; width: 100%; aspect-ratio: 16 / 10; min-height: 340px; margin-block: 44px 24px; }
 .felt {
   position: absolute; inset: 12% 10%; border-radius: 50% / 50%;
-  background: radial-gradient(ellipse at 50% 40%, #1f6b47, #12432d 70%);
-  border: 10px solid #3a2616; box-shadow: inset 0 0 40px rgba(0,0,0,.55), 0 10px 30px rgba(0,0,0,.5);
+  border: 12px solid #4a2c15;
+  box-shadow: inset 0 0 0 3px #2a170a, inset 0 0 50px rgba(0,0,0,.55), 0 0 0 3px #7b4a22, 0 0 0 5px #2a170a, 0 14px 36px rgba(0,0,0,.6);
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 10px;
 }
+.felt::before {
+  content: "ACE"; position: absolute; top: 50%; left: 50%; translate: -50% 60%; pointer-events: none;
+  font: 700 clamp(1.6rem, 6vw, 3rem)/1 var(--display); letter-spacing: 10px; color: rgba(255,255,255,.06);
+}
+.felt-row { display: flex; align-items: center; gap: 12px; }
+.deck { position: relative; width: 40px; height: 56px; flex: none; }
+.deck .pcard { position: absolute; inset: 0; }
+.deck .pcard:nth-child(2) { translate: -2px -2px; }
+.deck .pcard:nth-child(3) { translate: -4px -4px; }
 .board-cards { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .board-cards .pcard.blank { border-color: rgba(255,255,255,.18); }
-.pot-text { font: 700 1rem/1.2 var(--display); letter-spacing: 1px; color: #f2e3b3; text-align: center; max-width: 90%; }
+.pot { display: flex; align-items: center; gap: 8px; }
+.pot-text { font: 700 1rem/1.2 var(--display); letter-spacing: 1px; color: #f2e3b3; text-align: center; max-width: 90%; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
+.pot-chips { display: inline-flex; min-height: 4px; }
+
+/* Chip piles: thin discs stacked upwards. */
+.chipstack { display: inline-block; position: relative; width: 16px; height: 22px; vertical-align: middle; margin-right: 4px; }
+.chipstack i, .chip-ghost {
+  --c: #e5484d;
+  position: absolute; left: 0; bottom: calc(var(--k, 0) * 3px); width: 16px; height: 6px; border-radius: 50%;
+  background: var(--c); border: 1px solid rgba(0,0,0,.45);
+  box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.55), 0 1px 0 rgba(0,0,0,.4);
+}
+.chip-ghost { position: fixed; bottom: auto; width: 16px; height: 16px; border-radius: 50%;
+  background: radial-gradient(circle, var(--c) 0 40%, #fff 41% 50%, var(--c) 51%); border: 1px solid rgba(0,0,0,.4); }
+.pot-chips .chipstack { width: 20px; height: 34px; }
+.pot-chips .chipstack i { width: 20px; height: 7px; }
 
 .pseat {
-  position: absolute; translate: -50% -50%; width: 128px;
+  position: absolute; translate: -50% -50%; width: 140px;
   display: flex; flex-direction: column; align-items: center; gap: 4px; z-index: 1;
 }
 .pseat-cards { display: flex; gap: 2px; min-height: 0; }
+.pseat-cards .pcard.back { --w: 24px; }
+.pseat-cards .pcard.back + .pcard.back { margin-left: -10px; rotate: 8deg; }
+.pseat-cards .pcard.back::after { display: none; }
 .plate {
-  width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 10px;
-  padding: 5px 8px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1px;
-  box-shadow: 0 4px 12px rgba(0,0,0,.4);
+  width: 100%; background: linear-gradient(180deg, var(--card2), var(--card)); border: 1px solid var(--line); border-radius: 12px;
+  padding: 5px 8px 5px 6px; display: flex; align-items: center; gap: 7px; text-align: left;
+  box-shadow: 0 4px 12px rgba(0,0,0,.45);
 }
-.plate b { font-size: .85rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.plate .chips { font: 700 .95rem/1.1 var(--display); color: var(--gold); font-variant-numeric: tabular-nums; }
+.plate-info { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.plate b { font-size: .82rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plate .chips { font: 700 .95rem/1.1 var(--display); color: var(--gold); font-variant-numeric: tabular-nums; display: flex; align-items: flex-end; }
+.plate .chips .chipstack { height: 18px; width: 14px; }
+.plate .chips .chipstack i { width: 14px; height: 5px; }
 .plate .act { font-size: .72rem; color: var(--muted); min-height: 1em; }
-.pseat.turn .plate { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), 0 0 18px color-mix(in srgb, var(--accent) 60%, transparent); }
+.pseat.turn .plate { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), 0 0 22px color-mix(in srgb, var(--accent) 60%, transparent); }
 .pseat.mine .plate { border-color: var(--gold); }
 .pseat.folded { opacity: .5; }
 .pseat.out { opacity: .35; }
-.pseat.won .plate { background: color-mix(in srgb, var(--gold) 25%, var(--card)); }
+.pseat.won .plate { background: color-mix(in srgb, var(--gold) 28%, var(--card)); box-shadow: 0 0 22px color-mix(in srgb, var(--gold) 55%, transparent); }
 .chip-tag {
   position: absolute; top: -6px; right: 4px; width: 24px; height: 24px; border-radius: 50%;
   display: grid; place-items: center; font: 700 .7rem/1 var(--display);
-  background: #f4f1ea; color: #15171d; border: 2px solid #c9c3b6;
+  background: #f4f1ea; color: #15171d; border: 2px dashed #c9c3b6; box-shadow: 0 2px 4px rgba(0,0,0,.4);
 }
 .chip-tag.blind { right: auto; left: 4px; background: var(--purple); color: #fff; border-color: var(--accent); }
 .bet {
-  font: 700 .85rem/1 var(--display); color: #fff; background: rgba(0,0,0,.55); border: 1px solid var(--gold);
-  padding: 3px 8px; border-radius: 999px; font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: flex-end; font: 700 .85rem/1 var(--display); color: #fff; background: rgba(0,0,0,.55); border: 1px solid var(--gold);
+  padding: 3px 8px 3px 5px; border-radius: 999px; font-variant-numeric: tabular-nums;
 }
+.bet .chipstack { height: 18px; width: 15px; }
+.bet .chipstack i { width: 15px; height: 6px; bottom: calc(var(--k, 0) * 3px); }
+.bet.pop { animation: pop .3s ease-out; }
+@keyframes pop { 50% { transform: scale(1.25); } }
 
-.my-hand { display: flex; align-items: center; justify-content: center; gap: 8px; }
-.my-label { font: 700 1.1rem/1.2 var(--display); letter-spacing: 1px; color: var(--gold); margin-left: 8px; }
+/* My cards: a fan that lifts when you point at it. */
+.my-hand { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.hole-fan { display: flex; padding-top: 8px; }
+.hole-fan .pcard { rotate: var(--r, 0deg); transform-origin: 50% 120%; box-shadow: 0 6px 14px rgba(0,0,0,.5); }
+.hole-fan .pcard + .pcard { margin-left: -18px; }
+.hole-fan:hover .pcard { translate: 0 -8px; }
+.hole-fan:hover .pcard:first-child { rotate: calc(var(--r) * 1.6); }
+.hole-fan:hover .pcard:last-child { rotate: calc(var(--r) * 1.6); }
+.hole-fan.folded .pcard { filter: grayscale(.8) brightness(.7); }
+.my-label { font: 700 1.1rem/1.2 var(--display); letter-spacing: 1px; color: var(--gold); }
 .action-bar {
   display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center;
   padding: 12px; border-radius: var(--radius); background: var(--card); border: 1px solid var(--accent);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 .raise-box { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .raise-box input[type="range"] { width: 150px; padding: 0; accent-color: var(--accent); }
@@ -51,9 +94,14 @@
 #afterBar { justify-content: center; }
 
 @media (max-width: 640px) {
-  .table { aspect-ratio: 3 / 4; min-height: 420px; }
-  .felt { inset: 16% 14%; border-width: 6px; }
-  .pseat { width: 92px; }
-  .plate b { font-size: .75rem; }
+  .table { aspect-ratio: 3 / 4; min-height: 440px; }
+  .felt { inset: 16% 12%; border-width: 7px; }
+  .felt-row { gap: 6px; }
+  .deck { display: none; }
+  .pseat { width: 100px; }
+  .plate { padding: 4px 6px 4px 4px; gap: 4px; }
+  .plate .avatar { width: 22px; height: 22px; font-size: .72rem; }
+  .plate b { font-size: .72rem; }
   .board-cards .pcard { --w: 38px !important; }
 }
+@media (prefers-reduced-motion: reduce) { .bet.pop { animation: none; } }

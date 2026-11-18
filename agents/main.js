@@ -8,6 +8,7 @@
   const $ = id => document.getElementById(id);
   const params = new URLSearchParams(location.search);
   const cleanRoom = s => String(s || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
+  AceFX.soundButton();
 
   function setMode(mode) {
     $("startView").hidden = mode !== "start";

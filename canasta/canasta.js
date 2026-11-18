@@ -10,7 +10,7 @@
   const rankName = r => RANK_NAME[r] || r + "s";
   const fmt = n => Number(n || 0).toLocaleString("en-GB");
 
-  let send = null, state = null;
+  let send = null, state = null, prev = null;
   let picked = new Set();          // selected hand cards
   let pilePicked = false;          // the pile's top card is selected
   let groups = [];                 // staged meld groups: { cards: [...], rank? }
@@ -84,11 +84,20 @@
       s.seats.forEach((x, i) => {
         if (i === s.mySeat) return;
         const d = document.createElement("div");
-        d.className = "other" + (i === s.turn && s.phase !== "between" ? " turn" : "") + (n === 4 && s.mySide != null && i % 2 === s.mySide ? " partner" : "");
-        d.innerHTML = `<b></b><span class="muted small"></span>`;
+        const turn = i === s.turn && s.phase !== "between" && !s.over;
+        d.className = "other" + (turn ? " turn" : "") + (n === 4 && s.mySide != null && i % 2 === s.mySide ? " partner" : "");
+        d.dataset.seat = i;
+        d.innerHTML = `<div class="other-head"><span class="who"><b></b><span class="muted small"></span></span></div>`;
+        d.querySelector(".other-head").prepend(AceFX.avatar(x.name, i, "main" + (turn ? " turn" : "")));
         d.querySelector("b").textContent = x.name + (x.online ? "" : " (away)");
-        d.querySelector("span").textContent = `${s.counts[i]} card${s.counts[i] === 1 ? "" : "s"}` + (n === 4 && s.mySide != null ? (i % 2 === s.mySide ? " · partner" : " · opponent") : "");
+        d.querySelector(".who .muted").textContent = `${s.counts[i]} card${s.counts[i] === 1 ? "" : "s"}` + (n === 4 && s.mySide != null ? (i % 2 === s.mySide ? " · partner" : " · opponent") : "");
         if (s.hands) d.appendChild(cardsRow(s.hands[i], 26, "fan tight"));
+        else {
+          const backs = document.createElement("div");
+          backs.className = "backs";
+          for (let k = 0; k < Math.min(s.counts[i], 12); k++) backs.appendChild(AceCards.make("??", { w: 22 }));
+          d.appendChild(backs);
+        }
         others.appendChild(d);
       });
     }
@@ -188,15 +197,25 @@
       staged.appendChild(Object.assign(document.createElement("span"), { className: "muted small", textContent: `Staged: ${total} points` }));
     }
 
-    // My hand
+    // My hand: a fan, with the cards that could go down right now glowing.
     const handEl = $("hand");
     handEl.innerHTML = "";
     const inGroups = stagedCards();
-    (s.hand || []).forEach(c => {
-      if (inGroups.has(c)) return;
-      const b = AceCards.make(c, { w: 52, button: true });
+    const can = playable(s, myTurn);
+    const shownHand = (s.hand || []).filter(c => !inGroups.has(c));
+    const w = innerWidth < 560 ? 46 : 58;
+    const room = Math.max(200, handEl.clientWidth - 8);
+    const step = shownHand.length > 1 ? Math.min(w * 0.72, (room - w) / (shownHand.length - 1)) : w;
+    shownHand.forEach((c, k) => {
+      const b = AceCards.make(c, { w, button: true });
       b.classList.toggle("picked", picked.has(c));
+      b.classList.toggle("can", can.has(c) && !picked.has(c));
       b.disabled = !myTurn;
+      const mid = (shownHand.length - 1) / 2, off = k - mid;
+      b.style.setProperty("--r", (off * Math.min(2.2, 26 / Math.max(1, shownHand.length))).toFixed(2) + "deg");
+      b.style.setProperty("--y", (mid ? (off / mid) ** 2 * 10 : 0).toFixed(1) + "px");      // a gentle arc
+      if (k) b.style.marginLeft = (step - w).toFixed(1) + "px";
+      b.style.zIndex = String(k + 1);
       b.addEventListener("click", () => { picked.has(c) ? picked.delete(c) : picked.add(c); draw(); });
       handEl.appendChild(b);
     });
@@ -239,6 +258,9 @@
       }
     }
 
+    if (playing) motion(prev, s);
+    prev = s;
+
     // Status
     if (!s.started) {
       api.status("Lobby", "4 players: two teams of 2, partners sit opposite. 2 or 3 players: everyone for themselves.");
@@ -255,6 +277,63 @@
     }
   }
 
+  // Cards you could put down now: in the draw phase, ones that match the pile's top card; when
+  // melding, ones that fit your side's melds, wild cards once you have a meld, or three of a kind.
+  function playable(s, myTurn) {
+    const out = new Set();
+    if (!myTurn || !s.hand) return out;
+    const hand = s.hand;
+    const count = {};
+    hand.forEach(c => { if (!isWild(c)) count[rankOf(c)] = (count[rankOf(c)] || 0) + 1; });
+    if (s.phase === "draw") {
+      const top = s.pileTop && rankOf(s.pileTop);
+      if (top && !isWild(s.pileTop) && top !== "3") hand.forEach(c => { if (rankOf(c) === top) out.add(c); });
+      return out;
+    }
+    const mine = s.mySide != null ? s.melds[s.mySide] : [];
+    const have = new Set(mine.map(m => m.rank));
+    hand.forEach(c => {
+      const r = rankOf(c);
+      if (have.has(r) && r !== "3") out.add(c);
+      else if (isWild(c) && mine.length) out.add(c);
+      else if (r !== "3" && count[r] >= 3) out.add(c);
+    });
+    return out;
+  }
+
+  // Cards travel: what you draw comes off the stock, a discard flies from whoever threw it, and
+  // new meld cards drop into place.
+  function motion(p, s) {
+    if (!p || p.handNo !== s.handNo || !p.hand && !s.hand) {
+      if (p && p.handNo !== s.handNo) {
+        document.querySelectorAll("#hand .pcard").forEach((c, k) => AceFX.fly($("stock"), c, { delay: k * 45, duration: 380, sound: k % 3 ? null : "deal" }));
+      }
+      return;
+    }
+    const had = new Set(p.hand || []);
+    let k = 0;
+    document.querySelectorAll("#hand .pcard").forEach(c => {
+      if (!had.has(c.dataset.card)) AceFX.fly($("stock"), c, { delay: k++ * 140, sound: "deal", spin: -15 });
+    });
+    if (s.pileTop && s.pileTop !== p.pileTop && s.pileSize > (p.pileSize || 0)) {
+      const who = p.turn;
+      const from = who === s.mySeat ? $("hand") : document.querySelector(`#others .other[data-seat="${who}"]`);
+      const top = $("pile").querySelector(".pcard");
+      if (from && top) AceFX.fly(from, top, { sound: "flick", spin: 25, duration: 480 });
+    } else if ((p.pileSize || 0) > 1 && !s.pileSize) {
+      AceFX.sound("chime");                      // someone took the pile
+    }
+    const before = new Set([...(p.melds || []).flat().flatMap(m => m.cards), ...(p.red3 || []).flat()]);
+    let m = 0;
+    document.querySelectorAll("#sides .meld .pcard").forEach(c => {
+      if (!before.has(c.dataset.card)) {
+        c.classList.add("deal-in");
+        c.style.animationDelay = (m++ * 60) + "ms";
+      }
+    });
+    if (m) AceFX.sound("flip");
+  }
+
   AceRoom.start({
     game: "canasta",
     title: "Canasta",
@@ -265,6 +344,8 @@
       { key: "target", label: "Game length", choices: [["5000", "First to 5,000"], ["2500", "First to 2,500"], ["1500", "First to 1,500"]] },
     ],
     seatTag: (i, s) => (s.counts ? `${s.counts[i]} cards` : ""),
+    myTurn: s => s.phase !== "between" && s.turn === s.mySeat,
+    iWon: s => s.mySide != null && s.sides && (s.sides[s.mySide] || []).includes(s.winner),
     lobbyText: (s, text) => {
       const seated = s.players.filter(p => p.role === "player");
       if (seated.length === 4) {

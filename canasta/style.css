@@ -1,11 +1,16 @@
 /* Canasta: other players along the top, each side's melds, the stock and pile, then your hand. */
 .others { display: flex; flex-wrap: wrap; gap: 8px; }
 .other {
-  flex: 1 1 140px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0;
+  flex: 1 1 160px; background: linear-gradient(180deg, var(--card2), var(--card)); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; transition: border-color .2s, box-shadow .2s;
 }
+.other-head { display: flex; align-items: center; gap: 8px; }
+.other .who { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
 .other b { overflow-wrap: anywhere; }
-.other.turn { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.other.turn { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 18px color-mix(in srgb, var(--accent) 35%, transparent); }
+.backs { display: flex; padding-left: 4px; }
+.backs .pcard + .pcard { margin-left: -15px; }
+.backs .pcard::after { display: none; }
 .other.partner { background: color-mix(in srgb, var(--gold) 8%, var(--card)); }
 
 .sides { display: flex; flex-direction: column; gap: 10px; }
@@ -28,7 +33,10 @@ button.meld:hover { border-color: var(--accent); }
 .fan .pcard + .pcard { margin-left: calc(var(--w, 34px) * -0.55); }
 .fan.tight .pcard + .pcard { margin-left: calc(var(--w, 26px) * -0.7); }
 
-.middle { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 12px; border-radius: var(--radius); background: radial-gradient(ellipse at 50% 30%, #1f6b47, #12432d 80%); }
+.middle {
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 14px 16px; border-radius: 16px;
+  border: 8px solid #4a2c15; box-shadow: inset 0 0 0 2px #2a170a, inset 0 0 36px rgba(0,0,0,.5), 0 0 0 2px #7b4a22, 0 10px 26px rgba(0,0,0,.5);
+}
 .pile-spot { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .pile-spot .muted { color: #cfe3d6; }
 #pile.frozen .pcard { transform: rotate(90deg); margin-block: 12px; }
@@ -40,7 +48,12 @@ button.meld:hover { border-color: var(--accent); }
 
 .controls { justify-content: flex-start; }
 .help-text { margin: 0; }
-.hand { display: flex; flex-wrap: wrap; gap: 4px; padding-top: 12px; min-height: 90px; }
+/* My hand: one fanned row; cards lift when you point at them, selected ones stay up. */
+.hand { display: flex; justify-content: center; padding: 22px 4px 10px; min-height: 120px; }
+.hand .pcard { rotate: var(--r, 0deg); translate: 0 var(--y, 0px); transform-origin: 50% 140%; box-shadow: -2px 3px 8px rgba(0,0,0,.45); }
+.hand .pcard:hover:not(:disabled) { translate: 0 calc(var(--y, 0px) - 14px); z-index: 50 !important; }
+.hand .pcard.picked { translate: 0 calc(var(--y, 0px) - 18px); transform: none; z-index: 40 !important; }
+.hand .pcard.can { box-shadow: 0 0 0 2px var(--gold), 0 0 16px color-mix(in srgb, var(--gold) 70%, transparent), -2px 3px 8px rgba(0,0,0,.45); }
 
 .score-wrap { overflow-x: auto; }
 .score-table { border-collapse: collapse; width: 100%; font-size: .85rem; font-variant-numeric: tabular-nums; }

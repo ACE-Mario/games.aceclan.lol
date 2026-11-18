@@ -10,6 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../shared/site.css">
 <link rel="stylesheet" href="../shared/room.css">
+<link rel="stylesheet" href="../shared/fx.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -27,9 +28,12 @@
 <main id="gameView" class="wrap layout" hidden>
   <section class="board-col" aria-label="Table">
     <div id="table" class="table">
-      <div class="felt">
-        <div id="boardCards" class="board-cards"></div>
-        <div id="potText" class="pot-text"></div>
+      <div class="felt felt-tex">
+        <div class="felt-row">
+          <div id="deck" class="deck" aria-hidden="true"></div>
+          <div id="boardCards" class="board-cards"></div>
+        </div>
+        <div class="pot"><span id="potChips" class="pot-chips" aria-hidden="true"></span><div id="potText" class="pot-text"></div></div>
       </div>
       <div id="seatsRing"></div>
     </div>
@@ -57,6 +61,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 <script src="../shared/live.js"></script>
+<script src="../shared/fx.js"></script>
 <script src="../shared/room.js"></script>
 <script src="../shared/cards.js"></script>
 <script src="poker.js"></script>

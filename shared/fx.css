@@ -1,0 +1,58 @@
+/* Shared effects (see fx.js): the sound button, flying copies, confetti, the end-of-game banner,
+   player avatars and the felt texture used by the card tables. */
+.sound-btn {
+  background: none; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; color: var(--muted);
+  font: 600 .78rem/1 var(--body); padding: 6px 10px; margin-left: 10px; white-space: nowrap;
+}
+.sound-btn:hover { color: var(--text); border-color: var(--accent); }
+.sound-btn[aria-pressed="true"] { color: var(--text); }
+
+.fx-ghost { transition: none !important; animation: none !important; }
+.fx-confetti { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 80; }
+
+.fx-banner {
+  position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 16px;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,.55), rgba(0,0,0,.2) 70%); cursor: pointer;
+  animation: fx-fade .25s ease-out;
+}
+.fx-banner > div {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; max-width: 560px;
+  padding: 26px 34px; border-radius: 18px; background: var(--card); border: 2px solid var(--accent);
+  box-shadow: 0 20px 60px rgba(0,0,0,.6), 0 0 40px color-mix(in srgb, var(--accent) 35%, transparent);
+  animation: fx-pop .5s cubic-bezier(.2,1.4,.4,1);
+}
+.fx-banner.good > div { border-color: var(--gold); box-shadow: 0 20px 60px rgba(0,0,0,.6), 0 0 50px color-mix(in srgb, var(--gold) 45%, transparent); }
+.fx-banner strong { font: 700 clamp(2rem, 7vw, 3.4rem)/1 var(--display); letter-spacing: 3px; text-transform: uppercase; }
+.fx-banner.good strong { color: var(--gold); text-shadow: 0 0 24px color-mix(in srgb, var(--gold) 60%, transparent); }
+.fx-banner span { color: var(--text); font-size: 1.05rem; }
+.fx-banner small { color: var(--muted); font-size: .75rem; margin-top: 6px; }
+.fx-banner.out { opacity: 0; transition: opacity .3s; }
+@keyframes fx-fade { from { opacity: 0; } }
+@keyframes fx-pop { from { transform: scale(.6); opacity: 0; } }
+
+.avatar {
+  --av: var(--accent);
+  flex: none; width: 30px; height: 30px; border-radius: 50%; display: inline-grid; place-items: center;
+  font: 700 .95rem/1 var(--display); color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.4);
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--av) 60%, #fff), var(--av) 60%, color-mix(in srgb, var(--av) 70%, #000));
+  border: 2px solid rgba(255,255,255,.85); box-shadow: 0 2px 6px rgba(0,0,0,.45);
+}
+.avatar.sm { width: 22px; height: 22px; font-size: .72rem; border-width: 1.5px; }
+.avatar.lg { width: 40px; height: 40px; font-size: 1.2rem; }
+.avatar.turn, .turn > .avatar, .turn .avatar.main {
+  box-shadow: 0 0 0 3px var(--accent), 0 0 18px 4px color-mix(in srgb, var(--accent) 70%, transparent);
+  animation: fx-glow 1.4s ease-in-out infinite;
+}
+@keyframes fx-glow { 50% { box-shadow: 0 0 0 3px var(--accent), 0 0 26px 8px color-mix(in srgb, var(--accent) 45%, transparent); } }
+
+/* Green baize with a faint weave and a soft light from above. */
+.felt-tex {
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(255,255,240,.16), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .22 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E"),
+    radial-gradient(ellipse at 50% 45%, #22744d, #145036 62%, #0d3826);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-banner, .fx-banner > div, .avatar.turn, .turn > .avatar, .turn .avatar.main { animation: none; }
+}

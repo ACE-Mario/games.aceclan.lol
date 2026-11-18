@@ -3,9 +3,20 @@
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 18px; display: flex; flex-direction: column; gap: 14px;
 }
-.q-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.q-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .q-num { font: 700 1rem/1 var(--display); letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
-.q-clock { font: 700 1.4rem/1 var(--display); color: var(--gold); font-variant-numeric: tabular-nums; }
+.q-clock { position: relative; display: grid; place-items: center; min-width: 54px; min-height: 54px;
+  font: 700 1.4rem/1 var(--display); color: var(--gold); font-variant-numeric: tabular-nums; }
+.q-clock svg { position: absolute; inset: 0; width: 54px; height: 54px; transform: rotate(-90deg); display: none; }
+.q-clock.ringed svg { display: block; }
+.q-clock span { position: relative; }
+.q-clock:not(.ringed) span { font-size: 1rem; white-space: nowrap; }
+.ring-bg { fill: none; stroke: var(--bg2); stroke-width: 4; }
+.ring-fg { fill: none; stroke: var(--gold); stroke-width: 4; stroke-linecap: round; transition: stroke-dashoffset .2s linear, stroke .2s; }
+.q-clock.low { color: var(--red); }
+.q-clock.low .ring-fg { stroke: var(--red); }
+.q-clock.beat { animation: beat .45s ease-out; }
+@keyframes beat { 30% { transform: scale(1.25); } }
 .timer { height: 8px; background: var(--bg2); border-radius: 999px; overflow: hidden; }
 .timer i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--purple), var(--accent)); transition: width .2s linear; }
 .timer i.low { background: var(--red); }
@@ -14,19 +25,26 @@
 @media (max-width: 560px) { .answers { grid-template-columns: minmax(0, 1fr); } }
 .answer {
   --c: var(--purple);
-  display: flex; align-items: center; gap: 12px; text-align: left; min-height: 64px;
-  padding: 12px 14px; border-radius: 10px; cursor: pointer; color: var(--text);
-  background: color-mix(in srgb, var(--c) 22%, var(--card2)); border: 2px solid color-mix(in srgb, var(--c) 60%, var(--line));
-  font: 600 1.05rem/1.2 var(--body); transition: transform .1s, filter .15s, opacity .2s;
+  display: flex; align-items: center; gap: 12px; text-align: left; min-height: 78px;
+  padding: 14px 16px; border-radius: 14px; cursor: pointer; color: var(--text);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c) 34%, var(--card2)), color-mix(in srgb, var(--c) 18%, var(--card2)));
+  border: 2px solid color-mix(in srgb, var(--c) 65%, var(--line));
+  box-shadow: 0 4px 0 color-mix(in srgb, var(--c) 45%, #000), 0 8px 18px rgba(0,0,0,.3);
+  font: 600 1.12rem/1.2 var(--body); transition: transform .1s, filter .15s, opacity .2s, box-shadow .1s;
 }
 .answer b {
-  flex: none; width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center;
-  background: var(--c); color: #fff; font: 700 1.1rem/1 var(--display);
+  flex: none; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+  background: var(--c); color: #fff; font: 700 1.25rem/1 var(--display); box-shadow: inset 0 -3px 0 rgba(0,0,0,.25);
 }
 .answer span { flex: 1; overflow-wrap: anywhere; }
 .answer small { flex: none; color: var(--muted); font-size: .85rem; }
 .answer.a0 { --c: #e5484d; } .answer.a1 { --c: #3e7bfa; } .answer.a2 { --c: #d9a21b; } .answer.a3 { --c: #2fa565; }
 .answer:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.15); }
+.answer:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 color-mix(in srgb, var(--c) 45%, #000); }
+.answer.pop-in { animation: pop-in .35s cubic-bezier(.2,1.3,.4,1) backwards; animation-delay: var(--d, 0ms); }
+@keyframes pop-in { from { transform: scale(.7); opacity: 0; } }
+.answer.right { animation: right-glow 1s ease-out; }
+@keyframes right-glow { 30% { transform: scale(1.04); box-shadow: 0 0 0 4px #3fdc8a, 0 0 30px #3fdc8a; } }
 .answer:disabled { cursor: default; }
 .answer.mine { box-shadow: 0 0 0 3px var(--text); }
 .answer.right { background: color-mix(in srgb, #2fa565 45%, var(--card2)); border-color: #3fdc8a; }
@@ -47,6 +65,27 @@
 .leaderboard li.winner .rank { color: var(--gold); }
 .leaderboard .rank { width: 1.5em; font: 700 1.1rem/1 var(--display); color: var(--muted); }
 .leaderboard .who { flex: 1; overflow-wrap: anywhere; white-space: pre-wrap; }
-.leaderboard .pts { font: 700 1.05rem/1 var(--display); font-variant-numeric: tabular-nums; white-space: pre; }
+.leaderboard .pts { font: 700 1.05rem/1 var(--display); font-variant-numeric: tabular-nums; white-space: pre; min-width: 4ch; text-align: right; }
+.leaderboard li { position: relative; }
+
+/* Podium for the top three */
+.podium { display: flex; justify-content: center; align-items: flex-end; gap: 10px; padding: 18px 10px 0; }
+.step { display: flex; flex-direction: column; align-items: center; gap: 4px; width: min(30%, 150px); text-align: center; animation: rise .7s cubic-bezier(.2,1.2,.4,1) backwards; }
+.step b { overflow-wrap: anywhere; font-size: .95rem; }
+.step span { color: var(--muted); font-size: .82rem; }
+.step .block {
+  width: 100%; display: grid; place-items: start center; padding-top: 8px; border-radius: 10px 10px 0 0;
+  font: 700 2rem/1 var(--display); color: rgba(0,0,0,.45);
+  background: linear-gradient(180deg, #d9dde5, #9aa1ad); box-shadow: inset 0 2px 0 rgba(255,255,255,.5);
+}
+.step.p1 { animation-delay: .5s; } .step.p2 { animation-delay: .25s; }
+.step.p1 .block { height: 110px; background: linear-gradient(180deg, #f1d27a, #c89b3c); }
+.step.p2 .block { height: 80px; }
+.step.p3 .block { height: 58px; background: linear-gradient(180deg, #e3a876, #a8693a); }
+.step.p1 .avatar { box-shadow: 0 0 0 3px var(--gold), 0 0 22px var(--gold); }
+@keyframes rise { from { transform: translateY(40px); opacity: 0; } }
 .leaderboard .gain { color: #3fdc8a; font-weight: 600; }
-@media (prefers-reduced-motion: reduce) { .answer, .timer i { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .answer, .timer i, .ring-fg { transition: none; }
+  .answer.pop-in, .answer.right, .step, .q-clock.beat { animation: none; }
+}

@@ -9,11 +9,14 @@
 //     rules: "<ol>...</ol>",                // trusted HTML written in the game's own file
 //     canSkip: true,                        // show the leader's Skip turn button
 //     seatTag: (seat, s) => "120 pts",      // optional extra text after each player's name
+//     myTurn: s => bool,                    // optional: is it my move? (default: s.turn === s.mySeat)
+//     iWon: s => bool,                      // optional: did I win? (default: s.winner === s.mySeat)
 //     render: (s, api) => { ... },          // draw the game; api.send(type, extra) makes a move
 //   });
 //
 // The page needs <main id="startView">, and <main id="gameView"> with a .board-col section
-// (the game's board goes in it) and an <aside id="panel">.
+// (the game's board goes in it) and an <aside id="panel">. It also needs shared/fx.js, which
+// plays a ding when your turn comes round and shows the banner (and confetti) at the end.
 window.AceRoom = (() => {
   "use strict";
   const $ = id => document.getElementById(id);
@@ -27,6 +30,7 @@ window.AceRoom = (() => {
   const cleanRoom = v => String(v || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
 
   function start(cfg) {
+    AceFX.soundButton();
     const params = new URLSearchParams(location.search);
     const room = cleanRoom(params.get("room"));
     if (room && AceLive.name() && window.io) play(cfg, { room });
@@ -150,6 +154,7 @@ window.AceRoom = (() => {
     let pendingCreate = opts.create || null;
     let state = null;
     let errTimer = 0;
+    let wasMyTurn = null, wasOver = null;
     const socket = AceLive.connect();
 
     // Top of the board column: status banner, your hint, connection note, lobby bar.
@@ -481,14 +486,37 @@ window.AceRoom = (() => {
       for (const e of [...s.log].reverse()) log.appendChild(el("li", e.kind || "", e.text));
 
       cfg.render(s, api);
+      cheer(s, inGame);
+    }
+
+    // A ding when it becomes your move, and a banner when a game you watched finish ends.
+    function cheer(s, inGame) {
+      const mine = inGame && s.mySeat != null && (cfg.myTurn ? !!cfg.myTurn(s) : s.turn != null && s.turn === s.mySeat);
+      if (wasMyTurn === false && mine) AceFX.sound("ding");
+      wasMyTurn = mine;
+      if (wasOver === false && s.over && s.started) {
+        const played = s.mySeat != null;
+        const won = played && (cfg.iWon ? !!cfg.iWon(s) : s.winner === s.mySeat);
+        if (won) {
+          AceFX.confetti();
+          AceFX.sound("win");
+          AceFX.banner("You win!", s.result, true);
+        } else {
+          AceFX.sound(played ? "lose" : "chime");
+          AceFX.banner("Game over", s.result, false);
+        }
+      }
+      wasOver = !!s.over;
     }
 
     function playerItem(p, s, seat) {
       const li = el("li", "player" + (p.online === false ? " away" : ""));
       if (p.team && s.teams) li.classList.add("team-" + p.team);
+      const turn = seat != null && s.started && !s.over && s.turn === seat;
+      li.appendChild(AceFX.avatar(p.name, seat != null ? seat : 8, "sm" + (turn ? " turn" : "")));
       li.appendChild(el("span", "", p.name));
       const tags = [];
-      if (seat != null && s.teams && p.team) tags.push([s.teams[p.team], "team"]);
+      if (seat != null && s.teams && p.team) tags.push([s.teams[p.team], "teamtag"]);
       if (p.id === s.host) tags.push(["leader", "leader"]);
       if (p.id === s.you) tags.push(["you", "you"]);
       if (p.bot) tags.push(["bot", "bot"]);

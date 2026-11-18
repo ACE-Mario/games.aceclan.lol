@@ -11,7 +11,7 @@ window.startOnlineGame = function (opts, onFail) {
   let room = opts.room || null;
   let pendingCreate = opts.create || null;
   let state = null;
-  let lastAnimated = null;
+  let lastAnimated = null, drawnOnce = false, wasOver = null;
   let wasStarted = null;
   let errTimer = 0;
 
@@ -181,10 +181,19 @@ window.startOnlineGame = function (opts, onFail) {
       b.querySelector(".word").textContent = c.word;
       const animate = i === s.lastRevealed && s.lastRevealed !== lastAnimated;
       b.className = "card" + (c.role ? " " + c.role : "") + (c.revealed ? " revealed" : "") + (animate ? " just" : "");
+      b.dataset.word = c.word;
+      if (animate && drawnOnce) AceFX.sound(c.role === "bomb" ? "buzz" : "flip");
       b.disabled = c.revealed || !canReveal;
       b.setAttribute("aria-label", `${coord(i)} ${c.word}${c.role ? ", " + c.role : ""}${c.revealed ? ", revealed" : ""}`);
     });
     lastAnimated = s.lastRevealed;
+    drawnOnce = true;
+    // Confetti for the winning team.
+    if (wasOver === false && over) {
+      if (me.team === s.winner) { AceFX.confetti(); AceFX.sound("win"); }
+      else AceFX.sound(me.team ? "lose" : "chime");
+    }
+    wasOver = over;
 
     // Turn banner
     $("status").className = "status " + (over ? s.winner : s.turn);

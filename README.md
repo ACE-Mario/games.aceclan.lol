@@ -19,6 +19,9 @@ stops both. Rooms live in memory, so restarting the server ends any games in pro
 - `index.html`: landing page listing the games. Add a card here for each new game.
 - `shared/site.css`: the shared ACE look (colours, top bar, buttons). Every page links it.
 - `shared/live.js`: connects a game page to the live server (player id, name, server check).
+- `shared/fx.js` and `shared/fx.css`: effects every game uses: sounds made in the browser (with the Sound
+  on/off button in the top bar), cards and chips sliding between places, confetti and the end-of-game
+  banner, and player avatars. They respect the "reduce motion" setting.
 - `agents/`: Ace Agents, a two-team word game.
   - `index.html`: start screen, board, online panels and the one-screen key view.
   - `main.js`: picks the mode from the link (`?room=KQTZ` online, `?code=FALCON-42` one screen).
@@ -35,7 +38,7 @@ stops both. Rooms live in memory, so restarting the server ends any games in pro
     reads this file too; restart it after editing.
 - `poker/`: Ace Poker Night, Texas hold'em for points (never real money), 2 to 9 players.
 - `canasta/`: Canasta, classic rules for 2 to 4 players (4 play as two teams of 2).
-- `shared/cards.js`: draws playing cards for poker and canasta.
+- `shared/cards.js`: draws playing cards for poker and canasta (corner indices and face-card art).
 - `server/`: the live server.
   - `server.py`: rooms, players and the Socket.IO connection. Also serves this folder for local testing.
   - `games/agents.py`: Ace Agents rules. The server checks every move and only sends the key to spymasters.
@@ -79,6 +82,7 @@ time's up) never leave the server except to the player allowed to see them.
 2. For online play, write a rules module in `server/games/` (with `new_state`, `default_seat`, `handle` and
    `view`, like `agents.py`) and add it to `server/games/__init__.py`. A turn-based game with seats can
    subclass `base.SeatedGame` and use `shared/room.js` on the page, like `snakes.py` and `snakes/`.
+   Link `../shared/fx.css` and load `../shared/fx.js` before `room.js`.
    A game with a clock can add a `tick(room, now)` method; the server calls it a few times a second.
 3. Add a card for it in the root `index.html`.
 

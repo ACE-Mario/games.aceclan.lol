@@ -134,6 +134,8 @@ window.startLocalGame = function () {
 
   function finish(winner, reason) {
     state.winner = winner;
+    AceFX.confetti();
+    AceFX.sound("win");
     state.reason = reason;
     state.clue = null;
     state.left = null;
@@ -184,6 +186,8 @@ window.startLocalGame = function () {
       const revealed = state.revealed.includes(i);
       const role = board.roles[i];
       b.className = "card" + (revealed || keyOn ? " " + role : "") + (revealed ? " revealed" : "") + (i === lastRevealed ? " just" : "");
+      b.dataset.word = board.words[i];
+      if (i === lastRevealed) AceFX.sound(role === "bomb" ? "buzz" : "flip");
       b.disabled = revealed || over;
       b.setAttribute("aria-label", `${coord(i)} ${board.words[i]}${revealed ? ", " + role : ""}`);
     });
