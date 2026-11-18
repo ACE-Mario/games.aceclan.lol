@@ -281,7 +281,16 @@
     const rows = save.guesses.word = save.guesses.word || [];
     let cur = "", over = false, flipRow = -1;
     el.innerHTML = header(st, "Guess the five-letter word. <b style=\"color:#3fbf7f\">Green</b>: right letter, right spot. <b style=\"color:#c89b3c\">Gold</b>: in the word, wrong spot. Grey: not in it.")
-      + `<div class="wgrid" id="wgrid"></div><div class="keys" id="keys"></div>`;
+      + `<div class="wgrid" id="wgrid"></div><p class="wmsg" id="wmsg" aria-live="polite"></p><div class="keys" id="keys"></div>`;
+    // Guesses must be real words (guesses.js), or one of the answers. If the list didn't load, allow anything.
+    const isWord = w => !window.ACEDLE_VALID || window.ACEDLE_VALID.has(w) || window.ACEDLE_WORDS.includes(w);
+    let msgTimer = 0;
+    const say = text => { $("wmsg").textContent = text; clearTimeout(msgTimer); msgTimer = setTimeout(() => { $("wmsg").textContent = ""; }, 1800); };
+    const shake = () => {
+      const row = $("wgrid").children[rows.length];
+      row.classList.remove("shake"); void row.offsetWidth; row.classList.add("shake");
+      FX.sound("buzz");
+    };
     const keyRows = ["QWERTYUIOP", "ASDFGHJKL", "+ZXCVBNM-"];
     const draw = () => {
       const best = {};
@@ -302,12 +311,8 @@
     const press = k => {
       if (over) return;
       if (k === "Enter") {
-        if (cur.length < 5) {
-          const row = $("wgrid").children[rows.length];
-          row.classList.remove("shake"); void row.offsetWidth; row.classList.add("shake");
-          FX.sound("buzz");
-          return;
-        }
+        if (cur.length < 5) { shake(); say("Not enough letters"); return; }
+        if (!isWord(cur)) { shake(); say("Not in the word list"); return; }   // doesn't use up a guess
         rows.push(cur);
         persist();
         flipRow = rows.length - 1;

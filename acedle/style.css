@@ -48,6 +48,7 @@
 .tile.x, .key.x { background: #3a3f4d; border-color: #3a3f4d; color: #c7cad3; }
 .tile.flip { animation: tflip .5s ease both; }
 @keyframes tflip { 0% { transform: rotateX(0); } 50% { transform: rotateX(90deg); } 100% { transform: rotateX(0); } }
+.wmsg { text-align: center; min-height: 1.4em; margin: -8px 0 10px; font-weight: 700; color: var(--gold); }
 .keys { display: grid; gap: 6px; max-width: 500px; margin: 0 auto; }
 .krow { display: flex; gap: 5px; justify-content: center; }
 .key { flex: 1 1 0; max-width: 44px; height: 50px; border-radius: 6px; border: 1px solid var(--line); background: var(--card2);
