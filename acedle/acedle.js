@@ -55,15 +55,24 @@
   const data = {};
   const ready = {
     league: (async () => {
+      // Lore regions come from Riot's Universe site (Data Dragon doesn't have them). If it's down, the
+      // Champion stage just leaves the Region column out.
+      const universe = getJSON("https://universe-meeps.leagueoflegends.com/v1/en_us/search/index.json").catch(() => null);
       const ver = (await getJSON(`${DD}/api/versions.json`))[0];
       const champs = (await getJSON(`${DD}/cdn/${ver}/data/en_US/champion.json`)).data;
+      const uni = await universe;
+      const squash = s => String(s).toLowerCase().replace(/[^a-z]/g, "");
+      const regionName = Object.fromEntries((uni?.factions || []).map(f => [f.slug, f.name.replace(/^The /, "")]));
+      const regionOf = Object.fromEntries((uni?.champions || []).map(c => [squash(c.slug), regionName[c["associated-faction-slug"]] || "Runeterra"]));
       data.dd = ver;
       data.champs = Object.values(champs).sort((a, b) => a.id.localeCompare(b.id)).map(c => ({
         id: c.id, name: c.name, img: `${DD}/cdn/${ver}/img/champion/${c.id}.png`,
         cls: c.tags[0] || "None", cls2: c.tags[1] || "None", resource: c.partype || "None",
-        melee: c.stats.attackrange < 300, range: c.stats.attackrange, diff: c.info.difficulty,
+        melee: c.stats.attackrange < 300, range: c.stats.attackrange,
+        region: regionOf[squash(c.name)] || regionOf[squash(c.id)] || null,
         title: c.title, blurb: c.blurb,
       }));
+      data.regions = data.champs.filter(c => c.region).length > data.champs.length / 2;
       // A different champion for each League stage. Emoji goes first: only some champions have emoji clues.
       const used = new Set();
       const distinct = (salt, from = data.champs) => { const r = rng(salt); let c; do { c = pick(from, r); } while (used.has(c.id)); used.add(c.id); return c; };
@@ -251,7 +260,7 @@
     const answer = data.answer.champion;
     const names = save.guesses.champion = save.guesses.champion || [];
     el.innerHTML = header(st, "Guess today's League champion. Each guess shows how close it is.")
-      + `<div id="pickHolder"></div><div class="clues"><table><thead><tr><th>Champion</th><th>Class</th><th>Also</th><th>Resource</th><th>Range</th><th>Attack range</th><th>Difficulty</th></tr></thead><tbody id="rows"></tbody></table></div>
+      + `<div id="pickHolder"></div><div class="clues"><table><thead><tr><th>Champion</th><th>Class</th><th>Also</th><th>Resource</th><th>Range</th><th>Attack range</th>${data.regions ? "<th>Region</th>" : ""}</tr></thead><tbody id="rows"></tbody></table></div>
       <div class="key-legend"><span><i style="background:#2f9e44"></i>Match</span><span><i style="background:#c89b3c"></i>Partly (one of their classes)</span><span><i style="background:#3a3f4d"></i>No match</span><span>↑ ↓ the answer is higher or lower</span></div>
       <div id="tries"></div>`;
     const options = data.champs.map(c => ({ ...c, used: names.includes(c.id) }));
@@ -262,7 +271,7 @@
       <td class="${cls(c.cls2, answer.cls, answer.cls2, answer.cls2)}">${esc(c.cls2)}</td>
       <td class="${c.resource === answer.resource ? "g" : "x"}">${esc(c.resource)}</td>
       <td class="${c.melee === answer.melee ? "g" : "x"}">${c.melee ? "Melee" : "Ranged"}</td>
-      ${num(c.range, answer.range)}${num(c.diff, answer.diff)}</tr>`;
+      ${num(c.range, answer.range)}${data.regions ? `<td class="${c.region && c.region === answer.region ? "g" : "x"}">${esc(c.region || "Unknown")}</td>` : ""}</tr>`;
     const byId = id => data.champs.find(c => c.id === id);
     const draw = isNew => {
       $("rows").innerHTML = names.slice().reverse().map((id, i) => row(byId(id), isNew && i === 0)).join("");
