@@ -45,3 +45,15 @@ window.AceLive = (() => {
     setName: n => store.set("ace-name", n.trim().slice(0, 20)),
   };
 })();
+
+// Effects (shared/fx.js) are optional. Every game page loads this file first, so if a page
+// doesn't load fx.js (an old copy still in someone's browser cache), the games carry on without
+// sounds or animations instead of stopping. fx.js, when loaded, replaces this.
+window.AceFX = window.AceFX || {
+  sound() {}, soundButton() {}, setMuted() {}, muted: true, confetti() {}, banner() {}, pulse() {}, slide() {},
+  fly: () => Promise.resolve(),
+  countUp(el, from, to, fmt = String) { if (el) el.textContent = fmt(to); },
+  snap: () => new Map(),
+  avatar: () => Object.assign(document.createElement("span"), { hidden: true }),
+  color: () => "#a78bfa", COLORS: [], still: () => true,
+};

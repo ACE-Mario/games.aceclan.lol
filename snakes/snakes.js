@@ -15,7 +15,7 @@
   }
 
   let built = false, tokens = [], lastRoll = null, shown = [];
-  let queue = Promise.resolve(), pending = 0;
+  let queue = Promise.resolve(), pending = 0, latest = [];
 
   // ---- The board ----------------------------------------------------------------------------
   function build(s) {
@@ -167,7 +167,7 @@
     return out;
   }
 
-  async function animateRoll(last, pos) {
+  async function animateRoll(last) {
     const fast = pending > 1;
     showDie(last.die, true);
     AceFX.sound("roll");
@@ -191,7 +191,7 @@
       await sleep(fast ? 400 : 750);
       if (tok) tok.classList.remove("climbing", "sliding");
     }
-    shown = pos.slice();
+    shown = latest.slice();                       // wherever everyone is now
     layout(shown);
   }
 
@@ -221,10 +221,10 @@
 
     // Animate the latest roll; rolls that arrive mid-animation wait their turn (and go faster).
     const last = s.last;
-    if (last && lastRoll !== null && last.n !== lastRoll) {
+    latest = pos.slice();
+    if (last && lastRoll !== null && last.n !== lastRoll && pending < 2) {
       pending++;
-      const p = pos.slice();
-      queue = queue.then(() => animateRoll(last, p)).catch(() => {}).then(() => { pending--; });
+      queue = queue.then(() => animateRoll(last)).catch(() => {}).then(() => { pending--; });
     } else if (!pending) {
       shown = pos.slice();
       layout(shown);

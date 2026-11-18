@@ -28,9 +28,10 @@ window.AceRoom = (() => {
     return e;
   };
   const cleanRoom = v => String(v || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
+  const FX = window.AceFX;            // shared/fx.js (live.js stands in with no-ops if it's missing)
 
   function start(cfg) {
-    AceFX.soundButton();
+    FX.soundButton();
     const params = new URLSearchParams(location.search);
     const room = cleanRoom(params.get("room"));
     if (room && AceLive.name() && window.io) play(cfg, { room });
@@ -492,18 +493,18 @@ window.AceRoom = (() => {
     // A ding when it becomes your move, and a banner when a game you watched finish ends.
     function cheer(s, inGame) {
       const mine = inGame && s.mySeat != null && (cfg.myTurn ? !!cfg.myTurn(s) : s.turn != null && s.turn === s.mySeat);
-      if (wasMyTurn === false && mine) AceFX.sound("ding");
+      if (wasMyTurn === false && mine) FX.sound("ding");
       wasMyTurn = mine;
       if (wasOver === false && s.over && s.started) {
         const played = s.mySeat != null;
         const won = played && (cfg.iWon ? !!cfg.iWon(s) : s.winner === s.mySeat);
         if (won) {
-          AceFX.confetti();
-          AceFX.sound("win");
-          AceFX.banner("You win!", s.result, true);
+          FX.confetti();
+          FX.sound("win");
+          FX.banner("You win!", s.result, true);
         } else {
-          AceFX.sound(played ? "lose" : "chime");
-          AceFX.banner("Game over", s.result, false);
+          FX.sound(played ? "lose" : "chime");
+          FX.banner("Game over", s.result, false);
         }
       }
       wasOver = !!s.over;
@@ -513,7 +514,7 @@ window.AceRoom = (() => {
       const li = el("li", "player" + (p.online === false ? " away" : ""));
       if (p.team && s.teams) li.classList.add("team-" + p.team);
       const turn = seat != null && s.started && !s.over && s.turn === seat;
-      li.appendChild(AceFX.avatar(p.name, seat != null ? seat : 8, "sm" + (turn ? " turn" : "")));
+      li.appendChild(FX.avatar(p.name, seat != null ? seat : 8, "sm" + (turn ? " turn" : "")));
       li.appendChild(el("span", "", p.name));
       const tags = [];
       if (seat != null && s.teams && p.team) tags.push([s.teams[p.team], "teamtag"]);
