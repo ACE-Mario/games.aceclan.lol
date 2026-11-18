@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ACEdle</title>
+<meta name="description" content="ACEdle: the daily ACE Clan puzzle run. Eight guessing stages, points for every one, and a clan leaderboard.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/site.css?v=20261118">
+<link rel="stylesheet" href="../shared/fx.css?v=20261118">
+<link rel="stylesheet" href="style.css?v=20261118">
+</head>
+<body>
+<header class="sitebar">
+  <div class="wrap sitebar-inner">
+    <a class="ace" href="../">ACE<span>.</span><small>Games</small></a>
+    <nav>
+      <a href="../">Games</a>
+      <a href="https://aceclan.lol">Clan</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap acedle">
+  <section class="top">
+    <div>
+      <h1>ACE<span>dle</span> <small id="dayNo"></small></h1>
+      <p class="muted">Eight puzzles a day, one after another. Fewer guesses, more points. New run at midnight (Adelaide time).</p>
+    </div>
+    <div class="scorebox"><b id="total">0</b><span>/ 800 points</span></div>
+  </section>
+
+  <ol class="stages" id="stages" aria-label="Stages"></ol>
+
+  <section id="stage" class="stage" aria-live="polite">
+    <p class="muted loading">Loading today's puzzles…</p>
+  </section>
+
+  <section id="finish" class="finish" hidden></section>
+</main>
+
+<footer class="site-foot">ACEdle is a fan game for ACE Clan. League of Legends and VALORANT names and pictures belong to Riot Games.</footer>
+
+<script src="../shared/fx.js?v=20261118"></script>
+<script src="words.js?v=20261118"></script>
+<script src="acedle.js?v=20261118"></script>
+</body>
+</html>
