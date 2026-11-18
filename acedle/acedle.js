@@ -55,24 +55,39 @@
   const data = {};
   const ready = {
     league: (async () => {
-      // Lore regions come from Riot's Universe site (Data Dragon doesn't have them). If it's down, the
-      // Champion stage just leaves the Region column out.
+      // Regions and melee/ranged come from champions.txt (edit it in Notepad). Champions missing from it fall
+      // back to Riot's Universe site for their main region and Data Dragon's attack range. If neither has
+      // regions, the Champion stage just leaves the Region column out.
+      const listFile = fetch("champions.txt", { cache: "no-cache" }).then(r => r.ok ? r.text() : "").catch(() => "");
       const universe = getJSON("https://universe-meeps.leagueoflegends.com/v1/en_us/search/index.json").catch(() => null);
       const ver = (await getJSON(`${DD}/api/versions.json`))[0];
       const champs = (await getJSON(`${DD}/cdn/${ver}/data/en_US/champion.json`)).data;
-      const uni = await universe;
+      const [list, uni] = await Promise.all([listFile, universe]);
       const squash = s => String(s).toLowerCase().replace(/[^a-z]/g, "");
+      const tidyRegion = r => r.trim().replace(/^the\s+/i, "").replace(/\b\w/g, ch => ch.toUpperCase());
+      const listed = {};
+      for (const line of list.split(/\r?\n/)) {
+        if (!line.trim() || line.trim().startsWith("#")) continue;
+        const [name, regions = "", reach = ""] = line.split("|").map(s => s.trim());
+        listed[squash(name)] = { regions: regions.split(",").map(tidyRegion).filter(Boolean), reach: reach.toLowerCase() };
+      }
       const regionName = Object.fromEntries((uni?.factions || []).map(f => [f.slug, f.name.replace(/^The /, "")]));
       const regionOf = Object.fromEntries((uni?.champions || []).map(c => [squash(c.slug), regionName[c["associated-faction-slug"]] || "Runeterra"]));
       data.dd = ver;
-      data.champs = Object.values(champs).sort((a, b) => a.id.localeCompare(b.id)).map(c => ({
-        id: c.id, name: c.name, img: `${DD}/cdn/${ver}/img/champion/${c.id}.png`,
-        cls: c.tags[0] || "None", cls2: c.tags[1] || "None", resource: c.partype || "None",
-        melee: c.stats.attackrange < 300, range: c.stats.attackrange,
-        region: regionOf[squash(c.name)] || regionOf[squash(c.id)] || null,
-        title: c.title, blurb: c.blurb,
-      }));
-      data.regions = data.champs.filter(c => c.region).length > data.champs.length / 2;
+      data.champs = Object.values(champs).sort((a, b) => a.id.localeCompare(b.id)).map(c => {
+        const own = listed[squash(c.name)] || listed[squash(c.id)] || {};
+        const main = regionOf[squash(c.name)] || regionOf[squash(c.id)];
+        const reach = own.reach === "both" ? ["Melee", "Ranged"] : own.reach === "melee" ? ["Melee"] : own.reach === "ranged" ? ["Ranged"]
+          : [c.stats.attackrange < 300 ? "Melee" : "Ranged"];
+        return {
+          id: c.id, name: c.name, img: `${DD}/cdn/${ver}/img/champion/${c.id}.png`,
+          cls: c.tags[0] || "None", cls2: c.tags[1] || "None", resource: c.partype || "None",
+          reach, reachLabel: reach.length > 1 ? "Both" : reach[0], range: c.stats.attackrange,
+          regions: own.regions?.length ? own.regions : main ? [main] : [],
+          title: c.title, blurb: c.blurb,
+        };
+      });
+      data.regions = data.champs.filter(c => c.regions.length).length > data.champs.length / 2;
       // A different champion for each League stage. Emoji goes first: only some champions have emoji clues.
       const used = new Set();
       const distinct = (salt, from = data.champs) => { const r = rng(salt); let c; do { c = pick(from, r); } while (used.has(c.id)); used.add(c.id); return c; };
@@ -261,17 +276,23 @@
     const names = save.guesses.champion = save.guesses.champion || [];
     el.innerHTML = header(st, "Guess today's League champion. Each guess shows how close it is.")
       + `<div id="pickHolder"></div><div class="clues"><table><thead><tr><th>Champion</th><th>Class</th><th>Also</th><th>Resource</th><th>Range</th><th>Attack range</th>${data.regions ? "<th>Region</th>" : ""}</tr></thead><tbody id="rows"></tbody></table></div>
-      <div class="key-legend"><span><i style="background:#2f9e44"></i>Match</span><span><i style="background:#c89b3c"></i>Partly (one of their classes)</span><span><i style="background:#3a3f4d"></i>No match</span><span>↑ ↓ the answer is higher or lower</span></div>
+      <div class="key-legend"><span><i style="background:#2f9e44"></i>Match</span><span><i style="background:#c89b3c"></i>Partly (something in common)</span><span><i style="background:#3a3f4d"></i>No match</span><span>↑ ↓ the answer is higher or lower</span></div>
       <div id="tries"></div>`;
     const options = data.champs.map(c => ({ ...c, used: names.includes(c.id) }));
     const num = (g, a) => g === a ? `<td class="g">${g}</td>` : `<td class="x">${g}<span class="ar">${a > g ? "↑" : "↓"}</span></td>`;
+    // Lists (regions, melee/ranged): exactly the same = green, anything shared = gold.
+    const overlap = (g, a) => {
+      const A = new Set(a.map(x => x.toLowerCase())), G = g.map(x => x.toLowerCase());
+      if (!G.length || !A.size) return "x";
+      return G.length === A.size && G.every(x => A.has(x)) ? "g" : G.some(x => A.has(x)) ? "y" : "x";
+    };
     const cls = (g, a1, a2, exact) => g === exact ? "g" : g !== "None" && (g === a1 || g === a2) ? "y" : "x";
     const row = (c, isNew) => `<tr class="${isNew ? "new" : ""}"><td class="who" title="${esc(c.name)}"><img src="${esc(c.img)}" alt="${esc(c.name)}"></td>
       <td class="${cls(c.cls, answer.cls, answer.cls2, answer.cls)}">${esc(c.cls)}</td>
       <td class="${cls(c.cls2, answer.cls, answer.cls2, answer.cls2)}">${esc(c.cls2)}</td>
       <td class="${c.resource === answer.resource ? "g" : "x"}">${esc(c.resource)}</td>
-      <td class="${c.melee === answer.melee ? "g" : "x"}">${c.melee ? "Melee" : "Ranged"}</td>
-      ${num(c.range, answer.range)}${data.regions ? `<td class="${c.region && c.region === answer.region ? "g" : "x"}">${esc(c.region || "Unknown")}</td>` : ""}</tr>`;
+      <td class="${overlap(c.reach, answer.reach)}">${c.reachLabel}</td>
+      ${num(c.range, answer.range)}${data.regions ? `<td class="${overlap(c.regions, answer.regions)}">${esc(c.regions.join(", ") || "Unknown")}</td>` : ""}</tr>`;
     const byId = id => data.champs.find(c => c.id === id);
     const draw = isNew => {
       $("rows").innerHTML = names.slice().reverse().map((id, i) => row(byId(id), isNew && i === 0)).join("");
@@ -370,7 +391,7 @@
       how: "Whose story is this? You get hints with every wrong guess.",
       picture: `<blockquote class="lore">${hidden}</blockquote>`,
       update: () => {},
-      hints: [`Class: <b>${esc(answer.cls)}</b>`, `<b>${answer.melee ? "Melee" : "Ranged"}</b>`, `Title: <b>${esc(answer.title)}</b>`],
+      hints: [`Class: <b>${esc(answer.cls)}</b>`, `<b>${answer.reachLabel === "Both" ? "Melee and ranged" : answer.reachLabel}</b>`, `Title: <b>${esc(answer.title)}</b>`],
       options: data.champs.map(c => ({ name: c.name, img: c.img })), answerName: answer.name,
       answerHtml: `<b>${esc(answer.name)}</b>, ${esc(answer.title)}`,
     });
@@ -424,7 +445,7 @@
       how: "Whose splash art is this? It zooms out with every wrong guess.",
       picture: `<div class="splash" id="pic" role="img" aria-label="A zoomed-in piece of splash art" style="background-image:url('${DD}/cdn/img/champion/splash/${answer.id}_0.jpg')"></div>`,
       update: m => { const p = $("pic"); p.style.backgroundSize = m >= 99 ? "100%" : `${zoom[m] ?? 100}%`; p.style.backgroundPosition = m >= 99 ? "50% 50%" : `${x}% ${y}%`; },
-      hints: [`Class: <b>${esc(answer.cls)}</b>`, `<b>${answer.melee ? "Melee" : "Ranged"}</b>`, `Resource: <b>${esc(answer.resource)}</b>`],
+      hints: [`Class: <b>${esc(answer.cls)}</b>`, `<b>${answer.reachLabel === "Both" ? "Melee and ranged" : answer.reachLabel}</b>`, `Resource: <b>${esc(answer.resource)}</b>`],
       options: data.champs.map(c => ({ name: c.name, img: c.img })), answerName: answer.name,
       answerHtml: `<b>${esc(answer.name)}</b>`,
     });

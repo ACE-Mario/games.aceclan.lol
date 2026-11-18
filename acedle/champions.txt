@@ -1,0 +1,183 @@
+# ACEdle champion list: the Region and Range clues in the Champion stage.
+# One line per champion:   Name | Regions | Range
+#   Regions: main region first, then any others, split with commas.  e.g.  Sylas | Demacia, Freljord | Melee
+#   Range:   Melee, Ranged or Both.
+# Region names to use: Bandle City, Bilgewater, Demacia, Freljord, Ionia, Ixtal, Noxus, Piltover,
+#   Shadow Isles, Shurima, Targon, Void, Zaun, Runeterra (no home region).
+# Clues: exactly the same regions = green, at least one shared = gold. Same for Range with Both.
+# Don't rename champions. New champions missing from here still work (main region only).
+# Lines starting with # are ignored. Save, then push the games site.
+
+Aatrox         | Runeterra | Melee
+Ahri           | Ionia | Ranged
+Akali          | Ionia | Melee
+Akshan         | Shurima | Ranged
+Alistar        | Runeterra | Melee
+Ambessa        | Noxus | Melee
+Amumu          | Shurima | Melee
+Anivia         | Freljord | Ranged
+Annie          | Runeterra | Ranged
+Aphelios       | Targon | Ranged
+Ashe           | Freljord | Ranged
+Aurelion Sol   | Runeterra | Ranged
+Aurora         | Freljord | Ranged
+Azir           | Shurima | Ranged
+Bard           | Runeterra | Ranged
+Bel'Veth       | Void | Melee
+Blitzcrank     | Zaun | Melee
+Brand          | Runeterra | Ranged
+Braum          | Freljord | Melee
+Briar          | Noxus | Melee
+Caitlyn        | Piltover | Ranged
+Camille        | Piltover | Melee
+Cassiopeia     | Noxus | Ranged
+Cho'Gath       | Void | Melee
+Corki          | Bandle City | Ranged
+Darius         | Noxus | Melee
+Diana          | Targon | Melee
+Dr. Mundo      | Zaun | Melee
+Draven         | Noxus | Ranged
+Ekko           | Zaun | Melee
+Elise          | Shadow Isles | Both
+Evelynn        | Runeterra | Melee
+Ezreal         | Piltover | Ranged
+Fiddlesticks   | Runeterra | Ranged
+Fiora          | Demacia | Melee
+Fizz           | Runeterra | Melee
+Galio          | Demacia | Melee
+Gangplank      | Bilgewater | Melee
+Garen          | Demacia | Melee
+Gnar           | Freljord | Both
+Gragas         | Freljord | Melee
+Graves         | Bilgewater | Ranged
+Gwen           | Shadow Isles | Melee
+Hecarim        | Shadow Isles | Melee
+Heimerdinger   | Piltover | Ranged
+Hwei           | Ionia | Ranged
+Illaoi         | Bilgewater | Melee
+Irelia         | Ionia | Melee
+Ivern          | Ionia | Ranged
+Janna          | Zaun | Ranged
+Jarvan IV      | Demacia | Melee
+Jax            | Runeterra | Melee
+Jayce          | Piltover | Both
+Jhin           | Ionia | Ranged
+Jinx           | Zaun | Ranged
+K'Sante        | Shurima | Melee
+Kai'Sa         | Void | Ranged
+Kalista        | Shadow Isles | Ranged
+Karma          | Ionia | Ranged
+Karthus        | Shadow Isles | Ranged
+Kassadin       | Void | Melee
+Katarina       | Noxus | Melee
+Kayle          | Demacia | Both
+Kayn           | Ionia | Melee
+Kennen         | Ionia | Ranged
+Kha'Zix        | Void | Melee
+Kindred        | Runeterra | Ranged
+Kled           | Noxus | Both
+Kog'Maw        | Void | Ranged
+LeBlanc        | Noxus | Ranged
+Lee Sin        | Ionia | Melee
+Leona          | Targon | Melee
+Lillia         | Ionia | Ranged
+Lissandra      | Freljord | Ranged
+Locke          | Demacia | Melee
+Lucian         | Runeterra | Ranged
+Lulu           | Bandle City | Ranged
+Lux            | Demacia | Ranged
+Malphite       | Ixtal | Melee
+Malzahar       | Void | Ranged
+Maokai         | Shadow Isles | Melee
+Master Yi      | Ionia | Melee
+Mel            | Noxus | Ranged
+Milio          | Ixtal | Ranged
+Miss Fortune   | Bilgewater | Ranged
+Mordekaiser    | Noxus | Melee
+Morgana        | Demacia | Ranged
+Naafiri        | Shurima | Melee
+Nami           | Runeterra | Ranged
+Nasus          | Shurima | Melee
+Nautilus       | Bilgewater | Melee
+Neeko          | Ixtal | Ranged
+Nidalee        | Ixtal | Both
+Nilah          | Bilgewater | Melee
+Nocturne       | Runeterra | Melee
+Nunu & Willump | Freljord | Melee
+Olaf           | Freljord | Melee
+Orianna        | Piltover | Ranged
+Ornn           | Freljord | Melee
+Pantheon       | Targon | Melee
+Poppy          | Demacia | Melee
+Pyke           | Bilgewater | Melee
+Qiyana         | Ixtal | Melee
+Quinn          | Demacia | Ranged
+Rakan          | Ionia | Ranged
+Rammus         | Shurima | Melee
+Rek'Sai        | Void | Melee
+Rell           | Noxus | Melee
+Renata Glasc   | Zaun | Ranged
+Renekton       | Shurima | Melee
+Rengar         | Ixtal | Melee
+Riven          | Noxus | Melee
+Rumble         | Bandle City | Melee
+Ryze           | Runeterra | Ranged
+Samira         | Noxus | Ranged
+Sejuani        | Freljord | Melee
+Senna          | Runeterra | Ranged
+Seraphine      | Piltover | Ranged
+Sett           | Ionia | Melee
+Shaco          | Runeterra | Melee
+Shen           | Ionia | Melee
+Shyvana        | Demacia | Melee
+Singed         | Zaun | Melee
+Sion           | Noxus | Melee
+Sivir          | Shurima | Ranged
+Skarner        | Ixtal | Melee
+Smolder        | Runeterra | Ranged
+Sona           | Demacia | Ranged
+Soraka         | Targon | Ranged
+Swain          | Noxus | Ranged
+Sylas          | Demacia | Melee
+Syndra         | Ionia | Ranged
+Tahm Kench     | Runeterra | Melee
+Taliyah        | Shurima | Ranged
+Talon          | Noxus | Melee
+Taric          | Targon | Melee
+Teemo          | Bandle City | Ranged
+Thresh         | Shadow Isles | Ranged
+Tristana       | Bandle City | Ranged
+Trundle        | Freljord | Melee
+Tryndamere     | Freljord | Melee
+Twisted Fate   | Bilgewater | Ranged
+Twitch         | Zaun | Ranged
+Udyr           | Freljord | Melee
+Urgot          | Zaun | Ranged
+Varus          | Ionia | Ranged
+Vayne          | Demacia | Ranged
+Veigar         | Bandle City | Ranged
+Vel'Koz        | Void | Ranged
+Vex            | Shadow Isles | Ranged
+Vi             | Piltover | Melee
+Viego          | Shadow Isles | Melee
+Viktor         | Zaun | Ranged
+Vladimir       | Noxus | Ranged
+Volibear       | Freljord | Melee
+Warwick        | Zaun | Melee
+Wukong         | Ionia | Melee
+Xayah          | Ionia | Ranged
+Xerath         | Shurima | Ranged
+Xin Zhao       | Demacia | Melee
+Yasuo          | Ionia | Melee
+Yone           | Ionia | Melee
+Yorick         | Shadow Isles | Melee
+Yunara         | Ionia | Ranged
+Yuumi          | Bandle City | Ranged
+Zaahen         | Runeterra | Melee
+Zac            | Zaun | Melee
+Zed            | Ionia | Melee
+Zeri           | Zaun | Ranged
+Ziggs          | Zaun | Ranged
+Zilean         | Runeterra | Ranged
+Zoe            | Targon | Ranged
+Zyra           | Ixtal | Ranged
