@@ -6,10 +6,10 @@
 .top p { margin: 6px 0 0; max-width: 60ch; }
 .scorebox { text-align: right; font-family: var(--display); }
 .scorebox b { font-size: 2.4rem; line-height: 1; color: var(--gold); }
-.scorebox span { display: block; color: var(--muted); letter-spacing: 1px; }
+.scorebox > span { display: block; color: var(--muted); letter-spacing: 1px; }
 
 /* Stage strip */
-.stages { list-style: none; margin: 0 0 18px; padding: 0; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+.stages { list-style: none; margin: 0 0 18px; padding: 0; display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 6px; }
 .stages li { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 6px; text-align: center;
   font-family: var(--display); letter-spacing: 1px; color: var(--muted); min-width: 0; }
 .stages li .ic { font-size: 1.2rem; display: block; }
@@ -21,6 +21,7 @@
 .stages li.lost { border-color: var(--red); }
 .stages li.lost .pt { color: var(--red); }
 .stages li.locked { opacity: .5; }
+@media (max-width: 760px) { .stages { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .stages li .nm { display: none; } }
 
 .stage, .finish { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
@@ -137,3 +138,7 @@
 .picture .emoji { display: flex; gap: 14px; justify-content: center; font-size: clamp(2.4rem, 11vw, 3.6rem); line-height: 1; }
 .emoji span { width: 1.4em; height: 1.4em; display: grid; place-items: center; background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; }
 .emoji span.hide { color: var(--muted); font: 700 1.6rem/1 var(--display); }
+
+/* Weapon pictures are small transparent cut-outs: shown whole, blurred, on a lighter backdrop */
+.picture .splash.weapon { aspect-ratio: 352 / 160; width: min(100%, 460px); background-color: #2a3042; display: grid; }
+.splash.weapon .gun { background: no-repeat 50% 50% / 88% auto; transition: filter .4s; }

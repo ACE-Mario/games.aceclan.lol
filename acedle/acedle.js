@@ -1,5 +1,5 @@
 // ACEdle: the daily ACE Clan puzzle run.
-// Everyone gets the same six puzzles each day (picked from the date). Stages unlock one after another,
+// Everyone gets the same puzzles each day (picked from the date). Stages unlock one after another,
 // each is worth up to 100 points (fewer guesses = more), and finished runs go on a clan leaderboard
 // kept by RIOT API (riot.aceclan.lol), which works the points out again itself from the guess counts.
 // Progress is saved in this browser, so a refresh carries on where you were.
@@ -12,7 +12,9 @@
 
   // The clan's day: midnight in Adelaide (UTC+10:30), the same as the leaderboard uses.
   const START = Date.UTC(2026, 10, 18), OFFSET = 10.5 * 3600e3, DAY_MS = 86400e3;
-  const DAY = Math.floor((Date.now() + OFFSET - START) / DAY_MS) + 1;
+  // On this PC (localhost) ?day=N shows puzzle N, for testing. The real site always uses today.
+  const TEST_DAY = LOCAL && +new URLSearchParams(location.search).get("day");
+  const DAY = TEST_DAY || Math.floor((Date.now() + OFFSET - START) / DAY_MS) + 1;
   const NEXT = START + DAY * DAY_MS - OFFSET;
 
   const STAGES = [
@@ -22,9 +24,13 @@
     { key: "ability", name: "Ability", icon: "✨", max: 5 },
     { key: "emoji", name: "Emoji", icon: "😀", max: 6 },
     { key: "splash", name: "Splash", icon: "🖼️", max: 6 },
-    { key: "agent", name: "Agent", icon: "🎯", max: 5 },
+    { key: "item", name: "Item", icon: "💰", max: 5, from: 2 },
+    { key: "valagent", name: "Agent", icon: "🕵️", max: 6, from: 2 },
+    { key: "agent", name: "Agent ability", icon: "🎯", max: 5 },
+    { key: "gear", name: "Weapon or map", icon: "🗺️", max: 6, from: 2 },
     { key: "ace", name: "Who's the ACE?", icon: "♠️", max: 4 },
-  ];
+  ].filter(st => DAY >= (st.from || 1));   // stages added later start on puzzle `from` (RIOT API uses the same rule)
+  const MAX_POINTS = STAGES.length * 100;
   const points = (st, r) => r && r.solved && r.guesses >= 1 && r.guesses <= st.max ? Math.round(100 * (st.max - r.guesses + 1) / st.max) : 0;
 
   const $ = id => document.getElementById(id);
@@ -96,13 +102,51 @@
       data.answer.emoji = distinct(9, emojiChamps);
       for (const [k, salt] of [["champion", 2], ["lore", 10], ["ability", 3], ["splash", 5]]) data.answer[k] = distinct(salt);
     })(),
+    items: (async () => {
+      // Finished Summoner's Rift items you can buy (nothing builds out of them), one per name.
+      const ver = (await getJSON(`${DD}/api/versions.json`))[0];
+      const all = (await getJSON(`${DD}/cdn/${ver}/data/en_US/item.json`)).data;
+      const byName = new Map();
+      for (const [id, x] of Object.entries(all).sort((a, b) => a[0] - b[0])) {
+        if (+id >= 10000 || !x.maps?.["11"] || !x.gold?.purchasable || x.requiredChampion || x.requiredAlly
+            || x.inStore === false || x.hideFromAll || x.into?.length || x.gold.total < 900 || /^Guardian's /.test(x.name)) continue;
+        if (byName.has(x.name)) continue;
+        const stats = (x.description.match(/<stats>([\s\S]*?)<\/stats>/)?.[1] || "").split(/<br\s*\/?>/i)
+          .map(s => s.replace(/<[^>]+>/g, "").trim()).filter(Boolean);
+        byName.set(x.name, { name: x.name, img: `${DD}/cdn/${ver}/img/item/${x.image.full}`, cost: x.gold.total, stats, tags: x.tags || [] });
+      }
+      data.items = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+    })(),
     valorant: (async () => {
+      // Origin, release year and utility come from agents.txt (edit it in Notepad); role from the VALORANT data.
+      const listFile = fetch("agents.txt", { cache: "no-cache" }).then(r => r.ok ? r.text() : "").catch(() => "");
       const list = (await getJSON("https://valorant-api.com/v1/agents?isPlayableCharacter=true")).data;
+      const known = s => s && s !== "?" ? s : null;
+      const listed = {};
+      for (const line of (await listFile).split(/\r?\n/)) {
+        if (!line.trim() || line.trim().startsWith("#")) continue;
+        const [name, origin, year, utility = ""] = line.split("|").map(s => s.trim());
+        listed[norm(name)] = { origin: known(origin), year: known(year) ? +year : null,
+                               utility: utility.split(",").map(s => s.trim()).filter(s => s && s !== "?").map(s => s[0].toUpperCase() + s.slice(1).toLowerCase()) };
+      }
       const seen = new Set();
       data.agents = list.filter(a => !seen.has(a.displayName) && seen.add(a.displayName))
         .sort((a, b) => a.displayName.localeCompare(b.displayName))
         .map(a => ({ name: a.displayName, img: a.displayIcon, role: a.role?.displayName || "?",
-                     abilities: a.abilities.filter(x => x.displayIcon && x.slot !== "Passive") }));
+                     abilities: a.abilities.filter(x => x.displayIcon && x.slot !== "Passive"),
+                     origin: null, year: null, utility: [], ...listed[norm(a.displayName)] }));
+    })(),
+    gear: (async () => {
+      const [weapons, maps] = await Promise.all([getJSON("https://valorant-api.com/v1/weapons"), getJSON("https://valorant-api.com/v1/maps")]);
+      data.weapons = weapons.data.filter(w => w.shopData && w.displayIcon).map(w => ({
+        name: w.displayName, img: w.displayIcon, type: w.category.split("::").pop(),
+        cost: w.shopData.cost, rate: w.weaponStats?.fireRate,
+      })).sort((a, b) => a.name.localeCompare(b.name));
+      // Competitive maps only: they're the ones with A/B(/C) sites.
+      const seenMap = new Set();
+      data.maps = maps.data.filter(m => m.tacticalDescription && m.splash && !seenMap.has(m.displayName) && seenMap.add(m.displayName))
+        .map(m => ({ name: m.displayName, img: m.listViewIcon || m.displayIcon, splash: m.splash, sites: m.tacticalDescription }))
+        .sort((a, b) => a.name.localeCompare(b.name));
     })(),
     clan: (async () => {
       try {
@@ -451,6 +495,99 @@
     });
   }
 
+  // ---- Item: a League item icon that gets clearer ---------------------------------------------------
+  async function stageItem(el, st) {
+    await ready.items;
+    const answer = pick(data.items, rng(12));
+    const pretty = t => t.replace(/([a-z])([A-Z])/g, "$1 $2");
+    const blur = [8, 5.5, 3, 1.5, 0.5], grey = [1, 0.8, 0.5, 0.25, 0];
+    pictureStage(el, st, {
+      key: "item", placeholder: "Type an item…",
+      how: "Which League item is this? It gets clearer, and you get hints, with every wrong guess.",
+      picture: `<div class="frame"><img id="pic" src="${esc(answer.img)}" alt="A League item icon"></div>`,
+      update: m => { $("pic").style.filter = m >= 99 ? "none" : `blur(${blur[m] ?? 0}px) grayscale(${grey[m] ?? 0})`; },
+      hints: [`Costs <b>${answer.cost}</b> gold`, answer.stats[0] ? `Gives <b>${esc(answer.stats[0])}</b>` : `Type: <b>${esc(answer.tags.map(pretty).join(", ") || "None")}</b>`,
+              answer.stats.length > 1 ? `Also <b>${esc(answer.stats.slice(1).join(", "))}</b>` : `Type: <b>${esc(answer.tags.map(pretty).join(", ") || "None")}</b>`],
+      options: data.items.map(i => ({ name: i.name, img: i.img })), answerName: answer.name,
+      answerHtml: `<b>${esc(answer.name)}</b>`,
+    });
+  }
+
+  // ---- Agent: clues like the Champion stage, for VALORANT agents --------------------------------------
+  async function stageValAgent(el, st) {
+    await ready.valorant;
+    // Not the same agent as the Agent ability stage.
+    const abilityAgent = pick(data.agents, rng(6));
+    const r = rng(11);
+    let answer;
+    do { answer = pick(data.agents, r); } while (answer === abilityAgent && data.agents.length > 1);
+    const names = save.guesses.valagent = save.guesses.valagent || [];
+    el.innerHTML = header(st, "Guess today's VALORANT agent. Each guess shows how close it is.")
+      + `<div id="pickHolder"></div><div class="clues"><table><thead><tr><th>Agent</th><th>Role</th><th>Origin</th><th>Released</th><th>Utility</th></tr></thead><tbody id="rows"></tbody></table></div>
+      <div class="key-legend"><span><i style="background:#2f9e44"></i>Match</span><span><i style="background:#c89b3c"></i>Partly (some utility in common)</span><span><i style="background:#3a3f4d"></i>No match</span><span>↑ ↓ the answer came out later or earlier</span></div>
+      <div id="tries"></div>`;
+    const same = (g, a) => g != null && a != null && String(g).toLowerCase() === String(a).toLowerCase();
+    const util = (g, a) => {
+      const A = new Set(a.map(x => x.toLowerCase())), G = g.map(x => x.toLowerCase());
+      if (!G.length || !A.size) return "x";
+      return G.length === A.size && G.every(x => A.has(x)) ? "g" : G.some(x => A.has(x)) ? "y" : "x";
+    };
+    const year = (g, a) => g == null ? `<td class="x">?</td>` : same(g, a) ? `<td class="g">${g}</td>`
+      : `<td class="x">${g}${a == null ? "" : `<span class="ar">${a > g ? "↑" : "↓"}</span>`}</td>`;
+    const row = (g, isNew) => `<tr class="${isNew ? "new" : ""}"><td class="who" title="${esc(g.name)}"><img src="${esc(g.img)}" alt="${esc(g.name)}"></td>
+      <td class="${same(g.role, answer.role) ? "g" : "x"}">${esc(g.role)}</td>
+      <td class="${same(g.origin, answer.origin) ? "g" : "x"}">${esc(g.origin || "?")}</td>
+      ${year(g.year, answer.year)}
+      <td class="${util(g.utility, answer.utility)}">${esc(g.utility.join(", ") || "?")}</td></tr>`;
+    const byName = n => data.agents.find(a => a.name === n);
+    const draw = isNew => {
+      $("rows").innerHTML = names.slice().reverse().map((n, i) => byName(n) ? row(byName(n), isNew && i === 0) : "").join("");
+      $("tries").innerHTML = triesLeft(st, names.length);
+    };
+    const options = data.agents.map(a => ({ name: a.name, img: a.img, used: names.includes(a.name) }));
+    const p = picker($("pickHolder"), options, o => {
+      o.used = true;
+      names.push(o.name);
+      persist();
+      FX.sound("flip");
+      draw(true);
+      if (o.name === answer.name || names.length >= st.max) { p.done(); setTimeout(() => complete(st, el, names.length, o.name === answer.name, `<b>${esc(answer.name)}</b>`), 600); }
+    }, "Type an agent…");
+    draw(false);
+    if (names.includes(answer.name) || names.length >= st.max) { p.done(); complete(st, el, names.length, names.includes(answer.name), `<b>${esc(answer.name)}</b>`); }
+    else p.input.focus();
+  }
+
+  // ---- Weapon or map: a zoomed-in picture, weapons one day and maps the next ----------------------------
+  async function stageGear(el, st) {
+    await ready.gear;
+    const r = rng(13);
+    const maps = DAY % 2 === 0 && data.maps.length;
+    const answer = pick(maps ? data.maps : data.weapons, r);
+    const x = Math.round((maps ? 20 : 30) + r() * (maps ? 60 : 40)), y = Math.round((maps ? 20 : 40) + r() * (maps ? 60 : 20));
+    // Maps zoom out. Weapon pictures are too small to zoom into, so the whole gun starts blurred instead.
+    const zoom = [650, 470, 340, 240, 170, 125], blur = [12, 8, 5, 3, 1.5, 0.5];
+    const hints = maps
+      ? [`<b>${esc(answer.sites)}</b>`, `Starts with <b>${esc(answer.name[0])}</b>`]
+      : [`Type: <b>${esc(answer.type)}</b>`, `Costs <b>${answer.cost}</b> credits`, answer.rate ? `Fires <b>${answer.rate}</b> shots a second` : `Starts with <b>${esc(answer.name[0])}</b>`];
+    pictureStage(el, st, {
+      key: "gear", placeholder: maps ? "Type a map…" : "Type a weapon…",
+      how: maps ? "Today it's a VALORANT <b>map</b>. Which one is this? It zooms out with every wrong guess."
+                : "Today it's a VALORANT <b>weapon</b>. Which one is this? It gets clearer with every wrong guess.",
+      picture: maps
+        ? `<div class="splash" id="pic" role="img" aria-label="A zoomed-in VALORANT map" style="background-image:url('${esc(answer.splash)}')"></div>`
+        : `<div class="splash weapon"><div class="gun" id="pic" role="img" aria-label="A blurred VALORANT weapon" style="background-image:url('${esc(answer.img)}')"></div></div>`,
+      update: m => {
+        const p = $("pic");
+        if (maps) { p.style.backgroundSize = m >= 99 ? "100%" : `${zoom[m] ?? 100}%`; p.style.backgroundPosition = m >= 99 ? "50% 50%" : `${x}% ${y}%`; }
+        else p.style.filter = m >= 99 ? "none" : `blur(${blur[m] ?? 0}px) ${m >= 3 ? "" : " brightness(0) invert(1)"}`;   // first misses: just a white silhouette
+      },
+      hints,
+      options: (maps ? data.maps : data.weapons).map(o => ({ name: o.name, img: o.img })), answerName: answer.name,
+      answerHtml: `<b>${esc(answer.name)}</b>`,
+    });
+  }
+
   // ---- 6. Who's the ACE? -----------------------------------------------------------------------
   const TIERS = ["iron", "bronze", "silver", "gold", "platinum", "emerald", "diamond", "master", "grandmaster", "challenger"];
   const tierOf = m => TIERS.indexOf(String(m.rank || "").split(" ")[0].toLowerCase());
@@ -496,7 +633,7 @@
     else p.input.focus();
   }
 
-  const STAGE_FN = { word: stageWord, champion: stageChampion, lore: stageLore, ability: stageAbility, emoji: stageEmoji, agent: stageAgent, splash: stageSplash, ace: stageAce };
+  const STAGE_FN = { word: stageWord, champion: stageChampion, lore: stageLore, ability: stageAbility, emoji: stageEmoji, splash: stageSplash, item: stageItem, valagent: stageValAgent, agent: stageAgent, gear: stageGear, ace: stageAce };
 
   // ---- Finish: score, streak, share, leaderboard -----------------------------------------------
   function shareText(total) {
@@ -505,7 +642,7 @@
       const bar = r.solved ? "🟩".repeat(Math.max(1, Math.round(points(st, r) / 20))) : "🟥";
       return `${st.icon} ${r.solved ? `${r.guesses}/${st.max}` : "X/" + st.max} ${bar}`;
     });
-    return `ACEdle #${DAY}: ${total}/800\n${lines.join("\n")}\nhttps://games.aceclan.lol/acedle/`;
+    return `ACEdle #${DAY}: ${total}/${MAX_POINTS}\n${lines.join("\n")}\nhttps://games.aceclan.lol/acedle/`;
   }
 
   function finish() {
@@ -528,7 +665,7 @@
     }
     const name = save.name || store.get("acedle-name", "");
     el.innerHTML = `<h2>Run complete</h2>
-      <div class="big">${total} <small style="font-size:1.1rem;color:var(--muted)">/ 800</small></div>
+      <div class="big">${total} <small style="font-size:1.1rem;color:var(--muted)">/ ${MAX_POINTS}</small></div>
       <ul class="breakdown">${STAGES.map(st => { const r = save.results[st.key];
         return `<li><span>${st.icon} ${esc(st.name)} <span class="muted">${r.skipped ? "skipped" : r.solved ? `${r.guesses} of ${st.max} guesses` : "missed"}</span></span><b>${points(st, r)}</b></li>`; }).join("")}</ul>
       <div class="streak"><span><b>${stats.streak}</b>day streak</span><span><b>${stats.best}</b>best streak</span><span><b>${stats.played}</b>runs played</span></div>
@@ -608,6 +745,8 @@
   }
 
   $("dayNo").textContent = "#" + DAY;
+  $("maxPts").textContent = MAX_POINTS;
+  $("stageCount").textContent = STAGES.length;
   document.querySelector(".top")?.append(FX.soundButton() || "");
   show();
 })();

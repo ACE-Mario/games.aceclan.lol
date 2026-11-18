@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ACEdle</title>
-<meta name="description" content="ACEdle: the daily ACE Clan puzzle run. Eight guessing stages, points for every one, and a clan leaderboard.">
+<meta name="description" content="ACEdle: the daily ACE Clan puzzle run. Daily guessing stages, points for every one, and a clan leaderboard.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../shared/site.css?v=20261118">
 <link rel="stylesheet" href="../shared/fx.css?v=20261118">
-<link rel="stylesheet" href="style.css?v=20261118">
+<link rel="stylesheet" href="style.css?v=20261118d">
 </head>
 <body>
 <header class="sitebar">
@@ -27,9 +27,9 @@
   <section class="top">
     <div>
       <h1>ACE<span>dle</span> <small id="dayNo"></small></h1>
-      <p class="muted">Eight puzzles a day, one after another. Fewer guesses, more points. New run at midnight (Adelaide time).</p>
+      <p class="muted"><span id="stageCount">11</span> puzzles a day, one after another. Fewer guesses, more points. New run at midnight (Adelaide time).</p>
     </div>
-    <div class="scorebox"><b id="total">0</b><span>/ 800 points</span></div>
+    <div class="scorebox"><b id="total">0</b><span>/ <span id="maxPts">1100</span> points</span></div>
   </section>
 
   <ol class="stages" id="stages" aria-label="Stages"></ol>
@@ -45,6 +45,6 @@
 
 <script src="../shared/fx.js?v=20261118"></script>
 <script src="words.js?v=20261118"></script>
-<script src="acedle.js?v=20261118c"></script>
+<script src="acedle.js?v=20261118d"></script>
 </body>
 </html>
