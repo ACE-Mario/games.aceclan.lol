@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ACE Squads</title>
+<meta name="description" content="ACE Squads: sort 16 League and VALORANT tiles into four hidden groups. A new puzzle every day.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/site.css?v=20261119">
+<link rel="stylesheet" href="../shared/fx.css?v=20261119">
+<link rel="stylesheet" href="style.css?v=20261119">
+</head>
+<body>
+<header class="sitebar">
+  <div class="wrap sitebar-inner">
+    <a class="ace" href="../">ACE<span>.</span><small>Games</small></a>
+    <nav>
+      <a href="../">Games</a>
+      <a href="https://aceclan.lol">Clan</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap squads" id="game">
+  <section class="top">
+    <h1>ACE <span>Squads</span> <small id="dayNo"></small></h1>
+    <p class="muted">Sort the 16 tiles into four squads of four. League, VALORANT, or both. Four mistakes and you're out. New puzzle at midnight (Adelaide time).</p>
+  </section>
+
+  <p id="loading" class="muted">Building today's puzzle…</p>
+  <div id="solved" class="solved"></div>
+  <div id="grid" class="grid" aria-label="Tiles"></div>
+  <p id="msg" class="msg" aria-live="polite"></p>
+
+  <div id="controls" class="controls">
+    <div class="lives"><span class="muted small">Mistakes left</span> <span id="lives"></span></div>
+    <div class="row">
+      <button id="shuffle" class="btn" type="button">Shuffle</button>
+      <button id="clearSel" class="btn" type="button">Deselect</button>
+      <button id="submit" class="btn primary" type="button">Submit</button>
+    </div>
+  </div>
+
+  <section id="end" class="end" hidden>
+    <h2 id="endTitle"></h2>
+    <p id="endText" class="muted"></p>
+    <button id="share" class="btn primary" type="button">Copy result</button>
+    <p id="shareNote" class="muted small" aria-live="polite"></p>
+    <p class="muted small">Next puzzle in <b id="nextIn"></b>. Try <a href="../acedle/">ACEdle</a> or <a href="../mappin/">Map Pin</a> too.</p>
+  </section>
+
+  <details class="how">
+    <summary>How to play</summary>
+    <ul>
+      <li>Tap four tiles you think share something, then Submit.</li>
+      <li>Right: that squad is revealed in its colour. Gold is the easiest, then teal, purple, and red is the hardest.</li>
+      <li>"One away…" means three of your four belong together.</li>
+      <li>Watch out for red herrings: a tile can look like it fits two squads, but it only belongs to one.</li>
+    </ul>
+  </details>
+</main>
+
+<footer class="site-foot wrap">ACE Clan · Squads</footer>
+
+<script src="../shared/fx.js?v=20261119"></script>
+<script src="../shared/day.js?v=20261119"></script>
+<script src="squads.js?v=20261119"></script>
+</body>
+</html>

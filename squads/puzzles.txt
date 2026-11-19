@@ -1,0 +1,12 @@
+# Squads: hand-made puzzles. Any day not written here gets one built from the League and VALORANT data.
+#
+# Start a puzzle with  @  and the puzzle number (the same number as ACEdle that day), then four lines,
+# easiest group first:     Group name | four, tiles, split, with commas
+# Each tile must belong to only one group, and all 16 must be different. Lines starting with # are notes.
+#
+# Example (not used, because it's a note):
+# @12
+# VALORANT Controllers | Brimstone, Omen, Viper, Astra
+# From Shurima | Azir, Nasus, Renekton, Sivir
+# Rifles | Vandal, Phantom, Bulldog, Guardian
+# Agents who can heal | Sage, Skye, Phoenix, Reyna
