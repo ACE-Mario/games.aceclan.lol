@@ -331,7 +331,7 @@ window.AceRoom = (() => {
     }
 
     const api = {
-      send, error: showError, esc, el,
+      send, error: showError, esc, el, socket,      // socket: for games with their own live messages (sketch)
       status(main, sub, cls) {
         $("statusMain").textContent = main || "";
         const subEl = $("statusSub");

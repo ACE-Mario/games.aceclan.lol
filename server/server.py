@@ -217,6 +217,23 @@ def on_action(data):
         return {"error": err} if err else {"ok": True}
 
 
+@socketio.on("live")
+def on_live(data):
+    """Quick messages that don't change the whole room (lines being drawn in Sketch & Guess). The game's
+    relay() checks them and says what to pass on; it goes to everyone else in the room, without the
+    full update every player gets for a move."""
+    with lock:
+        where = sid_index.get(request.sid)
+        room = rooms.get(where[0]) if where else None
+        relay = getattr(room.game, "relay", None) if room else None
+        if not relay or not isinstance(data, dict):
+            return
+        out = relay(room, where[1], data)
+        if out is not None:
+            room.touched = time.time()
+            socketio.emit("live", out, to=room.code, skip_sid=request.sid)
+
+
 @socketio.on("disconnect")
 def on_disconnect(*_):
     with lock:

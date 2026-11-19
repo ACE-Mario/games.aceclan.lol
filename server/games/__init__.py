@@ -4,7 +4,8 @@ build on base.SeatedGame, which already handles the lobby, seats and admin panel
 from .agents import Agents
 from .canasta import Canasta
 from .poker import Poker
+from .sketch import Sketch
 from .snakes import Snakes
 from .trivia import Trivia
 
-GAMES = {g.id: g for g in (Agents(), Snakes(), Trivia(), Poker(), Canasta())}
+GAMES = {g.id: g for g in (Agents(), Snakes(), Trivia(), Poker(), Canasta(), Sketch())}

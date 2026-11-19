@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Sketch &amp; Guess</title>
+<meta name="description" content="Take turns drawing while the rest of ACE Clan races to guess the word.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/site.css?v=20261119">
+<link rel="stylesheet" href="../shared/room.css?v=20261119">
+<link rel="stylesheet" href="../shared/fx.css?v=20261119">
+<link rel="stylesheet" href="style.css?v=20261119">
+</head>
+<body>
+<header class="sitebar">
+  <div class="wrap sitebar-inner">
+    <a class="ace" href="../">ACE<span>.</span><small>Games</small></a>
+    <nav>
+      <a href="../">Games</a>
+    </nav>
+  </div>
+</header>
+
+<main id="startView" class="wrap start" hidden></main>
+
+<main id="gameView" class="wrap layout" hidden>
+  <section class="board-col" aria-label="Drawing">
+    <div id="sketch" class="sketch" hidden>
+      <div class="sk-head">
+        <span id="skRound" class="sk-round"></span>
+        <span id="skWord" class="sk-word" aria-live="polite"></span>
+        <span id="skClock" class="sk-clock"></span>
+      </div>
+      <div class="sk-stage">
+        <canvas id="pad" width="1000" height="750" aria-label="Drawing board"></canvas>
+        <div id="overlay" class="sk-overlay" hidden></div>
+      </div>
+      <div id="tools" class="sk-tools" hidden></div>
+      <div class="sk-chat">
+        <ol id="chat" class="chat" aria-live="polite"></ol>
+        <form id="guessForm" class="guess-row" autocomplete="off">
+          <label class="sr" for="guess">Your guess</label>
+          <input id="guess" maxlength="80" placeholder="Type your guess…">
+          <button class="btn primary" type="submit">Send</button>
+        </form>
+      </div>
+    </div>
+    <div id="podium" class="podium" hidden></div>
+    <div class="box">
+      <h2>Scores</h2>
+      <ol id="board" class="leaderboard"></ol>
+    </div>
+  </section>
+  <aside id="panel" class="panel"></aside>
+</main>
+
+<footer class="site-foot wrap">ACE Clan · Sketch &amp; Guess</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<script src="../shared/live.js?v=20261119"></script>
+<script src="../shared/fx.js?v=20261119"></script>
+<script src="../shared/room.js?v=20261119"></script>
+<script src="sketch.js?v=20261119"></script>
+</body>
+</html>
