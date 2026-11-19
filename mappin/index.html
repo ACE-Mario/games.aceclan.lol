@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ACE Map Pin</title>
+<meta name="description" content="ACE Map Pin: find VALORANT callouts and Summoner's Rift landmarks on the minimap. New maps every day.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/site.css?v=20261119">
+<link rel="stylesheet" href="../shared/fx.css?v=20261119">
+<link rel="stylesheet" href="style.css?v=20261119">
+</head>
+<body>
+<header class="sitebar">
+  <div class="wrap sitebar-inner">
+    <a class="ace" href="../">ACE<span>.</span><small>Games</small></a>
+    <nav>
+      <a href="../">Games</a>
+      <a href="https://aceclan.lol">Clan</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap mappin">
+  <section class="top">
+    <h1>ACE <span>Map Pin</span> <small id="dayNo"></small></h1>
+    <p class="muted">Drop a pin where you think it is. Five VALORANT callouts and five Summoner's Rift spots a day, up to 1000 points each. New maps at midnight (Adelaide time).</p>
+  </section>
+
+  <div id="tabs" class="tabs" role="tablist"></div>
+  <section id="play" class="play" aria-live="polite"><p class="muted">Loading…</p></section>
+
+  <details class="how">
+    <summary>How to play</summary>
+    <ul>
+      <li>Tap the map to drop your pin. Tap again to move it, then Lock in.</li>
+      <li>Bang on scores 1000. The further away, the fewer points; more than about a third of the map away scores nothing.</li>
+      <li>On Summoner's Rift, Blue side is the team in the bottom-left corner, Red side the top-right.</li>
+      <li>VALORANT callouts are the ones the game itself uses.</li>
+    </ul>
+  </details>
+</main>
+
+<footer class="site-foot wrap">ACE Clan · Map Pin</footer>
+
+<script src="../shared/fx.js?v=20261119"></script>
+<script src="../shared/day.js?v=20261119"></script>
+<script src="mappin.js?v=20261119"></script>
+</body>
+</html>
