@@ -2,7 +2,7 @@
 # One line per agent:   Name | Origin | Release year | Utility
 #   Origin: country (or Unknown).  Release year: e.g. 2023.
 #   Utility: what their kit does, split with commas. Use these words so they match:
-#     Smoke, Flash, Heal, Wall, Recon, Trap, Stun, Slow, Damage, Movement, Suppress
+#     Smoke, Flash, Heal, Wall, Recon, Trap, Stun, Slow, Damage, Movement, Suppress, Stim
 # Clues: same origin = green, release year shows higher/lower, utility exactly the same = green, any shared = gold.
 # Use ? when you don't know something (it shows as no match). New agents missing from here still work,
 # just with ? for everything except role. Lines starting with # are ignored. Save, then push the games site.
@@ -17,12 +17,12 @@ Deadlock  | Norway       | 2023 | Wall, Trap, Stun
 Fade      | Turkey       | 2022 | Recon, Flash
 Gekko     | USA          | 2023 | Flash, Stun, Damage
 Harbor    | India        | 2022 | Smoke, Wall, Stun
-Hush      | ?            | ?    | ?
+Hush      | China        | 2026 | Movement, Flash, Stun
 Iso       | China        | 2023 | Wall
 Jett      | South Korea  | 2020 | Smoke, Movement
 KAY/O     | Unknown      | 2021 | Flash, Damage, Suppress
 Killjoy   | Germany      | 2020 | Trap, Damage
-Miks      | ?            | ?    | ?
+Miks      | Croatia      | 2026 | Smoke, Stun, Heal, Stim
 Neon      | Philippines  | 2022 | Wall, Stun, Movement
 Omen      | Unknown      | 2020 | Smoke, Flash, Movement
 Phoenix   | UK           | 2020 | Flash, Wall, Heal, Damage
