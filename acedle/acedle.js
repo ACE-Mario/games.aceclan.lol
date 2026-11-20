@@ -16,6 +16,7 @@
   const NEXT = START + CALENDAR_DAY * DAY_MS - OFFSET;          // next midnight
   // The puzzle number comes from RIOT API, because a new day can be started early from Jerry's control
   // panel. If it can't be reached, use the date plus the last early start this browser heard about.
+  let serverAce = null;              // today's "Who's the ACE?" answer, picked and saved by RIOT API
   async function puzzleDay() {
     const remembered = () => { try { return +localStorage.getItem("acedle-skipped") || 0; } catch { return 0; } };
     try {
@@ -25,6 +26,7 @@
       clearTimeout(timer);
       const d = await r.json();
       try { localStorage.setItem("acedle-skipped", String(d.skipped || 0)); } catch { /* fine */ }
+      serverAce = d.ace || null;
       return d.day;
     } catch {
       return CALENDAR_DAY + remembered();
@@ -618,7 +620,9 @@
 
   async function stageAce(el, st) {
     await ready.clan;
-    const answer = pick(data.clan, rng(8));
+    // RIOT API picks the member (everyone gets a turn before anyone repeats). If it can't be reached, or
+    // when testing another day with ?day=, fall back to a pick from the date.
+    const answer = (!TEST_DAY && data.clan.find(m => m.name === serverAce)) || pick(data.clan, rng(8));
     const names = save.guesses.ace = save.guesses.ace || [];
     el.innerHTML = header(st, "Which clan member is it today? Each guess shows what you have in common.")
       + `<div id="pickHolder"></div><div class="clues"><table><thead><tr><th>Member</th><th>Plays</th><th>Region</th><th>League rank</th><th>Main role</th><th>Top champ</th><th>Main agent</th></tr></thead><tbody id="rows"></tbody></table></div>
