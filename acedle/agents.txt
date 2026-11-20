@@ -32,7 +32,7 @@ Sage      | China        | 2020 | Heal, Wall, Slow
 Skye      | Australia    | 2020 | Flash, Heal, Recon
 Sova      | Russia       | 2020 | Recon, Damage
 Tejo      | Colombia     | 2025 | Recon, Damage, Stun
-Veto      | ?            | 2025 | ?
+Veto      | Senegal      | 2025 | Trap, Movement, Heal, Stim
 Viper     | USA          | 2020 | Smoke, Wall, Damage
 Vyse      | Unknown      | 2024 | Trap, Wall, Flash
 Waylay    | Thailand     | 2025 | Slow, Movement
