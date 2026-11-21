@@ -42,7 +42,7 @@
   const DAY = REVEAL ? +REVEAL.day : TEST_DAY || await puzzleDay();
 
   const STAGES = [
-    { key: "word", name: "Word", icon: "🔤", max: 6 },
+    { key: "word", name: "Word", icon: "🔤", max: 6, until: 5 },
     { key: "champion", name: "Champion", icon: "🛡️", max: 8 },
     { key: "lore", name: "Lore", icon: "📜", max: 6 },
     { key: "ability", name: "Ability", icon: "✨", max: 5 },
@@ -53,7 +53,9 @@
     { key: "agent", name: "Agent ability", icon: "🎯", max: 5 },
     { key: "gear", name: "Weapon or map", icon: "🗺️", max: 6, from: 2 },
     { key: "ace", name: "Who's the ACE?", icon: "♠️", max: 4 },
-  ].filter(st => DAY >= (st.from || 1));   // stages added later start on puzzle `from` (RIOT API uses the same rule)
+  ].filter(st => DAY >= (st.from || 1) && DAY < (st.until || Infinity));
+  // Stages added later start on puzzle `from`; dropped ones stop before puzzle `until` (RIOT API uses the same rule).
+  const CHAMP_MORE = DAY >= 5;          // the Champion stage's Released and Gender columns start on puzzle #5
   const MAX_POINTS = STAGES.length * 100;
   const points = (st, r) => r && r.solved && r.guesses >= 1 && r.guesses <= st.max ? Math.round(100 * (st.max - r.guesses + 1) / st.max) : 0;
 
@@ -98,11 +100,17 @@
       const listed = {};
       for (const line of list.split(/\r?\n/)) {
         if (!line.trim() || line.trim().startsWith("#")) continue;
-        const [name, regions = "", reach = ""] = line.split("|").map(s => s.trim());
-        listed[squash(name)] = { regions: regions.split(",").map(tidyRegion).filter(Boolean), reach: reach.toLowerCase() };
+        const [name, regions = "", reach = "", gender = ""] = line.split("|").map(s => s.trim());
+        listed[squash(name)] = { regions: regions.split(",").map(tidyRegion).filter(Boolean), reach: reach.toLowerCase(),
+                                 gender: gender ? gender[0].toUpperCase() + gender.slice(1).toLowerCase() : "" };
       }
       const regionName = Object.fromEntries((uni?.factions || []).map(f => [f.slug, f.name.replace(/^The /, "")]));
       const regionOf = Object.fromEntries((uni?.champions || []).map(c => [squash(c.slug), regionName[c["associated-faction-slug"]] || "Runeterra"]));
+      const yearOf = {};
+      for (const c of uni?.champions || []) {
+        const y = +String(c["release-date"] || "").slice(0, 4);
+        if (y) yearOf[squash(c.slug)] = yearOf[squash(c.name)] = y;
+      }
       data.dd = ver;
       data.champs = Object.values(champs).sort((a, b) => a.id.localeCompare(b.id)).map(c => {
         const own = listed[squash(c.name)] || listed[squash(c.id)] || {};
@@ -114,6 +122,7 @@
           cls: c.tags[0] || "None", cls2: c.tags[1] || "None", resource: c.partype || "None",
           reach, reachLabel: reach.length > 1 ? "Both" : reach[0], range: c.stats.attackrange,
           regions: own.regions?.length ? own.regions : main ? [main] : [],
+          year: yearOf[squash(c.name)] || yearOf[squash(c.id)] || null, gender: own.gender || "?",
           title: c.title, blurb: c.blurb,
         };
       });
@@ -394,7 +403,7 @@
     const answer = data.answer.champion;
     const names = save.guesses.champion = save.guesses.champion || [];
     el.innerHTML = header(st, "Guess today's League champion. Each guess shows how close it is.")
-      + `<div id="pickHolder"></div><div class="clues"><table><thead><tr><th>Champion</th><th>Class</th><th>Also</th><th>Resource</th><th>Range</th><th>Attack range</th>${data.regions ? "<th>Region</th>" : ""}</tr></thead><tbody id="rows"></tbody></table></div>
+      + `<div id="pickHolder"></div><div class="clues"><table><thead><tr><th>Champion</th><th>Class</th><th>Also</th><th>Resource</th><th>Range</th><th>Attack range</th>${data.regions ? "<th>Region</th>" : ""}${CHAMP_MORE ? "<th>Gender</th><th>Released</th>" : ""}</tr></thead><tbody id="rows"></tbody></table></div>
       <div class="key-legend"><span><i style="background:#2f9e44"></i>Match</span><span><i style="background:#c89b3c"></i>Partly (something in common)</span><span><i style="background:#3a3f4d"></i>No match</span><span>↑ ↓ the answer is higher or lower</span></div>
       <div id="tries"></div>`;
     const options = data.champs.map(c => ({ ...c, used: names.includes(c.id) }));
@@ -411,7 +420,8 @@
       <td class="${cls(c.cls2, answer.cls, answer.cls2, answer.cls2)}">${esc(c.cls2)}</td>
       <td class="${c.resource === answer.resource ? "g" : "x"}">${esc(c.resource)}</td>
       <td class="${overlap(c.reach, answer.reach)}">${c.reachLabel}</td>
-      ${num(c.range, answer.range)}${data.regions ? `<td class="${overlap(c.regions, answer.regions)}">${esc(c.regions.join(", ") || "Unknown")}</td>` : ""}</tr>`;
+      ${num(c.range, answer.range)}${data.regions ? `<td class="${overlap(c.regions, answer.regions)}">${esc(c.regions.join(", ") || "Unknown")}</td>` : ""}${CHAMP_MORE
+        ? `<td class="${c.gender !== "?" && c.gender === answer.gender ? "g" : "x"}">${esc(c.gender)}</td>${c.year && answer.year ? num(c.year, answer.year) : `<td class="x">${c.year || "?"}</td>`}` : ""}</tr>`;
     const byId = id => data.champs.find(c => c.id === id);
     const draw = isNew => {
       $("rows").innerHTML = names.slice().reverse().map((id, i) => row(byId(id), isNew && i === 0)).join("");
