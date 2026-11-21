@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Sound Check</title>
+<meta name="description" content="Sound Check: hear a League of Legends champion's pick line, ban line or select sound and guess who it is. Ten new sounds every day.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/site.css?v=20261119">
+<link rel="stylesheet" href="../shared/fx.css?v=20261119">
+<link rel="stylesheet" href="style.css?v=20261122">
+</head>
+<body>
+<header class="sitebar">
+  <div class="wrap sitebar-inner">
+    <a class="ace" href="../">ACE<span>.</span><small>Games</small></a>
+    <nav>
+      <a href="../">Games</a>
+      <a href="https://aceclan.lol">Clan</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap voices">
+  <section class="top">
+    <h1>Sound <span>Check</span> <small id="dayNo"></small></h1>
+    <p class="muted">Ten League champion sounds a day: the line they say when you pick them, the line when they're banned, or their champion select sound. Who is it? New sounds at midnight (Adelaide time).</p>
+  </section>
+
+  <section id="play" class="play" aria-live="polite"><p class="muted">Loading…</p></section>
+
+  <details class="how">
+    <summary>How to play</summary>
+    <ul>
+      <li>Press play (as often as you like), then type a champion.</li>
+      <li>Three guesses a sound: 100 points first try, 60 second, 30 third. A hint shows after each miss.</li>
+      <li>Turn your sound on. Headphones help with the quiet ones.</li>
+    </ul>
+  </details>
+</main>
+
+<footer class="site-foot wrap">ACE Clan · Sound Check · Sounds belong to Riot Games</footer>
+
+<script src="../shared/fx.js?v=20261119"></script>
+<script src="../shared/day.js?v=20261119"></script>
+<script src="voices.js?v=20261122"></script>
+</body>
+</html>
