@@ -21,6 +21,9 @@
 .stages li.lost { border-color: var(--red); }
 .stages li.lost .pt { color: var(--red); }
 .stages li.locked { opacity: .5; }
+.stages li[data-key], .breakdown li[data-key] { cursor: pointer; }
+.stages li[data-key]:hover, .breakdown li[data-key]:hover { filter: brightness(1.25); }
+.stages li.viewing { box-shadow: 0 0 0 2px var(--text) inset; }
 @media (max-width: 760px) { .stages { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .stages li .nm { display: none; } }
 

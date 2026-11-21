@@ -242,24 +242,37 @@
 
   // ---- Stage strip and flow -------------------------------------------------------------------
   let stageAbort = null;
+  let viewing = null;                 // a finished stage reopened from the strip to look back at
   const current = () => STAGES.find(st => !save.results[st.key]);
+  const canView = st => save.results[st.key] && !save.results[st.key].skipped;
 
   function drawStrip() {
     const cur = current();
     $("stages").innerHTML = STAGES.map(st => {
       const r = save.results[st.key];
-      const cls = r ? (r.solved ? "won" : "lost") : st === cur ? "current" : "locked";
+      const cls = (r ? (r.solved ? "won" : "lost") : st === cur ? "current" : "locked") + (st.key === viewing ? " viewing" : "");
       const pt = r ? (r.skipped ? "skipped" : r.solved ? `+${points(st, r)}` : "0") : st === cur ? "now" : "🔒";
-      return `<li class="${cls}" title="${esc(st.name)}"><span class="ic">${st.icon}</span><span class="nm">${esc(st.name)}</span><span class="pt">${pt}</span></li>`;
+      const open = canView(st) ? ` data-key="${st.key}" tabindex="0" role="button" title="${esc(st.name)}: look back at it"` : ` title="${esc(st.name)}"`;
+      return `<li class="${cls}"${open}><span class="ic">${st.icon}</span><span class="nm">${esc(st.name)}</span><span class="pt">${pt}</span></li>`;
     }).join("");
     $("total").textContent = STAGES.reduce((a, st) => a + points(st, save.results[st.key]), 0);
   }
 
-  function show() {
+  // Tap a finished stage (in the strip or the score breakdown) to see its guesses and answer again.
+  function lookBack(e) {
+    const li = e.target.closest("[data-key]");
+    if (!li || (e.type === "keydown" && e.key !== "Enter" && e.key !== " ")) return;
+    e.preventDefault();
+    show(li.dataset.key);
+    $("stage").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function show(key) {
     if (stageAbort) stageAbort.abort();
     stageAbort = new AbortController();
+    viewing = key && canView(STAGES.find(st => st.key === key) || {}) ? key : null;
     drawStrip();
-    const st = current();
+    const st = viewing ? STAGES.find(s => s.key === viewing) : current();
     if (!st) { $("stage").hidden = true; finish(); return; }
     $("stage").hidden = false;
     $("finish").hidden = true;
@@ -286,8 +299,9 @@
     const box = document.createElement("div");
     box.className = "result " + (solved ? "won" : "lost");
     const last = !current();
-    box.innerHTML = `<span>${solved ? `<b>Got it in ${guesses}!</b> +${pts} points` : `<b>Out of guesses.</b> It was ${answerHtml}.`}</span>
-      <button class="btn primary" type="button">${last ? "See your score" : "Next stage →"}</button>`;
+    const label = viewing ? (last ? "Back to your score" : `Back to ${esc(current().name)} →`) : last ? "See your score" : "Next stage →";
+    box.innerHTML = `<span>${solved ? `<b>Got it in ${guesses}!</b> It was ${answerHtml}. +${pts} points` : `<b>Out of guesses.</b> It was ${answerHtml}.`}</span>
+      <button class="btn primary" type="button">${label}</button>`;
     box.querySelector("button").onclick = () => { show(); scrollTo({ top: 0, behavior: "smooth" }); };
     el.append(box);
     box.querySelector("button").focus({ preventScroll: true });
@@ -742,7 +756,7 @@
     el.innerHTML = `<h2>Run complete</h2>
       <div class="big">${total} <small style="font-size:1.1rem;color:var(--muted)">/ ${MAX_POINTS}</small></div>
       <ul class="breakdown">${STAGES.map(st => { const r = save.results[st.key];
-        return `<li><span>${st.icon} ${esc(st.name)} <span class="muted">${r.skipped ? "skipped" : r.solved ? `${r.guesses} of ${st.max} guesses` : "missed"}</span></span><b>${points(st, r)}</b></li>`; }).join("")}</ul>
+        return `<li${canView(st) ? ` data-key="${st.key}" tabindex="0" role="button" title="Look back at it"` : ""}><span>${st.icon} ${esc(st.name)} <span class="muted">${r.skipped ? "skipped" : r.solved ? `${r.guesses} of ${st.max} guesses` : "missed"}</span></span><b>${points(st, r)}</b></li>`; }).join("")}</ul>
       <div class="streak"><span><b>${stats.streak}</b>day streak</span><span><b>${stats.best}</b>best streak</span><span><b>${stats.played}</b>runs played</span></div>
       <div class="row"><button class="btn" type="button" id="share">Copy result</button><span class="note" id="shareNote"></span></div>
       <div class="board">
@@ -824,6 +838,7 @@
     return;
   }
 
+  for (const id of ["stages", "finish"]) { $(id).addEventListener("click", lookBack); $(id).addEventListener("keydown", lookBack); }
   $("dayNo").textContent = "#" + DAY;
   $("maxPts").textContent = MAX_POINTS;
   $("stageCount").textContent = STAGES.length;
