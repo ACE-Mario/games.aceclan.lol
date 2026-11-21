@@ -1,4 +1,4 @@
-// The clan's daily puzzle number, shared by the daily games (Squads, Map Pin, ACE Mini, Sound Check). It is the same number
+// The clan's daily puzzle number, shared by the daily games (Squads, Map Pin, ACE Mini). It is the same number
 // ACEdle uses: days start at midnight in Adelaide, and RIOT API can move it on early (Jerry's
 // "Make new day" button). If RIOT API can't be reached, it uses the date plus the last early start
 // this browser heard about. On this PC, ?day=N picks a day for testing.
