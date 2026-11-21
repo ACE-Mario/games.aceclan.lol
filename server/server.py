@@ -9,6 +9,7 @@ Start it with "Games server.bat" in G:\\AceClan, or:
     python server.py --local    # server only, for testing at http://localhost:5050
 """
 import atexit
+import logging
 import os
 import random
 import re
@@ -319,8 +320,15 @@ def start_tunnel():
     log("tunnel started: https://play.aceclan.lol")
 
 
+class QuietHealth(logging.Filter):
+    """ACE Status checks /health every 20 seconds; leave those out of the log."""
+    def filter(self, record):
+        return "/health" not in record.getMessage()
+
+
 if __name__ == "__main__":
     local = "--local" in sys.argv
+    logging.getLogger("werkzeug").addFilter(QuietHealth())
     if not local:
         start_tunnel()
     socketio.start_background_task(cleanup_loop)
