@@ -1,6 +1,6 @@
 // Map Pin: the daily "where is it?" game. Two runs a day, VALORANT and League, five rounds each.
 // You're given a place (a VALORANT callout like "A Main" on Ascent, or a Summoner's Rift landmark like
-// "Red side Gromp"), tap where you think it is on the minimap, and score up to 1000 points by how close you are.
+// "Red side Gromp"), tap where you think it is on the minimap, and see how close you got. Just for fun: no points.
 // VALORANT maps and callouts (with their positions) come from valorant-api.com. Summoner's Rift is the
 // current minimap from Riot's Data Dragon, with landmark positions worked out from in-game coordinates below.
 (async () => {
@@ -81,8 +81,10 @@
       .map(p => ({ place: p.name, map: "Summoner's Rift", img: `${DD}/cdn/${ver}/img/map/map11.png`, at: p.at }));
   }
 
-  // Up to 1000 points: full marks within about 1% of the map, nothing past 35%.
-  const points = d => d <= 0.012 ? 1000 : Math.round(1000 * Math.max(0, 1 - d / 0.35) ** 2);
+  // How close a pin was, in words (d is the distance as a share of the map's width).
+  const closeness = d => d <= 0.012 ? ["Bang on!", "good"] : d <= 0.05 ? ["Very close", "good"] : d <= 0.12 ? ["Close", ""]
+    : d <= 0.25 ? ["Not far", ""] : ["Way off", "bad"];
+  const distOf = (k, i) => { const p = saves[k].pins[i], a = rounds[k][i].at; return Math.hypot(p.at[0] - a[0], p.at[1] - a[1]); };
 
   // ---- Playing ------------------------------------------------------------------------------------
   const TRACKS = {
@@ -97,12 +99,11 @@
   const rounds = {};
   let pin = null;                       // where you've tapped this round, before locking in
 
-  const total = k => saves[k].pins.reduce((a, p) => a + p.points, 0);
   const done = k => rounds[k] && saves[k].pins.length >= rounds[k].length;
 
   function tabs() {
     $("tabs").innerHTML = Object.entries(TRACKS).map(([k, t]) =>
-      `<button type="button" role="tab" data-k="${k}" aria-selected="${k === track}" class="${k === track ? "on" : ""}">${t.label}<small>${saves[k].pins.length ? `${total(k)} pts` : ""}${done(k) ? " ✓" : ""}</small></button>`).join("");
+      `<button type="button" role="tab" data-k="${k}" aria-selected="${k === track}" class="${k === track ? "on" : ""}">${t.label}<small>${done(k) ? "Done ✓" : saves[k].pins.length ? `${saves[k].pins.length} of ${ROUNDS}` : ""}</small></button>`).join("");
     $("tabs").querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
       track = b.dataset.k;
       AceDay.store.set("mappin-track", track);
@@ -124,7 +125,7 @@
     if (done(track)) return finish();
     const i = save.pins.length, rd = list[i];
     $("play").innerHTML = `
-      <div class="round-head"><span class="muted">Round ${i + 1} of ${list.length}</span><b>${total(track)} pts</b></div>
+      <div class="round-head"><span class="muted">Round ${i + 1} of ${list.length}</span></div>
       <h2 class="ask">Where's <span class="place"></span>${rd.map === "Summoner's Rift" ? "" : ` on <span class="mapname"></span>`}?</h2>
       <div class="map" id="map"><img alt="" draggable="false"><svg viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true"></svg></div>
       <div class="actions"><button id="lock" class="btn primary" type="button" disabled>Lock in</button><span id="note" class="muted small" aria-live="polite">Tap the map to drop your pin.</span></div>`;
@@ -147,48 +148,34 @@
     $("lock").addEventListener("click", () => {
       if (!pin || map.dataset.locked) return;
       map.dataset.locked = "1";
-      const d = Math.hypot(pin[0] - rd.at[0], pin[1] - rd.at[1]), pts = points(d);
-      save.pins.push({ at: pin, points: pts });
+      const d = Math.hypot(pin[0] - rd.at[0], pin[1] - rd.at[1]), [word, cls] = closeness(d);
+      save.pins.push({ at: pin });
       persist(track);
       svg.innerHTML = `<line x1="${pin[0] * 1000}" y1="${pin[1] * 1000}" x2="${rd.at[0] * 1000}" y2="${rd.at[1] * 1000}" class="gap"/>
         <circle cx="${pin[0] * 1000}" cy="${pin[1] * 1000}" r="17" class="mine"/>
         <circle cx="${rd.at[0] * 1000}" cy="${rd.at[1] * 1000}" r="22" class="answer"/>`;
-      FX.sound(pts >= 700 ? "chime" : pts >= 300 ? "ding" : "buzz");
-      $("note").textContent = pts === 1000 ? "Bang on! +1000" : pts ? `+${pts} (${Math.round(d * 100)}% of the map away)` : "Too far away for points.";
-      $("note").className = "small " + (pts >= 700 ? "good" : pts ? "" : "bad");
+      FX.sound(cls === "good" ? "chime" : cls ? "buzz" : "ding");
+      $("note").textContent = d <= 0.012 ? word : `${word} (${Math.round(d * 100)}% of the map away)`;
+      $("note").className = "small " + cls;
       $("lock").textContent = save.pins.length >= list.length ? "See results" : "Next";
       $("lock").disabled = false;
       $("lock").onclick = () => { pin = null; show(); };
-      $("play").querySelector(".round-head b").textContent = `${total(track)} pts`;
       tabs();
     }, { once: true });
     drawPin();
-  }
-
-  function shareText() {
-    const line = k => saves[k].pins.length ? `${TRACKS[k].label} ${total(k)}/${ROUNDS * 1000} ${saves[k].pins.map(p => p.points >= 900 ? "🎯" : p.points >= 500 ? "🟢" : p.points ? "🟡" : "⚫").join("")}` : null;
-    return [`ACE Map Pin #${DAY}`, ...Object.keys(TRACKS).map(line).filter(Boolean), "https://games.aceclan.lol/mappin/"].join("\n");
   }
 
   function finish() {
     const list = rounds[track], save = saves[track], other = Object.keys(TRACKS).find(k => k !== track);
     $("play").innerHTML = `
       <div class="end">
-        <h2>${total(track)} <small>/ ${list.length * 1000}</small></h2>
-        <ol class="results">${list.map((rd, i) => `<li><span></span><b>${save.pins[i].points}</b></li>`).join("")}</ol>
-        <div class="row">
-          ${done(other) ? "" : `<button id="other" class="btn primary" type="button">Play ${TRACKS[other].label}</button>`}
-          <button id="share" class="btn${done(other) ? " primary" : ""}" type="button">Copy result</button>
-        </div>
-        <p id="shareNote" class="muted small" aria-live="polite"></p>
+        <h2>${TRACKS[track].label} done</h2>
+        <ol class="results">${list.map((rd, i) => `<li><span></span><b class="${closeness(distOf(track, i))[1]}">${closeness(distOf(track, i))[0]}</b></li>`).join("")}</ol>
+        ${done(other) ? "" : `<div class="row"><button id="other" class="btn primary" type="button">Play ${TRACKS[other].label}</button></div>`}
         <p class="muted small">New maps in <b>${AceDay.untilNext()}</b>. Try <a href="../acedle/">ACEdle</a> or <a href="../squads/">Squads</a> too.</p>
       </div>`;
     $("play").querySelectorAll(".results span").forEach((s, i) => { s.textContent = list[i].map === "Summoner's Rift" ? list[i].place : `${list[i].place} · ${list[i].map}`; });
     $("other")?.addEventListener("click", () => { track = other; AceDay.store.set("mappin-track", track); show(); });
-    $("share").addEventListener("click", async () => {
-      try { await navigator.clipboard.writeText(shareText()); $("shareNote").textContent = "Copied. Paste it in Discord."; }
-      catch { $("shareNote").textContent = shareText(); }
-    });
   }
 
   show();
