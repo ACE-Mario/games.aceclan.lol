@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ACE Mini</title>
+<meta name="description" content="ACE Mini: a daily 5 by 5 crossword of League of Legends and VALORANT words, the same for everyone.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/site.css?v=20261119">
+<link rel="stylesheet" href="../shared/fx.css?v=20261119">
+<link rel="stylesheet" href="style.css?v=20261122">
+</head>
+<body>
+<header class="sitebar">
+  <div class="wrap sitebar-inner">
+    <a class="ace" href="../">ACE<span>.</span><small>Games</small></a>
+    <nav>
+      <a href="../">Games</a>
+      <a href="https://aceclan.lol">Clan</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap mini">
+  <section class="top">
+    <h1>ACE <span>Mini</span> <small id="dayNo"></small></h1>
+    <p class="muted">A daily 5 by 5 crossword of League and VALORANT words. Same puzzle for everyone; new one at midnight (Adelaide time).</p>
+  </section>
+
+  <section id="play" class="play" aria-live="polite"><p class="muted">Loading…</p></section>
+
+  <details class="how">
+    <summary>How to play</summary>
+    <ul>
+      <li>Tap a square and type. Tap the same square again, or use the clue lists, to switch between across and down.</li>
+      <li>Arrow keys move around; Backspace goes back a square.</li>
+      <li><b>Check</b> marks any wrong letters, and <b>Reveal</b> fills in the square you're on. Both are counted in your result.</li>
+    </ul>
+  </details>
+</main>
+
+<footer class="site-foot wrap">ACE Clan · Mini crossword</footer>
+
+<script src="../shared/fx.js?v=20261119"></script>
+<script src="../shared/day.js?v=20261119"></script>
+<script src="build.js?v=20261122"></script>
+<script src="crossword.js?v=20261122"></script>
+</body>
+</html>

@@ -1,0 +1,164 @@
+# ACE Mini crossword words: one per line,  WORD | clue
+# Words are 3 to 5 letters (the grid is 5 by 5), letters only. Each day's puzzle is built from these,
+# the same for everyone. Add, change or remove lines freely (Notepad is fine), then push the games site.
+# Changing this file changes today's puzzle too, so it's best done just after midnight.
+# Lines starting with # are ignored.
+
+AHRI  | League champion, the Nine-Tailed Fox
+AKALI | League champion, the Rogue Assassin
+AMUMU | League champion, the Sad Mummy
+ANNIE | League champion, the Dark Child
+ASHE  | League champion, the Frost Archer
+AZIR  | League champion, the Emperor of the Sands
+BARD  | League champion, the Wandering Caretaker
+BRAND | League champion, the Burning Vengeance
+BRAUM | League champion, the Heart of the Freljord
+BRIAR | League champion, the Restrained Hunger
+CORKI | League champion, the Daring Bombardier
+DIANA | League champion, Scorn of the Moon
+EKKO  | League champion, the Boy Who Shattered Time
+ELISE | League champion, the Spider Queen
+FIORA | League champion, the Grand Duelist
+FIZZ  | League champion, the Tidal Trickster
+GALIO | League champion, the Colossus
+GAREN | League champion, the Might of Demacia
+GNAR  | League champion, the Missing Link
+GWEN  | League champion, the Hallowed Seamstress
+HWEI  | League champion, the Visionary
+IVERN | League champion, the Green Father
+JANNA | League champion, the Storm's Fury
+JAX   | League champion, Grandmaster at Arms
+JAYCE | League champion, the Defender of Tomorrow
+JHIN  | League champion, the Virtuoso
+JINX  | League champion, the Loose Cannon
+KAISA | League champion, Daughter of the Void
+KARMA | League champion, the Enlightened One
+KAYLE | League champion, the Righteous
+KAYN  | League champion, the Shadow Reaper
+KLED  | League champion, the Cantankerous Cavalier
+LEONA | League champion, the Radiant Dawn
+LOCKE | League champion, the Ashen Exorcist
+LULU  | League champion, the Fae Sorceress
+LUX   | League champion, the Lady of Luminosity
+MEL   | League champion, the Soul's Reflection
+MILIO | League champion, the Gentle Flame
+NAMI  | League champion, the Tidecaller
+NASUS | League champion, the Curator of the Sands
+NEEKO | League champion, the Curious Chameleon
+NILAH | League champion, the Joy Unbound
+OLAF  | League champion, the Berserker
+ORNN  | League champion, the Fire below the Mountain
+POPPY | League champion, Keeper of the Hammer
+PYKE  | League champion, the Bloodharbor Ripper
+QUINN | League champion, Demacia's Wings
+RAKAN | League champion, the Charmer
+RELL  | League champion, the Iron Maiden
+RIVEN | League champion, the Exile
+RYZE  | League champion, the Rune Mage
+SENNA | League champion, the Redeemer
+SETT  | League champion, the Boss
+SHACO | League champion, the Demon Jester
+SHEN  | League champion, the Eye of Twilight
+SION  | League champion, the Undead Juggernaut
+SIVIR | League champion, the Battle Mistress
+SONA  | League champion, Maven of the Strings
+SWAIN | League champion, the Noxian Grand General
+SYLAS | League champion, the Unshackled
+TALON | League champion, the Blade's Shadow
+TARIC | League champion, the Shield of Valoran
+TEEMO | League champion, the Swift Scout
+UDYR  | League champion, the Spirit Walker
+URGOT | League champion, the Dreadnought
+VARUS | League champion, the Arrow of Retribution
+VAYNE | League champion, the Night Hunter
+VEX   | League champion, the Gloomist
+VIEGO | League champion, the Ruined King
+XAYAH | League champion, the Rebel
+YASUO | League champion, the Unforgiven
+YONE  | League champion, the Unforgotten
+YUUMI | League champion, the Magical Cat
+ZAC   | League champion, the Secret Weapon
+ZED   | League champion, the Master of Shadows
+ZERI  | League champion, the Spark of Zaun
+ZIGGS | League champion, the Hexplosives Expert
+ZOE   | League champion, the Aspect of Twilight
+ZYRA  | League champion, Rise of the Thorns
+ASTRA | VALORANT Controller whose ultimate is Cosmic Divide
+CLOVE | VALORANT Controller whose ultimate is Not Dead Yet
+FADE  | VALORANT Initiator whose ultimate is Nightfall
+GEKKO | VALORANT Initiator whose ultimate is Thrash
+HUSH  | VALORANT Duelist whose ultimate is Suspension
+ISO   | VALORANT Duelist whose ultimate is Kill Contract
+JETT  | VALORANT Duelist whose ultimate is Blade Storm
+KAYO  | VALORANT Initiator whose ultimate is NULL/CMD
+MIKS  | VALORANT Controller whose ultimate is Bassquake
+NEON  | VALORANT Duelist whose ultimate is Overdrive
+OMEN  | VALORANT Controller whose ultimate is From the Shadows
+RAZE  | VALORANT Duelist whose ultimate is Showstopper
+REYNA | VALORANT Duelist whose ultimate is Empress
+SAGE  | VALORANT Sentinel whose ultimate is Resurrection
+SKYE  | VALORANT Initiator whose ultimate is Seekers
+SOVA  | VALORANT Initiator whose ultimate is Hunter's Fury
+TEJO  | VALORANT Initiator whose ultimate is Armageddon
+VETO  | VALORANT Sentinel whose ultimate is Evolution
+VIPER | VALORANT Controller with a toxic wall and a poison cloud
+VYSE  | VALORANT Sentinel whose ultimate is Steel Garden
+YORU  | VALORANT Duelist whose ultimate is Dimensional Drift
+ARES  | VALORANT heavy that costs 1600 credits
+BUCKY | VALORANT shotgun that costs 850 credits
+GHOST | VALORANT sidearm that costs 500 credits
+JUDGE | VALORANT shotgun that costs 1850 credits
+MELEE | Knife slot in VALORANT, or any close-range champion in League
+ODIN  | VALORANT heavy that costs 3200 credits
+ABYSS | VALORANT map with no walls at the edges, so you can fall off
+BIND  | VALORANT map in Morocco with one-way teleporters and no mid
+HAVEN | VALORANT map in Bhutan, the first with three sites
+LOTUS | VALORANT map in India with rotating doors and three sites
+PEARL | Underwater VALORANT map in Portugal
+SPLIT | VALORANT map in Tokyo with ropes up to the rooftops
+ACE   | Kill all five enemies in one round (and our clan's name)
+BARON | Big purple worm in the top-side river pit
+NEXUS | Destroy it to win a League game
+GANK  | A jungler's surprise attack on a lane
+FARM  | Last-hit minions for gold
+LANE  | Top, mid or bot
+WARD  | League item that gives vision
+BUFF  | Make a champion or agent stronger in a patch
+NERF  | Make a champion or agent weaker in a patch
+SPIKE | The bomb in VALORANT
+ECO   | A VALORANT round where you save your credits
+PEEK  | Step out from cover to take a fight
+FLASH | Summoner spell that blinks you a short distance
+SMITE | The jungler's summoner spell
+HEAL  | Summoner spell, or what Sage does to her team
+DRAKE | Elemental dragon in the bot-side river
+PING  | Click on the map to warn your team, or your connection's delay
+LAG   | What a high ping causes
+AFK   | Away from keyboard
+CARRY | Win the game for your team
+FEED  | Keep dying and give the enemy gold
+TILT  | Get frustrated and start playing worse
+RANK  | Iron to Challenger, or Iron to Radiant
+IRON  | The lowest rank in both games
+GOLD  | Rank above Silver, or what you buy League items with
+CLASH | League's tournament mode for teams of five
+PATCH | Game update that changes balance
+META  | The strongest picks right now
+SMURF | A good player on a new low-rank account
+RIOT  | The company that makes both games
+RIFT  | Summoner's ___
+ARAM  | One lane, random champions, Howling Abyss
+ULT   | Your R in League or your X in VALORANT
+ORB   | Pick one up in VALORANT for an ultimate point
+SITE  | A, B or C in VALORANT
+PLANT | Put the spike down
+ROUND | VALORANT matches are first to 13 of these
+CRIT  | Extra-damage hit, for short
+TANK  | A champion who soaks up damage
+ITEM  | Something you buy in League's shop
+KDA   | Kills, deaths and assists
+MID   | The lane that runs corner to corner through the centre
+TOP   | Lane where Darius and Garen usually go
+BOT   | The lane with the ADC and support
+ADC   | Ranged damage carry in bot lane
+TOWER | League's turret, by its other name
