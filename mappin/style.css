@@ -44,3 +44,4 @@
 .how { color: var(--muted); }
 .how summary { cursor: pointer; font-family: var(--display); font-weight: 700; letter-spacing: 1px; }
 @media (prefers-reduced-motion: reduce) { .map .answer { animation: none; } }
+.results b.good { color: #3fdc8a; } .results b.bad { color: var(--red); }
