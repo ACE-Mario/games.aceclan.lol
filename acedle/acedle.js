@@ -5,6 +5,10 @@
 // Progress is saved in this browser, so a refresh carries on where you were.
 (async () => {
   "use strict";
+  // Jerry's control panel loads this file with window.ACEDLE_REVEAL = { day, ace, done(answers) } to list
+  // today's answers: the same picks as the game, with no page drawn.
+  const REVEAL = window.ACEDLE_REVEAL || null;
+  const HERE = document.currentScript?.src || location.href;     // champions.txt and agents.txt sit beside this file
   const FX = window.AceFX || { sound() {}, confetti() {}, soundButton() {} };
   const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   const RIOT = LOCAL ? "http://localhost:5080" : "https://riot.aceclan.lol";
@@ -34,7 +38,8 @@
   }
   // On this PC (localhost) ?day=N shows puzzle N, for testing. The real site always uses today's puzzle.
   const TEST_DAY = LOCAL && +new URLSearchParams(location.search).get("day");
-  const DAY = TEST_DAY || await puzzleDay();
+  if (REVEAL) serverAce = REVEAL.ace || null;
+  const DAY = REVEAL ? +REVEAL.day : TEST_DAY || await puzzleDay();
 
   const STAGES = [
     { key: "word", name: "Word", icon: "🔤", max: 6 },
@@ -83,7 +88,7 @@
       // Regions and melee/ranged come from champions.txt (edit it in Notepad). Champions missing from it fall
       // back to Riot's Universe site for their main region and Data Dragon's attack range. If neither has
       // regions, the Champion stage just leaves the Region column out.
-      const listFile = fetch("champions.txt", { cache: "no-cache" }).then(r => r.ok ? r.text() : "").catch(() => "");
+      const listFile = fetch(new URL("champions.txt", HERE), { cache: "no-cache" }).then(r => r.ok ? r.text() : "").catch(() => "");
       const universe = getJSON("https://universe-meeps.leagueoflegends.com/v1/en_us/search/index.json").catch(() => null);
       const ver = (await getJSON(`${DD}/api/versions.json`))[0];
       const champs = (await getJSON(`${DD}/cdn/${ver}/data/en_US/champion.json`)).data;
@@ -138,7 +143,7 @@
     })(),
     valorant: (async () => {
       // Origin, release year and utility come from agents.txt (edit it in Notepad); role from the VALORANT data.
-      const listFile = fetch("agents.txt", { cache: "no-cache" }).then(r => r.ok ? r.text() : "").catch(() => "");
+      const listFile = fetch(new URL("agents.txt", HERE), { cache: "no-cache" }).then(r => r.ok ? r.text() : "").catch(() => "");
       const list = (await getJSON("https://valorant-api.com/v1/agents?isPlayableCharacter=true")).data;
       const known = s => s && s !== "?" ? s : null;
       const listed = {};
@@ -167,7 +172,7 @@
         .map(m => ({ name: m.displayName, img: m.listViewIcon || m.displayIcon, splash: m.splash, sites: m.tacticalDescription }))
         .sort((a, b) => a.name.localeCompare(b.name));
     })(),
-    clan: (async () => {
+    clan: REVEAL ? Promise.resolve() : (async () => {
       try {
         data.clan = (await getJSON(RIOT + "/clan")).members;
       } catch {
@@ -179,6 +184,52 @@
       data.clan.sort((a, b) => a.name.localeCompare(b.name));
     })(),
   };
+
+  // ---- Today's answers (the stages and Jerry's reveal both use these) ---------------------------------
+  const wordAnswer = () => pick(window.ACEDLE_WORDS, rng(1));
+  async function abilityAnswer() {
+    await ready.league;
+    const answer = data.answer.ability;
+    const full = (await getJSON(`${DD}/cdn/${data.dd}/data/en_US/champion/${answer.id}.json`)).data[answer.id];
+    const slot = Math.floor(rng(4)() * 5);                    // 0 = passive, 1-4 = Q W E R
+    return { answer, slot, ab: slot ? full.spells[slot - 1] : full.passive };
+  }
+  function agentAnswer() {
+    const r = rng(6);
+    const agent = pick(data.agents, r);
+    return { agent, ab: pick(agent.abilities, r) };
+  }
+  function valAgentAnswer() {
+    const abilityAgent = pick(data.agents, rng(6));            // not the same agent as the Agent ability stage
+    const r = rng(11);
+    let answer;
+    do { answer = pick(data.agents, r); } while (answer === abilityAgent && data.agents.length > 1);
+    return answer;
+  }
+  function gearAnswer() {
+    const r = rng(13);
+    const maps = DAY % 2 === 0 && data.maps.length;
+    return { r, maps, answer: pick(maps ? data.maps : data.weapons, r) };
+  }
+  const aceAnswer = () => (!TEST_DAY && data.clan.find(m => m.name === serverAce)) || pick(data.clan, rng(8));
+
+  async function revealAll() {
+    const KEYS = ["Passive", "Q", "W", "E", "R"];
+    const out = [];
+    for (const st of STAGES) {
+      let answer = "", detail = "";
+      if (st.key === "word") answer = wordAnswer();
+      else if (["champion", "lore", "emoji", "splash"].includes(st.key)) { await ready.league; answer = data.answer[st.key].name; }
+      else if (st.key === "ability") { const a = await abilityAnswer(); answer = a.answer.name; detail = `${KEYS[a.slot]}: ${a.ab.name}`; }
+      else if (st.key === "item") { await ready.items; answer = pick(data.items, rng(12)).name; }
+      else if (st.key === "valagent") { await ready.valorant; answer = valAgentAnswer().name; }
+      else if (st.key === "agent") { await ready.valorant; const a = agentAnswer(); answer = a.agent.name; detail = a.ab.displayName; }
+      else if (st.key === "gear") { await ready.gear; const g = gearAnswer(); answer = g.answer.name; detail = g.maps ? "Map" : "Weapon"; }
+      else if (st.key === "ace") answer = serverAce || "Not picked yet";
+      out.push({ key: st.key, name: st.name, icon: st.icon, answer, detail });
+    }
+    return out;
+  }
 
   // ---- Stage strip and flow -------------------------------------------------------------------
   let stageAbort = null;
@@ -279,7 +330,7 @@
   }
 
   async function stageWord(el, st, signal) {
-    const answer = pick(window.ACEDLE_WORDS, rng(1));
+    const answer = wordAnswer();
     const rows = save.guesses.word = save.guesses.word || [];
     let cur = "", over = false, flipRow = -1;
     el.innerHTML = header(st, "Guess the five-letter word. <b style=\"color:#3fbf7f\">Green</b>: right letter, right spot. <b style=\"color:#c89b3c\">Gold</b>: in the word, wrong spot. Grey: not in it.")
@@ -408,11 +459,7 @@
   }
 
   async function stageAbility(el, st) {
-    await ready.league;
-    const answer = data.answer.ability;
-    const full = (await getJSON(`${DD}/cdn/${data.dd}/data/en_US/champion/${answer.id}.json`)).data[answer.id];
-    const slot = Math.floor(rng(4)() * 5);                    // 0 = passive, 1-4 = Q W E R
-    const ab = slot ? full.spells[slot - 1] : full.passive;
+    const { answer, slot, ab } = await abilityAnswer();
     const src = `${DD}/cdn/${data.dd}/img/${slot ? "spell" : "passive"}/${ab.image.full}`;
     const blur = [9, 6, 3.5, 1.5, 0.5], grey = [1, 0.85, 0.6, 0.3, 0.1];
     pictureStage(el, st, {
@@ -428,9 +475,7 @@
 
   async function stageAgent(el, st) {
     await ready.valorant;
-    const r = rng(6);
-    const agent = pick(data.agents, r);
-    const ab = pick(agent.abilities, r);
+    const { agent, ab } = agentAnswer();
     const keyName = { Ability1: "Q", Ability2: "E", Grenade: "C", Ultimate: "X" }[ab.slot] || ab.slot;
     const blur = [7, 4.5, 2.5, 1, 0.4];
     pictureStage(el, st, {
@@ -540,11 +585,7 @@
   // ---- Agent: clues like the Champion stage, for VALORANT agents --------------------------------------
   async function stageValAgent(el, st) {
     await ready.valorant;
-    // Not the same agent as the Agent ability stage.
-    const abilityAgent = pick(data.agents, rng(6));
-    const r = rng(11);
-    let answer;
-    do { answer = pick(data.agents, r); } while (answer === abilityAgent && data.agents.length > 1);
+    const answer = valAgentAnswer();
     const names = save.guesses.valagent = save.guesses.valagent || [];
     el.innerHTML = header(st, "Guess today's VALORANT agent. Each guess shows how close it is.")
       + `<div id="pickHolder"></div><div class="clues"><table><thead><tr><th>Agent</th><th>Role</th><th>Origin</th><th>Released</th><th>Utility</th></tr></thead><tbody id="rows"></tbody></table></div>
@@ -585,9 +626,7 @@
   // ---- Weapon or map: a zoomed-in picture, weapons one day and maps the next ----------------------------
   async function stageGear(el, st) {
     await ready.gear;
-    const r = rng(13);
-    const maps = DAY % 2 === 0 && data.maps.length;
-    const answer = pick(maps ? data.maps : data.weapons, r);
+    const { r, maps, answer } = gearAnswer();
     const x = Math.round((maps ? 20 : 30) + r() * (maps ? 60 : 40)), y = Math.round((maps ? 20 : 40) + r() * (maps ? 60 : 20));
     // Maps zoom out. Weapon pictures are too small to zoom into, so the whole gun starts blurred instead.
     const zoom = [650, 470, 340, 240, 170, 125], blur = [12, 8, 5, 3, 1.5, 0.5];
@@ -622,7 +661,7 @@
     await ready.clan;
     // RIOT API picks the member (everyone gets a turn before anyone repeats). If it can't be reached, or
     // when testing another day with ?day=, fall back to a pick from the date.
-    const answer = (!TEST_DAY && data.clan.find(m => m.name === serverAce)) || pick(data.clan, rng(8));
+    const answer = aceAnswer();
     const names = save.guesses.ace = save.guesses.ace || [];
     el.innerHTML = header(st, "Which clan member is it today? Each guess shows what you have in common.")
       + `<div id="pickHolder"></div><div class="clues"><table><thead><tr><th>Member</th><th>Plays</th><th>Region</th><th>League rank</th><th>Main role</th><th>Top champ</th><th>Main agent</th></tr></thead><tbody id="rows"></tbody></table></div>
@@ -768,6 +807,11 @@
       setTimeout(tick, 1000);
     };
     tick();
+  }
+
+  if (REVEAL) {
+    try { REVEAL.done(await revealAll()); } catch (e) { REVEAL.done(null, e); }
+    return;
   }
 
   $("dayNo").textContent = "#" + DAY;
