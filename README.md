@@ -27,7 +27,7 @@ stops both. Rooms live in memory, so restarting the server ends any games in pro
   - `main.js`: picks the mode from the link (`?room=KQTZ` online, `?code=FALCON-42` one screen).
   - `online.js`: online mode; sends moves to the server and draws what it sends back.
   - `local.js`: one-screen mode; works without the server.
-  - `words.js`: word packs (Classic). The server reads this file too, so edit packs only here.
+  - `words.js`: word packs (Classic, League, VALORANT). The server reads this file too, so edit packs only here.
   - `style.css`: styles for this game only.
 - `shared/room.js` and `shared/room.css`: the start screen, lobby and room panel (players, leader, admin panel,
   log) for the seated games below. Each of those games only draws its own board.
