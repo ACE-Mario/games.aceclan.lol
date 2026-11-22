@@ -39,6 +39,11 @@ stops both. Rooms live in memory, so restarting the server ends any games in pro
 - `poker/`: Ace Poker Night, Texas hold'em for points (never real money), 2 to 9 players.
 - `canasta/`: Canasta, classic rules for 2 to 4 players (4 play as two teams of 2).
 - `shared/cards.js`: draws playing cards for poker and canasta (corner indices and face-card art).
+- `shared/board.js` and `shared/board.css`: the clan leaderboard (Today and All time) on the results of the daily
+  games ACE Mini, Squads and Map Pin (Map Pin has one board for VALORANT and one for League). Scores are kept by
+  RIOT API (`riot.aceclan.lol`, the same program as ACEdle's leaderboard), which works the points out again from
+  what the page sends. Its rules for each game are in `riot.aceclan.lol/server.py`, under "Daily game leaderboards".
+  Sound Check has no board: it's endless and just for fun.
 - `server/`: the live server.
   - `server.py`: rooms, players and the Socket.IO connection. Also serves this folder for local testing.
   - `games/agents.py`: Ace Agents rules. The server checks every move and only sends the key to spymasters.

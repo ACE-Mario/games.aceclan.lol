@@ -227,7 +227,19 @@
     $("endText").textContent = won ? `All four squads with ${save.mistakes} mistake${save.mistakes === 1 ? "" : "s"}.` : `You found ${save.solved.length} of 4. The rest are shown above.`;
     $("nextIn").textContent = AceDay.untilNext();
     say("");
+    // Clan leaderboard (once: finish runs on every redraw after the game ends).
+    if (boardShown) return;
+    boardShown = true;
+    window.AceBoard?.mount($("board"), {
+      game: "squads", day: DAY,
+      run: { solved: save.solved.length, mistakes: save.mistakes },
+      today: [{ head: "Result", cls: "x", cell: r => r.detail.solved === 4
+                  ? (r.detail.mistakes ? `${r.detail.mistakes} mistake${r.detail.mistakes === 1 ? "" : "s"}` : "Perfect") : `${r.detail.solved}/4 squads` },
+              { head: "Points", cls: "p", cell: r => r.points }],
+      how: "Points: 100 for solving it, minus 20 for each mistake. Out of tries: 10 for each squad you found. All time adds them up.",
+    });
   }
+  let boardShown = false;
 
   $("submit").addEventListener("click", submit);
   $("shuffle").addEventListener("click", () => {

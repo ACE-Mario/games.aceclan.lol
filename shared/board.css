@@ -1,0 +1,22 @@
+/* The clan leaderboard on the daily games' results (shared/board.js). Same look as ACEdle's. */
+.aceboard { margin-top: 18px; text-align: left; width: 100%; }
+.aceboard h3 { margin: 0 0 8px; font-size: 1.2rem; letter-spacing: 1px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.aceboard-tabs { display: inline-flex; gap: 4px; margin-left: auto; }
+.aceboard-tabs button { background: var(--bg2); color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px;
+  font: 600 .8rem/1 var(--display); letter-spacing: 1px; cursor: pointer; }
+.aceboard-tabs button.on { background: var(--purple); border-color: var(--purple); color: #fff; }
+.aceboard-send { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.aceboard-send input { flex: 1 1 160px; max-width: 260px; }
+.aceboard-note { color: var(--muted); font-size: .9rem; margin: 8px 0; }
+.aceboard-note.bad { color: var(--red); }
+.aceboard table { width: 100%; border-collapse: collapse; }
+.aceboard td, .aceboard th { padding: 7px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+.aceboard th { font: 600 .75rem/1 var(--display); letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+.aceboard td.n { width: 32px; color: var(--muted); font: 700 1.05rem/1 var(--display); }
+.aceboard td.who { overflow-wrap: anywhere; }
+.aceboard th.p, .aceboard td.p { text-align: right; }
+.aceboard td.p { font: 700 1.1rem/1 var(--display); color: var(--gold); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.aceboard td.x { color: var(--muted); font-size: .85rem; }
+.aceboard td.dots { font-size: .8rem; letter-spacing: 1px; white-space: nowrap; }
+.aceboard tr.me td { background: rgba(124, 58, 237, .18); }
+.aceboard-how { color: var(--muted); font-size: .8rem; margin: 10px 0 0; }

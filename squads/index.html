@@ -10,6 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../shared/site.css?v=20261119">
 <link rel="stylesheet" href="../shared/fx.css?v=20261119">
+<link rel="stylesheet" href="../shared/board.css?v=20261122b">
 <link rel="stylesheet" href="style.css?v=20261119">
 </head>
 <body>
@@ -48,6 +49,7 @@
     <p id="endText" class="muted"></p>
     <button id="share" class="btn primary" type="button">Copy result</button>
     <p id="shareNote" class="muted small" aria-live="polite"></p>
+    <div id="board"></div>
     <p class="muted small">Next puzzle in <b id="nextIn"></b>. Try <a href="../acedle/">ACEdle</a> or <a href="../mappin/">Map Pin</a> too.</p>
   </section>
 
@@ -58,6 +60,7 @@
       <li>Right: that squad is revealed in its colour. Gold is the easiest, then teal, purple, and red is the hardest.</li>
       <li>"One away…" means three of your four belong together.</li>
       <li>Watch out for red herrings: a tile can look like it fits two squads, but it only belongs to one.</li>
+      <li>When you finish, add your score to the clan leaderboard: 100 points for solving it, minus 20 for each mistake. If you run out of tries, 10 for each squad you found.</li>
     </ul>
   </details>
 </main>
@@ -66,6 +69,7 @@
 
 <script src="../shared/fx.js?v=20261119"></script>
 <script src="../shared/day.js?v=20261119"></script>
-<script src="squads.js?v=20261119"></script>
+<script src="../shared/board.js?v=20261122b"></script>
+<script src="squads.js?v=20261122b"></script>
 </body>
 </html>

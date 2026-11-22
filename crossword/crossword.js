@@ -209,9 +209,21 @@
         <ol class="answers">${puzzle.entries.map(e => `<li><b>${e.num}${e.dir === "a" ? "A" : "D"} ${e.word}</b> <span></span></li>`).join("")}</ol>
         <div class="row"><button id="share" class="btn primary" type="button">Copy result</button></div>
         <p id="shareNote" class="muted small" aria-live="polite"></p>
+        <div id="board"></div>
         <p class="muted small">Next puzzle in <b>${AceDay.untilNext()}</b>. Try <a href="../acedle/">ACEdle</a> or <a href="../voices/">Sound Check</a> too.</p>
       </div>`;
     $("play").querySelectorAll(".answers span").forEach((s, i) => { s.textContent = puzzle.entries[i].clue; });
+    // Clan leaderboard: fastest time today (help adds time), and points added up for All time.
+    const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+    window.AceBoard?.mount($("board"), {
+      game: "mini", day: DAY,
+      run: { secs: Math.max(1, save.secs), checks: Math.min(999, save.checks), reveals: save.reveals },
+      today: [{ head: "Help", cls: "x", cell: r => r.detail.checks || r.detail.reveals
+                  ? [r.detail.checks && plural(r.detail.checks, "check"), r.detail.reveals && plural(r.detail.reveals, "reveal")].filter(Boolean).join(", ") : "none" },
+              { head: "Time", cls: "p", cell: r => clock(r.detail.time) }],
+      all: [{ head: "Best", cell: r => clock(-r.best) }, { head: "Days", cell: r => r.days }, { head: "Points", cls: "p", cell: r => r.points }],
+      how: "Leaderboard time adds 10 seconds for each Check and 30 for each revealed square. All time adds up points: 100 for a minute or less, then a point less every 6 seconds (never under 10).",
+    });
     $("share").addEventListener("click", async () => {
       try { await navigator.clipboard.writeText(shareText()); $("shareNote").textContent = "Copied. Paste it in Discord."; }
       catch { $("shareNote").textContent = shareText(); }

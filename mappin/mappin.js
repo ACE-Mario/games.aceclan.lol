@@ -165,8 +165,9 @@
     drawPin();
   }
 
+  const pinMark = pts => pts >= 900 ? "🎯" : pts >= 500 ? "🟢" : pts ? "🟡" : "⚫";
   function shareText() {
-    const line = k => saves[k].pins.length ? `${TRACKS[k].label} ${total(k)}/${ROUNDS * 1000} ${saves[k].pins.map(p => p.points >= 900 ? "🎯" : p.points >= 500 ? "🟢" : p.points ? "🟡" : "⚫").join("")}` : null;
+    const line = k => saves[k].pins.length ? `${TRACKS[k].label} ${total(k)}/${ROUNDS * 1000} ${saves[k].pins.map(p => pinMark(p.points)).join("")}` : null;
     return [`ACE Map Pin #${DAY}`, ...Object.keys(TRACKS).map(line).filter(Boolean), "https://games.aceclan.lol/mappin/"].join("\n");
   }
 
@@ -181,9 +182,17 @@
           <button id="share" class="btn${done(other) ? " primary" : ""}" type="button">Copy result</button>
         </div>
         <p id="shareNote" class="muted small" aria-live="polite"></p>
+        <div id="board"></div>
         <p class="muted small">New maps in <b>${AceDay.untilNext()}</b>. Try <a href="../acedle/">ACEdle</a> or <a href="../squads/">Squads</a> too.</p>
       </div>`;
     $("play").querySelectorAll(".results span").forEach((s, i) => { s.textContent = list[i].map === "Summoner's Rift" ? list[i].place : `${list[i].place} · ${list[i].map}`; });
+    // Clan leaderboard: VALORANT and League each have their own.
+    window.AceBoard?.mount($("board"), {
+      game: `mappin-${track}`, day: DAY, title: `${TRACKS[track].label} leaderboard`,
+      run: { pins: save.pins.map(p => p.points) },
+      today: [{ head: "Pins", cls: "dots", cell: r => r.detail.pins.map(pinMark).join("") }, { head: "Points", cls: "p", cell: r => r.points }],
+      how: `All time adds up your ${TRACKS[track].label} points from every day.`,
+    });
     $("other")?.addEventListener("click", () => { track = other; AceDay.store.set("mappin-track", track); show(); });
     $("share").addEventListener("click", async () => {
       try { await navigator.clipboard.writeText(shareText()); $("shareNote").textContent = "Copied. Paste it in Discord."; }
