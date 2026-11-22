@@ -56,8 +56,16 @@
   ].filter(st => DAY >= (st.from || 1) && DAY < (st.until || Infinity));
   // Stages added later start on puzzle `from`; dropped ones stop before puzzle `until` (RIOT API uses the same rule).
   const CHAMP_MORE = DAY >= 5;          // the Champion stage's Released and Gender columns start on puzzle #5
+  // From puzzle #6 the Ability stage no longer hints at the key. Once you've named the champion you can guess
+  // the key instead: get it right and one wrong guess is forgiven (so never more than 100). RIOT API agrees.
+  const KEY_BONUS = DAY >= 6;
+  const KEYS = ["Passive", "Q", "W", "E", "R"];
   const MAX_POINTS = STAGES.length * 100;
-  const points = (st, r) => r && r.solved && r.guesses >= 1 && r.guesses <= st.max ? Math.round(100 * (st.max - r.guesses + 1) / st.max) : 0;
+  const points = (st, r) => {
+    if (!r || !r.solved || !(r.guesses >= 1 && r.guesses <= st.max)) return 0;
+    const counted = r.guesses - (KEY_BONUS && st.key === "ability" && r.bonus && r.guesses > 1 ? 1 : 0);
+    return Math.round(100 * (st.max - counted + 1) / st.max);
+  };
 
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -223,7 +231,6 @@
   const aceAnswer = () => (!TEST_DAY && data.clan.find(m => m.name === serverAce)) || pick(data.clan, rng(8));
 
   async function revealAll() {
-    const KEYS = ["Passive", "Q", "W", "E", "R"];
     const out = [];
     for (const st of STAGES) {
       let answer = "", detail = "";
@@ -288,23 +295,47 @@
   }
 
   // A stage is over: save it, say how it went, offer the next one.
-  function complete(st, el, guesses, solved, answerHtml) {
+  function complete(st, el, guesses, solved, answerHtml, keyBonus) {
     if (!save.results[st.key]) {
       save.results[st.key] = { guesses, solved };
       persist();
       FX.sound(solved ? "chime" : "lose");
     }
     drawStrip();
-    const pts = points(st, save.results[st.key]);
+    const r = save.results[st.key], pts = points(st, r);
+    el.querySelectorAll(".result, .key-bonus").forEach(b => b.remove());
+    // The Ability stage's key question (see KEY_BONUS): asked once you've got the champion.
+    if (keyBonus && solved) {
+      const q = document.createElement("div");
+      q.className = "key-bonus";
+      if (r.keyGuess) {
+        q.innerHTML = r.keyGuess === keyBonus
+          ? `🎯 <b>${esc(keyBonus)}</b> was right!${guesses > 1 ? " One wrong guess forgiven." : ""}`
+          : `It was on <b>${esc(keyBonus)}</b>, not ${esc(r.keyGuess)}.`;
+        q.classList.add(r.keyGuess === keyBonus ? "won" : "lost");
+      } else {
+        q.innerHTML = `<span><b>Bonus:</b> which key is it?${guesses > 1 ? " Get it right and one wrong guess is forgiven." : " (You've got full marks already: just for fun.)"}</span>
+          <div class="keys">${KEYS.map(k => `<button class="btn" type="button" data-k="${k}">${k}</button>`).join("")}</div>`;
+        q.querySelectorAll("button").forEach(b => b.onclick = () => {
+          r.keyGuess = b.dataset.k;
+          r.bonus = r.keyGuess === keyBonus;
+          persist();
+          FX.sound(r.bonus ? "chime" : "buzz");
+          complete(st, el, guesses, solved, answerHtml, keyBonus);
+        });
+      }
+      el.append(q);
+    }
     const box = document.createElement("div");
     box.className = "result " + (solved ? "won" : "lost");
     const last = !current();
     const label = viewing ? (last ? "Back to your score" : `Back to ${esc(current().name)} →`) : last ? "See your score" : "Next stage →";
-    box.innerHTML = `<span>${solved ? `<b>Got it in ${guesses}!</b> It was ${answerHtml}. +${pts} points` : `<b>Out of guesses.</b> It was ${answerHtml}.`}</span>
+    const onKey = keyBonus ? `, on ${esc(keyBonus)}` : "";
+    box.innerHTML = `<span>${solved ? `<b>Got it in ${guesses}!</b> It was ${answerHtml}. +${pts} points` : `<b>Out of guesses.</b> It was ${answerHtml}${onKey}.`}</span>
       <button class="btn primary" type="button">${label}</button>`;
     box.querySelector("button").onclick = () => { show(); scrollTo({ top: 0, behavior: "smooth" }); };
     el.append(box);
-    box.querySelector("button").focus({ preventScroll: true });
+    (el.querySelector(".key-bonus .keys button") || box.querySelector("button")).focus({ preventScroll: true });
   }
 
   const header = (st, how) => `<h2>${st.icon} ${esc(st.name)}</h2><p class="how">${how}</p>`;
@@ -456,7 +487,7 @@
 
   // ---- Picture stages: ability, agent, splash -------------------------------------------------
   // Shared: a picture that gets clearer with every miss, hints that appear, and a search box.
-  function pictureStage(el, st, { how, picture, update, hints, options, answerName, answerHtml, placeholder, key }) {
+  function pictureStage(el, st, { how, picture, update, hints, options, answerName, answerHtml, placeholder, key, keyBonus }) {
     const names = save.guesses[key] = save.guesses[key] || [];
     el.innerHTML = header(st, how) + `<div class="picture-stage"><div class="picture">${picture}</div><ul class="hints" id="hints"></ul>
       <div id="pickHolder"></div><div class="guessed" id="guessed"></div><div id="tries" style="text-align:center"></div></div>`;
@@ -475,10 +506,10 @@
       persist();
       FX.sound(o.name === answerName ? "ding" : "buzz");
       draw();
-      if (solved() || names.length >= st.max) { p.done(); complete(st, el, names.length, solved(), answerHtml); }
+      if (solved() || names.length >= st.max) { p.done(); complete(st, el, names.length, solved(), answerHtml, keyBonus); }
     }, placeholder);
     draw();
-    if (solved() || names.length >= st.max) { p.done(); complete(st, el, names.length, solved(), answerHtml); }
+    if (solved() || names.length >= st.max) { p.done(); complete(st, el, names.length, solved(), answerHtml, keyBonus); }
     else p.input.focus({ preventScroll: true });
   }
 
@@ -491,9 +522,12 @@
       how: "Whose ability is this? It gets clearer, and you get hints, with every wrong guess.",
       picture: `<div class="frame"><img id="pic" src="${esc(src)}" alt="A League ability icon"></div>`,
       update: m => { const img = $("pic"); img.style.filter = m >= 99 ? "none" : `blur(${blur[m] ?? 0}px) grayscale(${grey[m] ?? 0})`; },
-      hints: [`Key: <b>${["Passive", "Q", "W", "E", "R"][slot]}</b>`, `Class: <b>${esc(answer.cls)}</b>`, `Ability: <b>${esc(ab.name)}</b>`],
+      hints: KEY_BONUS
+        ? [`Class: <b>${esc(answer.cls)}</b>`, `<b>${answer.reachLabel === "Both" ? "Melee and ranged" : answer.reachLabel}</b>`, `Ability: <b>${esc(ab.name)}</b>`]
+        : [`Key: <b>${KEYS[slot]}</b>`, `Class: <b>${esc(answer.cls)}</b>`, `Ability: <b>${esc(ab.name)}</b>`],
       options: data.champs.map(c => ({ name: c.name, img: c.img })), answerName: answer.name,
       answerHtml: `<b>${esc(answer.name)}</b> (${esc(ab.name)})`,
+      keyBonus: KEY_BONUS ? KEYS[slot] : null,
     });
   }
 
@@ -756,7 +790,7 @@
     el.innerHTML = `<h2>Run complete</h2>
       <div class="big">${total} <small style="font-size:1.1rem;color:var(--muted)">/ ${MAX_POINTS}</small></div>
       <ul class="breakdown">${STAGES.map(st => { const r = save.results[st.key];
-        return `<li${canView(st) ? ` data-key="${st.key}" tabindex="0" role="button" title="Look back at it"` : ""}><span>${st.icon} ${esc(st.name)} <span class="muted">${r.skipped ? "skipped" : r.solved ? `${r.guesses} of ${st.max} guesses` : "missed"}</span></span><b>${points(st, r)}</b></li>`; }).join("")}</ul>
+        return `<li${canView(st) ? ` data-key="${st.key}" tabindex="0" role="button" title="Look back at it"` : ""}><span>${st.icon} ${esc(st.name)} <span class="muted">${r.skipped ? "skipped" : r.solved ? `${r.guesses} of ${st.max} guesses${r.bonus && KEY_BONUS && st.key === "ability" ? ", key bonus" : ""}` : "missed"}</span></span><b>${points(st, r)}</b></li>`; }).join("")}</ul>
       <div class="streak"><span><b>${stats.streak}</b>day streak</span><span><b>${stats.best}</b>best streak</span><span><b>${stats.played}</b>runs played</span></div>
       <div class="row"><button class="btn" type="button" id="share">Copy result</button><span class="note" id="shareNote"></span></div>
       <div class="board">

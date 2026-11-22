@@ -146,3 +146,8 @@
 /* Weapon pictures are small transparent cut-outs: shown whole, blurred, on a lighter backdrop */
 .picture .splash.weapon { aspect-ratio: 352 / 160; width: min(100%, 460px); background-color: #2a3042; display: grid; }
 .splash.weapon .gun { background: no-repeat 50% 50% / 88% auto; transition: filter .4s; }
+.stage .key-bonus { margin-top: 16px; padding: 12px 14px; border-radius: 8px; background: var(--bg2); border: 1px dashed var(--gold); display: flex; flex-direction: column; gap: 10px; }
+.stage .key-bonus.won { border-style: solid; border-color: #2f9e44; }
+.stage .key-bonus.lost { border-style: solid; border-color: var(--line); color: var(--muted); }
+.stage .key-bonus .keys { display: flex; gap: 6px; flex-wrap: wrap; }
+.stage .key-bonus .keys .btn { min-width: 48px; }
