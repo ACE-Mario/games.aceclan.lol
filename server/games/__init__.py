@@ -2,10 +2,11 @@
 (new_state, default_seat, handle, view) and listing it here. Seated turn-based games can
 build on base.SeatedGame, which already handles the lobby, seats and admin panel."""
 from .agents import Agents
+from .board import Board
 from .canasta import Canasta
 from .poker import Poker
 from .sketch import Sketch
 from .snakes import Snakes
 from .trivia import Trivia
 
-GAMES = {g.id: g for g in (Agents(), Snakes(), Trivia(), Poker(), Canasta(), Sketch())}
+GAMES = {g.id: g for g in (Agents(), Snakes(), Trivia(), Poker(), Canasta(), Sketch(), Board())}

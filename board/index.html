@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ACE Board</title>
+<meta name="description" content="A shared live whiteboard for ACE Clan: write, draw and paste pictures together for ideas and studying.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/site.css?v=20261123">
+<link rel="stylesheet" href="../shared/room.css?v=20261123">
+<link rel="stylesheet" href="../shared/fx.css?v=20261123">
+<link rel="stylesheet" href="style.css?v=20261123">
+</head>
+<body>
+<header class="sitebar">
+  <div class="wrap sitebar-inner">
+    <a class="ace" href="../">ACE<span>.</span><small>Games</small></a>
+    <nav>
+      <a href="../">Games</a>
+    </nav>
+  </div>
+</header>
+
+<main id="startView" class="wrap start">
+  <section class="start-hero">
+    <h1>ACE Board</h1>
+    <p class="muted">A shared whiteboard for ideas, plans and studying. Type anywhere, draw with the pen and paste
+      pictures, and everyone in the room sees it live.</p>
+  </section>
+  <div class="start-grid">
+    <form id="onlineForm" class="box mode" autocomplete="off">
+      <h2>Open a board</h2>
+      <p class="muted small">Everyone joins from their own phone or PC with the room code or invite link.</p>
+      <p id="serverStatus" class="server-status">Checking the game server…</p>
+      <label class="field" for="playerName">Your name
+        <input id="playerName" maxlength="20" placeholder="Name the others will see">
+      </label>
+      <button id="createBtn" class="btn primary" type="submit">New board</button>
+      <div class="divider"><span>or join a board</span></div>
+      <div class="row">
+        <label class="sr" for="roomInput">Room code</label>
+        <input id="roomInput" maxlength="4" placeholder="Room code, e.g. KQTZ" autocapitalize="characters">
+        <button id="joinBtn" class="btn" type="button">Join</button>
+      </div>
+      <p id="startError" class="error" hidden></p>
+    </form>
+    <details class="box rules" open>
+      <summary><h2>How it works</h2></summary>
+      <ul class="how">
+        <li><b>Text</b>: pick the T tool and click anywhere to start typing.</li>
+        <li><b>Pen</b>: draw freehand in any colour and size.</li>
+        <li><b>Pictures</b>: press Ctrl+V to paste one, drag one onto the board, or use Add picture.</li>
+        <li><b>Move</b>: with the arrow tool, drag your own things around, or drag empty space to look around the board. It goes on forever. Double-click your text to change it.</li>
+        <li><b>Undo</b>: Ctrl+Z undoes your last change, Ctrl+Y puts it back.</li>
+        <li><b>Delete</b>: select your thing and press Delete, or rub it out with the eraser.</li>
+        <li><b>The eye</b> next to each player hides or shows their writing, just on your screen.</li>
+      </ul>
+      <p class="muted small">Boards stay open while people use them and close after 6 quiet hours. Nothing is saved
+        once the room closes, so screenshot anything you want to keep.</p>
+    </details>
+  </div>
+</main>
+
+<main id="gameView" class="bd-app" hidden>
+  <div id="viewport" class="bd-viewport" tabindex="0" aria-label="Whiteboard. Drag to move around, Ctrl+V pastes pictures.">
+    <div id="world" class="bd-world"></div>
+    <div id="dropHint" class="bd-drop" hidden>Drop the picture to add it</div>
+  </div>
+
+  <div class="bd-bar bd-float" role="toolbar" aria-label="Board tools">
+    <div class="bd-group" id="tools">
+      <button class="tb on" type="button" data-tool="select" title="Select, move and pan (V)" aria-label="Select and move">
+        <svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.6L10 19z"/></svg></button>
+      <button class="tb" type="button" data-tool="text" title="Text (T)" aria-label="Text">
+        <svg viewBox="0 0 24 24"><path d="M5 5h14M12 5v14M9 19h6"/></svg></button>
+      <button class="tb" type="button" data-tool="pen" title="Pen (P)" aria-label="Pen">
+        <svg viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19zM14 7l3 3"/></svg></button>
+      <button class="tb" type="button" data-tool="eraser" title="Eraser: rubs out your own things (E)" aria-label="Eraser">
+        <svg viewBox="0 0 24 24"><path d="M8 20h12M4 15l9-10 7 7-8 8H8z"/></svg></button>
+    </div>
+    <div class="bd-group">
+      <button id="undoBtn" class="tb" type="button" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>
+        <svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+      <button id="redoBtn" class="tb" type="button" title="Redo (Ctrl+Y)" aria-label="Redo" disabled>
+        <svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
+    </div>
+    <div class="bd-group" id="swatches" aria-label="Colour"></div>
+    <div class="bd-group" id="sizes" aria-label="Size"></div>
+    <div class="bd-group">
+      <button id="addImage" class="tb" type="button" title="Add picture (or paste with Ctrl+V)" aria-label="Add picture">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/></svg></button>
+      <input id="imageFile" type="file" accept="image/*" hidden>
+    </div>
+  </div>
+
+  <div class="bd-corner bd-float">
+    <button id="panelBtn" class="bd-pill" type="button" aria-expanded="true" aria-controls="panel">
+      <b id="roomCode" class="code"></b><span id="playerCount"></span>
+    </button>
+    <button id="fullBtn" class="tb" type="button" title="Full screen" aria-label="Full screen">
+      <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    <a class="tb" href="../" title="Back to the games" aria-label="Back to the games">
+      <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></a>
+  </div>
+
+  <aside id="panel" class="bd-panel bd-float" aria-label="Room and players">
+    <div class="bd-sec">
+      <button id="copyInvite" class="btn primary" type="button">Copy invite link</button>
+      <span id="inviteNote" class="muted small invite-note" aria-live="polite"></span>
+      <div class="row me-row">
+        <span class="small muted">You're <b id="myName"></b></span>
+        <button id="renameBtn" class="link-btn" type="button">Change name</button>
+      </div>
+      <form id="renameForm" class="row" hidden>
+        <label class="sr" for="renameInput">New name</label>
+        <input id="renameInput" maxlength="20">
+        <button class="btn" type="submit">Save</button>
+      </form>
+    </div>
+    <div class="bd-sec">
+      <h2>Players</h2>
+      <p class="muted small">The eye hides or shows someone's writing, on your screen only.</p>
+      <ul id="players" class="bd-players"></ul>
+      <button id="showAll" class="link-btn" type="button" hidden>Show everyone</button>
+    </div>
+    <div class="bd-sec">
+      <div class="row">
+        <button id="clearMine" class="btn small-btn" type="button">Clear my things</button>
+        <button id="clearAll" class="btn danger small-btn" type="button" hidden>Clear board</button>
+      </div>
+      <p id="boardInfo" class="muted small"></p>
+    </div>
+  </aside>
+
+  <div class="bd-zoom bd-float">
+    <button id="zoomOut" class="tb" type="button" title="Zoom out" aria-label="Zoom out">−</button>
+    <button id="zoomLabel" class="zoom-label" type="button" title="Show everything on the board">100%</button>
+    <button id="zoomIn" class="tb" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+  </div>
+
+  <div class="bd-notes">
+    <p id="connNote" class="conn-note" hidden></p>
+    <p id="note" class="bd-note" role="status" hidden></p>
+  </div>
+</main>
+
+<footer class="site-foot wrap">ACE Clan · ACE Board</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<script src="../shared/live.js?v=20261123"></script>
+<script src="../shared/fx.js?v=20261123"></script>
+<script src="board.js?v=20261123"></script>
+</body>
+</html>
