@@ -36,7 +36,7 @@ body.on-board .sitebar, body.on-board .site-foot { display: none; }
 }
 .bd-bar {
   left: max(10px, env(safe-area-inset-left, 0px)); top: max(10px, env(safe-area-inset-top, 0px));
-  max-width: calc(100vw - 230px); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 8px;
+  max-width: calc(100vw - 270px); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 8px;
 }
 .bd-group { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .tb {
@@ -49,6 +49,7 @@ body.on-board .sitebar, body.on-board .site-foot { display: none; }
 .tb:disabled { opacity: .35; cursor: default; }
 .tb.on { background: var(--purple); border-color: var(--purple); }
 .sz i { display: block; border-radius: 50%; background: currentColor; }
+.sz i.bar { width: 22px; border-radius: 3px; }
 .sz i.t { background: none; border-radius: 0; font: 700 1rem/1 var(--display); font-style: normal; }
 .sw { width: 24px; height: 24px; border-radius: 6px; border: 2px solid var(--line); background: var(--c); cursor: pointer; padding: 0; }
 .sw.on { outline: 3px solid var(--accent); outline-offset: 1px; }
@@ -101,21 +102,35 @@ body.on-board .sitebar, body.on-board .site-foot { display: none; }
 }
 .bd-image { box-shadow: 0 2px 10px #0002; }
 .bd-image img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; border-radius: 3px; }
-.bd-pen { overflow: visible; pointer-events: none; }
-.bd-pen path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
-.bd-pen .hit { stroke: transparent; pointer-events: stroke; }
+.bd-text.note {
+  width: 220px; min-height: 150px; padding: 16px; border-radius: 3px; font-weight: 500;
+  box-shadow: 0 3px 10px #0000002e, 0 1px 2px #0000001f;
+}
+.bd-text.note.editing { box-shadow: 0 0 0 2px var(--accent), 0 3px 10px #0000002e; }
+.bd-pen, .bd-shape { overflow: visible; pointer-events: none; }
+.bd-pen path, .bd-shape .hit { fill: none; }
+.bd-pen path, .bd-shape path { stroke-linecap: round; stroke-linejoin: round; }
+.bd-shape .line { fill-opacity: .18; }
+.bd-item .hit { stroke: transparent; pointer-events: stroke; }
+.bd-item .hit.filled { pointer-events: all; }
+.bd-pen.hl { mix-blend-mode: multiply; }
+.bd-pen.hl .line { stroke-opacity: .4; stroke-linecap: butt; }
 
 /* Your own things show a ring in your colour when you point at them; selected ones keep it. */
 .bd-viewport[data-tool="select"] .bd-item.mine { cursor: move; }
 .bd-viewport[data-tool="select"] .bd-item:hover:not(.editing),
-.bd-viewport[data-tool="eraser"] .bd-item.mine:hover { outline: calc(2px * var(--iz, 1)) dashed var(--pc); outline-offset: 3px; }
-.bd-viewport[data-tool="eraser"] .bd-item:not(.mine),
-.bd-viewport[data-tool="eraser"] .bd-pen:not(.mine) .hit { pointer-events: none; }
+.bd-viewport[data-tool="eraser"] .bd-item.can-del:hover { outline: calc(2px * var(--iz, 1)) dashed var(--pc); outline-offset: 3px; }
+.bd-viewport[data-tool="eraser"] .bd-item:not(.can-del),
+.bd-viewport[data-tool="eraser"] .bd-item:not(.can-del) .hit { pointer-events: none; }
 .bd-item.sel:not(.editing) { outline: calc(2px * var(--iz, 1)) solid var(--pc) !important; outline-offset: 3px; }
 .bd-handle {
-  position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; border-radius: 50%;
+  position: absolute; z-index: 4; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%;
   background: #fff; border: 3px solid var(--purple); cursor: nwse-resize;
-  transform: translate(50%, 50%) scale(var(--iz, 1));
+  transform: scale(var(--iz, 1));
+}
+.bd-marquee {
+  position: absolute; pointer-events: none; border: 1.5px dashed var(--purple);
+  background: color-mix(in srgb, var(--purple) 12%, transparent); border-radius: 3px;
 }
 
 /* Other people's pointers */

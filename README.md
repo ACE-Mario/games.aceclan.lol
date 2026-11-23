@@ -12,7 +12,8 @@ plus a small Python server for online rooms.
   while it's running. The page checks the server and says when it's offline; one-screen play always works.
 
 Start the server with **`Games server.bat`** in `G:\AceClan`. It starts the tunnel too, and closing the window
-stops both. Rooms live in memory, so restarting the server ends any games in progress.
+stops both. Rooms live in memory, so restarting the server ends any games in progress (ACE Board saves its boards to disk, so
+those come back).
 
 ## Files
 
@@ -38,12 +39,14 @@ stops both. Rooms live in memory, so restarting the server ends any games in pro
     reads this file too; restart it after editing.
 - `poker/`: Ace Poker Night, Texas hold'em for points (never real money), 2 to 9 players.
 - `canasta/`: Canasta, classic rules for 2 to 4 players (4 play as two teams of 2).
-- `board/`: ACE Board, a shared live whiteboard (text, pen and pasted or dropped pictures) for ideas and studying.
-  The board has no edges and fills the window (with a full-screen button); drag empty space or middle-click
-  drag to move around, the scroll wheel or a pinch zooms, and the target button goes back to the middle (0, 0). Everyone's pointer shows live with their name. Ctrl+Z / Ctrl+Y undo and
-  redo your own changes. No turns and no points. Each player's eye button hides or shows that player's writing
-  (and pointer), on your own screen only. Pictures are shrunk in the browser before they're sent (`board.js`);
-  the server caps their size.
+- `board/`: ACE Board, a shared live whiteboard for ideas and studying: text, sticky notes, pen, highlighter, boxes,
+  circles, lines and arrows, and pasted or dropped pictures. The board has no edges and fills the window (with a
+  full-screen button); middle-click drag or Space+drag moves around, the scroll wheel or a pinch zooms, and the target
+  button goes back to the middle (0, 0). Drag a box to select several things; Ctrl+C / Ctrl+V and Ctrl+D copy them.
+  Everyone's pointer shows live with their name. Ctrl+Z / Ctrl+Y undo and redo your own changes. The leader can delete
+  anyone's things. No turns and no points. Each player's eye button hides or shows that player's writing (and pointer),
+  on your own screen only. Download picture saves the board as a PNG. Pictures are shrunk in the browser before
+  they're sent (`board.js`); the server caps their size.
 - `shared/cards.js`: draws playing cards for poker and canasta (corner indices and face-card art).
 - `shared/board.js` and `shared/board.css`: the clan leaderboard (Today and All time) on the results of the daily
   games ACE Mini, Squads and Map Pin (Map Pin has one board for VALORANT and one for League). Scores are kept by
@@ -59,9 +62,11 @@ stops both. Rooms live in memory, so restarting the server ends any games in pro
   - `games/poker.py`: poker rules: dealing, blinds, betting rounds, side pots and hand ranking. Hole cards
     only go to their owner until a showdown.
   - `games/canasta.py`: Canasta rules: melds, wild cards, the frozen pile, red and black 3s, going out and scoring.
-  - `games/board.py`: ACE Board. Keeps every text box, line and picture, lets people change only their own,
-    and caps picture sizes (700 KB each, 15 MB a board). Changes go out as live messages; the whole board is only
-    sent to a tab that doesn't have it yet.
+  - `games/board.py`: ACE Board. Keeps every item, lets people change only their own (the leader can delete
+    anyone's), and caps picture sizes (700 KB each, 15 MB a board). Changes go out as live messages; the whole board
+    is only sent to a tab that doesn't have it yet. Boards are saved to `server/saved/boards/<CODE>.json` (not in git)
+    a few seconds after each change, and joining with the code after a restart brings the board back
+    (`restore_room` in `server.py`). Saved boards are deleted after 30 days unused.
   - `games/__init__.py`: list of games the server can host.
   - `cloudflared.yml`: tunnel settings for play.aceclan.lol. The tunnel's secret credentials stay in
     `C:\Users\User\.cloudflared`, not here.

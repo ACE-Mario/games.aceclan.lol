@@ -1,29 +1,39 @@
 // ACE Board: a shared live whiteboard with no edges. The server (server/games/board.py) keeps every item
-// on the board (text boxes, pen lines and pictures) and checks that people only change their own. Changes
-// travel as small "live" messages, the same way Sketch & Guess sends lines, so typing and drawing show up
-// straight away. The full room update carries the whole board only when this tab doesn't have it yet;
-// otherwise it lists the item ids, so we can drop anything stale and ask again if we missed something.
+// on the board (text boxes, sticky notes, pen and highlighter lines, shapes and pictures), saves the board to
+// disk, and checks that people only change their own things (the leader can delete anyone's). Changes travel
+// as small "live" messages, the same way Sketch & Guess sends lines, so typing and drawing show up straight
+// away. The full room update carries the whole board only when this tab doesn't have it yet; otherwise it
+// lists the item ids, so we can drop anything stale and ask again if we missed something.
 //
-// Each item is its own element (text: a div, picture: a div with an img, line: an svg) inside one "world"
-// element that is moved and scaled to pan and zoom. Hiding a player's writing (the eye) just hides their
-// elements, on this screen only. Undo (Ctrl+Z) keeps a list of your own changes and sends the reverse.
+// Each item is its own element (text and notes: a div, picture: a div with an img, lines and shapes: an svg)
+// inside one "world" element that is moved and scaled to pan and zoom. Hiding a player's writing (the eye)
+// just hides their elements, on this screen only. Undo (Ctrl+Z) keeps a list of your own changes and sends
+// the reverse.
 (() => {
   "use strict";
   const $ = id => document.getElementById(id);
   const FX = window.AceFX;
   const LIM = { items: 1500, text: 3000, images: 60, image: 700000, imageTotal: 15000000, stroke: 6000, chunk: 400 };
-  const COLOURS = ["#1f2328", "#e5484d", "#f76b15", "#d6a100", "#2f9e44", "#12a594", "#3e63dd", "#8e4ec6", "#d6409f", "#ffffff"];
+  const INK = ["#1f2328", "#e5484d", "#f76b15", "#d6a100", "#2f9e44", "#12a594", "#3e63dd", "#8e4ec6", "#d6409f", "#ffffff"];
+  const HL = ["#ffe14d", "#7ee787", "#ff8ccf", "#79c0ff", "#ffa657"];
+  const NOTES = ["#fff3a3", "#ffd6a5", "#ffc6d9", "#d7c6ff", "#bde0fe", "#c8f7c5", "#ffffff"];
   const PEN_SIZES = [3, 6, 12, 24];
+  const HL_SIZES = [14, 24, 40];
+  const SHAPE_SIZES = [2, 4, 8];
   const TEXT_SIZES = [18, 24, 36, 56];
+  const NOTE_SIZE = 20;
   const ZMIN = 0.1, ZMAX = 4;
   const IMG_MAX_SIDE = 1600;        // pictures are shrunk to this before sending
   const HISTORY = 100;              // how many of your changes Ctrl+Z remembers
+  const CLIP_MARK = "[ACE Board items] ";
+  const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
   const cleanRoom = v => String(v || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
   const newId = () => {
     const abc = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     return Array.from(crypto.getRandomValues(new Uint8Array(12)), b => abc[b % abc.length]).join("");
   };
   const SVGNS = "http://www.w3.org/2000/svg";
+  const svgEl = (tag, cls) => { const e = document.createElementNS(SVGNS, tag); if (cls) e.setAttribute("class", cls); return e; };
 
   let socket = null, state = null, me = "", room = null;
   const items = new Map();          // id -> { d: item data, el }
@@ -31,11 +41,17 @@
   const gone = new Map();           // id -> when we deleted it (so an older room update doesn't bring it back)
   const busy = new Set();           // ids being dragged, drawn or typed in right now
   const hidden = new Set();         // players whose writing is hidden on this screen
-  let tool = "select", colour = COLOURS[0], penSize = 6, textSize = 24;
-  let selected = null, editing = null, editStart = null, lastResync = 0, noteTimer = 0;
-  const cam = { x: -60, y: -60, z: 1 };    // board point at the top-left of the screen, and the zoom
+  const sel = new Set();            // selected item ids
+  let tool = "select", ink = INK[0], hlColour = HL[0], noteColour = NOTES[0];
+  let penSize = 6, hlSize = 24, shapeSize = 4, textSize = 24, shapeKind = "rect", shapeFill = false;
+  let editing = null, editStart = null, lastResync = 0, noteTimer = 0;
+  const cam = { x: 0, y: 0, z: 1 };        // board point at the top-left of the screen, and the zoom
 
   const world = $("world"), viewport = $("viewport");
+  const handle = document.createElement("div");       // the resize handle for one selected picture or shape
+  handle.className = "bd-handle";
+  handle.hidden = true;
+  world.append(handle);
 
   // ---- Start screen --------------------------------------------------------------------------
   function startError(msg) {
@@ -167,10 +183,12 @@
   // ---- Room updates --------------------------------------------------------------------------
   let firstState = true;
   function onState(s) {
+    const wasHost = state && state.isHost;
     state = s;
     me = s.you;
     room = s.room;
     if (s.limits) Object.assign(LIM, s.limits);
+    viewport.classList.toggle("host", !!s.isHost);
     const now = Date.now();
     for (const [id, t] of gone) if (now - t > 8000) gone.delete(id);
     const keep = new Set(s.ids);
@@ -186,6 +204,7 @@
       lastResync = now;                                   // we missed something: ask for the whole board
       action("resync");
     }
+    if (wasHost !== s.isHost) for (const it of items.values()) draw(it);
     renderPanel();
   }
 
@@ -196,22 +215,27 @@
     if (!it) return;
     const d = it.d;
     if (m.k === "pts") d.p.push(...m.p);
-    else if (m.k === "move") { d.x = m.x; d.y = m.y; if (m.w) { d.w = m.w; d.h = m.h; } }
-    else if (m.k === "edit") { for (const k of ["text", "c", "s"]) if (k in m) d[k] = m[k]; }
+    else if (m.k === "move") { d.x = m.x; d.y = m.y; if ("w" in m) { d.w = m.w; d.h = m.h; } }
+    else if (m.k === "edit") { for (const k of ["text", "c", "s", "bg"]) if (k in m) d[k] = m[k]; }
     else if (m.k === "del") { removeItem(m.id); renderPanel(); return; }
     draw(it);
   }
 
-  // ---- Drawing items -------------------------------------------------------------------------
+  // ---- People --------------------------------------------------------------------------------
   function playerName(pid) {
     const p = state && state.players.find(x => x.id === pid);
-    return p ? p.name : "Someone";
+    return p ? p.name : (state && state.authors && state.authors[pid]) || "Someone";
   }
-  function playerColour(pid) {
-    const n = state && state.colours ? state.colours[pid] : 0;
-    return FX.color(n ?? 0);
+  function colourIndex(pid) {
+    if (!state) return 0;
+    if (pid in state.colours) return state.colours[pid];
+    const away = Object.keys(state.authors || {});
+    return state.players.length + Math.max(0, away.indexOf(pid));
   }
+  const playerColour = pid => FX.color(colourIndex(pid));
+  const canDelete = it => it && (it.d.by === me || (state && state.isHost));
 
+  // ---- Drawing items -------------------------------------------------------------------------
   function applyItem(d) {
     let it = items.get(d.id);
     if (!it) {
@@ -224,16 +248,14 @@
         img.draggable = false;
         el.append(img);
       } else {
-        el = document.createElementNS(SVGNS, "svg");
-        const hit = document.createElementNS(SVGNS, "path"), line = document.createElementNS(SVGNS, "path");
-        hit.setAttribute("class", "hit");
-        el.append(hit, line);
+        el = svgEl("svg");
+        el.append(svgEl("path", "hit"), svgEl("path", "line"));
       }
       el.dataset.id = d.id;
       el.classList.add("bd-item", "bd-" + d.kind);
       it = { d: { ...d, p: d.p ? [...d.p] : undefined }, el };
       items.set(d.id, it);
-      world.append(el);
+      world.insertBefore(el, handle);
     } else {
       Object.assign(it.d, d, d.p ? { p: [...d.p] } : {});
     }
@@ -241,67 +263,113 @@
     return it;
   }
 
+  // A shape's box with left/top first (w and h can be negative while it's drawn or resized).
+  function shapeBox(d) {
+    return { x: Math.min(d.x, d.x + d.w), y: Math.min(d.y, d.y + d.h), w: Math.abs(d.w), h: Math.abs(d.h) };
+  }
+  function arrowHead(d) {
+    const x2 = d.x + d.w, y2 = d.y + d.h, a = Math.atan2(d.h, d.w), len = Math.max(14, d.sw * 4);
+    return [[x2 - len * Math.cos(a - 0.45), y2 - len * Math.sin(a - 0.45)], [x2, y2],
+            [x2 - len * Math.cos(a + 0.45), y2 - len * Math.sin(a + 0.45)]];
+  }
+  function shapePath(d) {
+    const b = shapeBox(d);
+    if (d.shape === "rect") return `M${b.x} ${b.y}h${b.w}v${b.h}h${-b.w}Z`;
+    if (d.shape === "ellipse") {
+      const rx = b.w / 2, ry = b.h / 2, cx = b.x + rx, cy = b.y + ry;
+      return `M${cx - rx} ${cy}a${rx} ${ry} 0 1 0 ${b.w} 0a${rx} ${ry} 0 1 0 ${-b.w} 0Z`;
+    }
+    let path = `M${d.x} ${d.y}L${d.x + d.w} ${d.y + d.h}`;
+    if (d.shape === "arrow" && (d.w || d.h)) {
+      const [a, tip, c] = arrowHead(d);
+      path += `M${a[0]} ${a[1]}L${tip[0]} ${tip[1]}L${c[0]} ${c[1]}`;
+    }
+    return path;
+  }
+
   function draw(it) {
     const d = it.d, el = it.el;
     const mine = d.by === me;
     el.classList.toggle("mine", mine);
-    el.classList.toggle("sel", selected === d.id);
+    el.classList.toggle("can-del", canDelete(it));
+    el.classList.toggle("sel", sel.has(d.id));
     el.style.setProperty("--pc", playerColour(d.by));
-    if (d.kind === "pen") el.setAttribute("aria-label", "Drawing by " + playerName(d.by));
-    else el.title = (d.kind === "image" ? "Picture" : "Text") + " by " + playerName(d.by) + (mine ? " (you)" : "");
+    const what = { text: d.bg ? "Sticky note" : "Text", image: "Picture", pen: d.hl ? "Highlight" : "Drawing", shape: "Shape" }[d.kind];
+    const label = what + " by " + playerName(d.by) + (mine ? " (you)" : "");
+    if (d.kind === "pen" || d.kind === "shape") el.setAttribute("aria-label", label);
+    else el.title = label;
     el.style.display = hidden.has(d.by) ? "none" : "";
     if (d.kind === "text") {
       el.style.left = d.x + "px";
       el.style.top = d.y + "px";
       el.style.color = d.c;
       el.style.fontSize = d.s + "px";
-      el.classList.toggle("light", isLight(d.c));
+      el.classList.toggle("note", !!d.bg);
+      el.style.background = d.bg || "";
+      el.classList.toggle("light", !d.bg && isLight(d.c));
       if (editing !== d.id && el.textContent !== d.text) el.textContent = d.text;
     } else if (d.kind === "image") {
       Object.assign(el.style, { left: d.x + "px", top: d.y + "px", width: d.w + "px", height: d.h + "px" });
       const img = el.firstChild;
       if (img.getAttribute("src") !== d.src) img.src = d.src;
-      let handle = el.querySelector(".bd-handle");
-      if (mine && selected === d.id && !handle) {
-        handle = document.createElement("span");
-        handle.className = "bd-handle";
-        el.append(handle);
-      } else if (handle && !(mine && selected === d.id)) handle.remove();
     } else {
-      const p = d.p, pad = d.w / 2 + 8;
-      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-      for (let i = 0; i < p.length; i += 2) {
-        x0 = Math.min(x0, p[i]); x1 = Math.max(x1, p[i]);
-        y0 = Math.min(y0, p[i + 1]); y1 = Math.max(y1, p[i + 1]);
+      let x0, y0, x1, y1, path, pad, sw;
+      if (d.kind === "pen") {
+        const p = d.p;
+        x0 = y0 = Infinity; x1 = y1 = -Infinity;
+        for (let i = 0; i < p.length; i += 2) {
+          x0 = Math.min(x0, p[i]); x1 = Math.max(x1, p[i]);
+          y0 = Math.min(y0, p[i + 1]); y1 = Math.max(y1, p[i + 1]);
+        }
+        path = `M${p[0]} ${p[1]}` + (p.length === 2 ? "l0.01 0" : "");     // a single tap: a dot
+        for (let i = 2; i < p.length; i += 2) path += `L${p[i]} ${p[i + 1]}`;
+        sw = d.w;
+        x0 += d.x; x1 += d.x; y0 += d.y; y1 += d.y;          // a line's x, y is how far it was moved
+      } else {
+        const b = shapeBox(d);
+        x0 = b.x; y0 = b.y; x1 = b.x + b.w; y1 = b.y + b.h;
+        path = shapePath(d);
+        sw = d.sw;
+        if (d.shape === "arrow") for (const [hx, hy] of arrowHead(d)) { x0 = Math.min(x0, hx); x1 = Math.max(x1, hx); y0 = Math.min(y0, hy); y1 = Math.max(y1, hy); }
       }
+      pad = sw / 2 + 10;
       const bw = x1 - x0 + pad * 2, bh = y1 - y0 + pad * 2;
-      el.setAttribute("viewBox", `${x0 - pad} ${y0 - pad} ${bw} ${bh}`);
+      const ox = d.kind === "pen" ? d.x : 0, oy = d.kind === "pen" ? d.y : 0;
+      el.setAttribute("viewBox", `${x0 - pad - ox} ${y0 - pad - oy} ${bw} ${bh}`);
       el.setAttribute("width", bw);
       el.setAttribute("height", bh);
-      el.style.left = (x0 - pad + d.x) + "px";
-      el.style.top = (y0 - pad + d.y) + "px";
-      let path = `M${p[0]} ${p[1]}`;
-      if (p.length === 2) path += `l0.01 0`;                      // a single tap: a dot
-      for (let i = 2; i < p.length; i += 2) path += `L${p[i]} ${p[i + 1]}`;
+      el.style.left = (x0 - pad) + "px";
+      el.style.top = (y0 - pad) + "px";
+      el.classList.toggle("hl", !!d.hl);
       const [hit, line] = el.children;
       hit.setAttribute("d", path);
-      hit.setAttribute("stroke-width", Math.max(d.w, 16));
+      hit.setAttribute("stroke-width", Math.max(sw, 16));
       line.setAttribute("d", path);
       line.setAttribute("stroke", d.c);
-      line.setAttribute("stroke-width", d.w);
+      line.setAttribute("stroke-width", sw);
+      line.setAttribute("fill", d.fill ? d.c : "none");
+      hit.classList.toggle("filled", !!d.fill);
     }
+    if (sel.size === 1 && sel.has(d.id)) placeHandle();
   }
   const isLight = c => {
     const n = parseInt(c.slice(1), 16);
     return ((n >> 16) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114) / 1000 > 200;
   };
 
+  // Where an item sits on the board (for selecting with a box, fitting the view and downloading).
+  function itemBox(it) {
+    const d = it.d, el = it.el;
+    if (d.kind === "text" || d.kind === "image") return { x: d.x, y: d.y, w: el.offsetWidth || d.w || 0, h: el.offsetHeight || d.h || 0 };
+    return { x: parseFloat(el.style.left), y: parseFloat(el.style.top), w: +el.getAttribute("width"), h: +el.getAttribute("height") };
+  }
+
   function removeItem(id) {
     const it = items.get(id);
     if (!it) return;
     it.el.remove();
     items.delete(id);
-    if (selected === id) { selected = null; syncToolbar(); }
+    if (sel.delete(id)) selChanged();
     if (editing === id) { editing = null; editStart = null; }
   }
   function clearBoard() {
@@ -327,22 +395,26 @@
     for (let i = 0; i < rest.length; i += LIM.chunk) live({ k: "pts", id: data.id, p: rest.slice(i, i + LIM.chunk) });
     renderPanel();
   }
+  // Deletes one item. Returns an undo entry when it was ours (the leader can't undo deleting someone else's).
   function deleteItem(id) {
     const it = items.get(id);
-    if (!it || it.d.by !== me) return null;
-    const snap = snapshot(it);
+    if (!canDelete(it)) return null;
+    const snap = it.d.by === me && !it.draft ? { t: "del", d: snapshot(it) } : null;
     if (!it.draft) live({ k: "del", id });
     gone.set(id, Date.now());
     removeItem(id);
     renderPanel();
-    return it.draft ? null : snap;
+    return snap;
   }
   function moveItem(id, to) {
     const it = items.get(id);
     if (!it) return;
     Object.assign(it.d, to);
     draw(it);
-    live(it.d.kind === "image" ? { k: "move", id, x: it.d.x, y: it.d.y, w: it.d.w, h: it.d.h } : { k: "move", id, x: it.d.x, y: it.d.y });
+    sendMove(it.d);
+  }
+  function sendMove(d) {
+    live(d.kind === "image" || d.kind === "shape" ? { k: "move", id: d.id, x: d.x, y: d.y, w: d.w, h: d.h } : { k: "move", id: d.id, x: d.x, y: d.y });
   }
   function editItem(id, vals) {
     const it = items.get(id);
@@ -355,11 +427,64 @@
     const { by, ...d } = it.d;
     return { ...d, p: d.p ? [...d.p] : undefined };
   };
-  function select(id) {
-    const before = selected;
-    selected = id;
-    for (const x of [before, id]) if (x && items.has(x)) draw(items.get(x));
+
+  // ---- Selection -----------------------------------------------------------------------------
+  function setSel(ids) {
+    const before = [...sel];
+    sel.clear();
+    for (const id of ids) if (items.has(id)) sel.add(id);
+    for (const id of new Set([...before, ...sel])) if (items.has(id)) draw(items.get(id));
+    selChanged();
+  }
+  const selItems = () => [...sel].map(id => items.get(id)).filter(Boolean);
+  const ownSel = () => selItems().filter(it => it.d.by === me);
+  function selChanged() {
+    placeHandle();
+    $("selBtns").hidden = !sel.size;
+    $("dupBtn").hidden = !ownSel().length;
     syncToolbar();
+  }
+  function placeHandle() {
+    const [it] = sel.size === 1 ? selItems() : [];
+    const ok = it && it.d.by === me && (it.d.kind === "image" || it.d.kind === "shape") && it.el.style.display !== "none";
+    handle.hidden = !ok;
+    if (!ok) return;
+    const d = it.d;
+    handle.style.left = d.x + d.w + "px";
+    handle.style.top = d.y + d.h + "px";
+  }
+  function deleteSelected() {
+    const undo = selItems().map(it => deleteItem(it.d.id)).filter(Boolean);
+    if (undo.length) record(undo.length === 1 ? undo[0] : { t: "many", list: undo });
+    setSel([]);
+  }
+
+  // Copies of your own things: Ctrl+C / Ctrl+V, Ctrl+X, Ctrl+D.
+  let clip = null, clipToken = "", pasteCount = 0;
+  function copySelected() {
+    const own = ownSel();
+    if (!own.length) return false;
+    clip = own.map(snapshot);
+    clipToken = newId();
+    pasteCount = 0;
+    return true;
+  }
+  function placeCopies(list, dx, dy) {
+    const added = [], ids = [];
+    for (const src of list) {
+      if (!roomFor(src.kind, src.src ? src.src.length : 0)) break;
+      const d = { ...src, id: newId(), x: src.x + dx, y: src.y + dy, p: src.p ? [...src.p] : undefined };
+      addItem(d);
+      added.push({ t: "add", d: { ...d, p: d.p ? [...d.p] : undefined } });
+      ids.push(d.id);
+    }
+    if (added.length) record(added.length === 1 ? added[0] : { t: "many", list: added });
+    setTool("select");
+    setSel(ids);
+  }
+  function duplicateSelected() {
+    const own = ownSel();
+    if (own.length) placeCopies(own.map(snapshot), 30, 30);
   }
 
   // ---- Undo and redo (your own changes only) -------------------------------------------------
@@ -410,7 +535,7 @@
     if (editing) finishEdit();
     const e = undoList.pop();
     if (!e) return;
-    select(null);
+    setSel([]);
     run(e, true);
     redoList.push(e);
     syncUndo();
@@ -419,7 +544,7 @@
     if (editing) finishEdit();
     const e = redoList.pop();
     if (!e) return;
-    select(null);
+    setSel([]);
     run(e, false);
     undoList.push(e);
     syncUndo();
@@ -468,30 +593,25 @@
     cam.y = wy - sy / z;
     applyCam();
   }
-  function fitAll() {
-    // Show everything that's on the board (or go back to the start if it's empty).
+  function visibleBounds() {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const it of items.values()) {
       if (it.el.style.display === "none") continue;
-      const r = { x: parseFloat(it.el.style.left), y: parseFloat(it.el.style.top),
-                  w: it.el.offsetWidth || +it.el.getAttribute("width") || 0, h: it.el.offsetHeight || +it.el.getAttribute("height") || 0 };
-      x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.h);
+      const b = itemBox(it);
+      x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); x1 = Math.max(x1, b.x + b.w); y1 = Math.max(y1, b.y + b.h);
     }
-    const vw = viewport.clientWidth, vh = viewport.clientHeight;
-    if (!isFinite(x0)) { recentre(); return; }
-    const pad = 80;
-    cam.z = Math.max(ZMIN, Math.min(1, Math.min(vw / (x1 - x0 + pad * 2), vh / (y1 - y0 + pad * 2))));
-    cam.x = (x0 + x1) / 2 - vw / 2 / cam.z;
-    cam.y = (y0 + y1) / 2 - vh / 2 / cam.z;
+    return isFinite(x0) ? { x0, y0, x1, y1 } : null;
+  }
+  function fitAll() {
+    // Show everything that's on the board (or go back to the middle if it's empty).
+    const b = visibleBounds();
+    if (!b) { recentre(); return; }
+    const vw = viewport.clientWidth, vh = viewport.clientHeight, pad = 80;
+    cam.z = Math.max(ZMIN, Math.min(1, Math.min(vw / (b.x1 - b.x0 + pad * 2), vh / (b.y1 - b.y0 + pad * 2))));
+    cam.x = (b.x0 + b.x1) / 2 - vw / 2 / cam.z;
+    cam.y = (b.y0 + b.y1) / 2 - vh / 2 / cam.z;
     applyCam();
   }
-  viewport.addEventListener("wheel", e => {
-    e.preventDefault();
-    // The scroll wheel zooms in and out around the pointer (drag or middle-click drag to move around).
-    const { sx, sy } = screenPt(e);
-    const dy = Math.max(-120, Math.min(120, e.deltaY * (e.deltaMode ? 33 : 1)));
-    zoomAt(cam.z * Math.exp(-dy * 0.0022), sx, sy);
-  }, { passive: false });
   function recentre() {
     // Back to the middle of the board (0, 0) at 100%.
     cam.z = 1;
@@ -499,16 +619,27 @@
     cam.y = -viewport.clientHeight / 2;
     applyCam();
   }
+  viewport.addEventListener("wheel", e => {
+    // The scroll wheel zooms in and out around the pointer (middle-click drag or Space+drag to move around).
+    e.preventDefault();
+    const { sx, sy } = screenPt(e);
+    const dy = Math.max(-120, Math.min(120, e.deltaY * (e.deltaMode ? 33 : 1)));
+    zoomAt(cam.z * Math.exp(-dy * 0.0022), sx, sy);
+  }, { passive: false });
   $("zoomIn").addEventListener("click", () => zoomAt(cam.z * 1.25));
   $("zoomOut").addEventListener("click", () => zoomAt(cam.z / 1.25));
   $("zoomLabel").addEventListener("click", fitAll);
   $("homeBtn").addEventListener("click", recentre);
 
-  // ---- Pointer: select/move, text, pen, eraser, pan, pinch -----------------------------------
+  // ---- Pointer: select/move, text, notes, pen, highlighter, shapes, eraser, pan, pinch -------
   let drag = null;           // what the pointer is doing right now
   let sendTimer = 0, spaceDown = false;
   const touches = new Map(); // pointer id -> last position, for two-finger pan and pinch
   let pinch = null;
+  const marquee = document.createElement("div");
+  marquee.className = "bd-marquee";
+  marquee.hidden = true;
+  viewport.append(marquee);
 
   function itemAt(target) {
     const el = target && target.closest ? target.closest(".bd-item") : null;
@@ -536,45 +667,68 @@
     if (editing && target.closest(".bd-item")?.dataset.id === editing) return;     // clicking inside the text you're typing
     if (editing) finishEdit();
     viewport.focus({ preventScroll: true });
-    viewport.setPointerCapture(e.pointerId);
+    try { viewport.setPointerCapture(e.pointerId); } catch { /* a pointer that's already gone */ }
     if (e.button === 1 || (e.button === 0 && spaceDown)) { e.preventDefault(); startPan(e); return; }
     if (e.button > 0) return;
     const pt = toBoard(e);
     const it = itemAt(target);
 
-    if (tool === "pen") {
+    if (target === handle) {                            // resize the one selected picture or shape
+      e.preventDefault();
+      const [s] = selItems();
+      busy.add(s.d.id);
+      drag = { type: "resize", id: s.d.id, from: pt, start: { x: s.d.x, y: s.d.y, w: s.d.w, h: s.d.h }, moved: false };
+    } else if (tool === "pen" || tool === "hl") {
       e.preventDefault();
       if (!roomFor("pen")) return;
-      const d = { id: newId(), kind: "pen", x: 0, y: 0, c: colour, w: penSize, p: [pt.x, pt.y] };
+      const hl = tool === "hl";
+      const d = { id: newId(), kind: "pen", x: 0, y: 0, c: hl ? hlColour : ink, w: hl ? hlSize : penSize, p: [pt.x, pt.y] };
+      if (hl) d.hl = true;
       addItem(d);
       busy.add(d.id);
       drag = { type: "pen", id: d.id, queue: [], last: pt };
+    } else if (tool === "shape") {
+      e.preventDefault();
+      if (!roomFor("shape")) return;
+      const d = { id: newId(), kind: "shape", shape: shapeKind, x: pt.x, y: pt.y, w: 0, h: 0, c: ink, sw: shapeSize, fill: shapeFill && (shapeKind === "rect" || shapeKind === "ellipse") };
+      addItem(d);
+      busy.add(d.id);
+      drag = { type: "shape", id: d.id, from: pt };
     } else if (tool === "eraser") {
       e.preventDefault();
       drag = { type: "erase", erased: [] };
       if (it) erase(it);
-    } else if (tool === "text") {
+    } else if (tool === "text" || tool === "note") {
       e.preventDefault();
       if (it && it.d.by === me && it.d.kind === "text") startEdit(it.d.id);
-      else newText(pt);
+      else newText(pt, tool === "note");
     } else {                                    // select
-      if (it && it.d.by === me) {
+      if (it && (it.d.by === me || state.isHost)) {
         e.preventDefault();
-        select(it.d.id);
-        busy.add(it.d.id);
-        const resize = target.classList.contains("bd-handle");
-        drag = { type: resize ? "resize" : "move", id: it.d.id, from: pt, start: { x: it.d.x, y: it.d.y, w: it.d.w, h: it.d.h }, moved: false };
+        const id = it.d.id;
+        if (e.shiftKey) {
+          setSel(sel.has(id) ? [...sel].filter(x => x !== id) : [...sel, id]);
+          if (!sel.has(id)) return;
+        } else if (!sel.has(id)) setSel([id]);
+        const moving = ownSel();
+        if (!moving.length) return;                    // the leader picked someone else's thing: select only
+        moving.forEach(m => busy.add(m.d.id));
+        drag = { type: "move", from: pt, moved: false, starts: new Map(moving.map(m => [m.d.id, { x: m.d.x, y: m.d.y }])) };
+      } else if (e.pointerType === "touch") {
+        if (!e.shiftKey) setSel([]);
+        startPan(e);                            // one finger on empty space moves the board
       } else {
-        select(null);
-        startPan(e);
+        const { sx, sy } = screenPt(e);
+        drag = { type: "box", sx, sy, add: e.shiftKey ? [...sel] : [] };
+        if (!e.shiftKey) setSel([]);
       }
     }
   });
 
   function erase(it) {
-    if (!it || it.d.by !== me) return;
-    const snap = deleteItem(it.d.id);
-    if (snap && drag && drag.erased) drag.erased.push({ t: "del", d: snap });
+    if (!canDelete(it)) return;
+    const entry = deleteItem(it.d.id);
+    if (entry && drag && drag.erased) drag.erased.push(entry);
   }
 
   viewport.addEventListener("pointermove", e => {
@@ -602,7 +756,29 @@
       erase(itemAt(document.elementFromPoint(e.clientX, e.clientY)));
       return;
     }
+    if (drag.type === "box") {
+      const { sx, sy } = screenPt(e);
+      const x = Math.min(sx, drag.sx), y = Math.min(sy, drag.sy), w = Math.abs(sx - drag.sx), h = Math.abs(sy - drag.sy);
+      Object.assign(marquee.style, { left: x + "px", top: y + "px", width: w + "px", height: h + "px" });
+      marquee.hidden = w < 3 && h < 3;
+      drag.rect = { x0: cam.x + x / cam.z, y0: cam.y + y / cam.z, x1: cam.x + (x + w) / cam.z, y1: cam.y + (y + h) / cam.z };
+      return;
+    }
     const pt = toBoard(e);
+    if (drag.type === "move") {
+      const dx = pt.x - drag.from.x, dy = pt.y - drag.from.y;
+      if (!drag.moved && Math.hypot(dx, dy) * cam.z < 3) return;
+      drag.moved = true;
+      for (const [id, st] of drag.starts) {
+        const it = items.get(id);
+        if (!it) continue;
+        it.d.x = st.x + dx;
+        it.d.y = st.y + dy;
+        draw(it);
+      }
+      if (!sendTimer) sendTimer = setTimeout(flushMove, 50);
+      return;
+    }
     const it = items.get(drag.id);
     if (!it) { drag = null; return; }
     if (drag.type === "pen") {
@@ -616,22 +792,34 @@
       }
       draw(it);
       if (!sendTimer) sendTimer = setTimeout(flushPen, 40);
-    } else if (drag.type === "move") {
-      const dx = pt.x - drag.from.x, dy = pt.y - drag.from.y;
-      if (!drag.moved && Math.hypot(dx, dy) * cam.z < 3) return;
-      drag.moved = true;
-      it.d.x = drag.start.x + dx;
-      it.d.y = drag.start.y + dy;
+    } else if (drag.type === "shape") {
+      let w = pt.x - drag.from.x, h = pt.y - drag.from.y;
+      if (e.shiftKey) {                         // Shift: a square or circle, or a line at 45° steps
+        if (it.d.shape === "line" || it.d.shape === "arrow") {
+          const a = Math.round(Math.atan2(h, w) / (Math.PI / 4)) * (Math.PI / 4), len = Math.hypot(w, h);
+          w = Math.round(Math.cos(a) * len); h = Math.round(Math.sin(a) * len);
+        } else {
+          const m = Math.max(Math.abs(w), Math.abs(h));
+          w = Math.sign(w || 1) * m; h = Math.sign(h || 1) * m;
+        }
+      }
+      it.d.w = w;
+      it.d.h = h;
       draw(it);
-      if (!sendTimer) sendTimer = setTimeout(flushMove, 50);
+      if (!sendTimer) sendTimer = setTimeout(() => { sendTimer = 0; sendMove(it.d); }, 50);
     } else if (drag.type === "resize") {
-      const ratio = drag.start.h / drag.start.w;
-      const w = Math.max(40, Math.min(8000, drag.start.w + (pt.x - drag.from.x)));
-      it.d.w = Math.round(w);
-      it.d.h = Math.max(16, Math.round(w * ratio));
       drag.moved = true;
+      if (it.d.kind === "image") {
+        const ratio = drag.start.h / drag.start.w;
+        const w = Math.max(40, Math.min(8000, drag.start.w + (pt.x - drag.from.x)));
+        it.d.w = Math.round(w);
+        it.d.h = Math.max(16, Math.round(w * ratio));
+      } else {
+        it.d.w = drag.start.w + (pt.x - drag.from.x);
+        it.d.h = drag.start.h + (pt.y - drag.from.y);
+      }
       draw(it);
-      if (!sendTimer) sendTimer = setTimeout(flushMove, 50);
+      if (!sendTimer) sendTimer = setTimeout(() => { sendTimer = 0; sendMove(it.d); }, 50);
     }
   });
 
@@ -642,41 +830,78 @@
   }
   function flushMove() {
     sendTimer = 0;
-    if (!drag || !drag.moved) return;
-    const d = items.get(drag.id)?.d;
-    if (!d) return;
-    live(d.kind === "image" ? { k: "move", id: d.id, x: d.x, y: d.y, w: d.w, h: d.h } : { k: "move", id: d.id, x: d.x, y: d.y });
+    if (!drag || drag.type !== "move" || !drag.moved) return;
+    for (const id of drag.starts.keys()) { const it = items.get(id); if (it) sendMove(it.d); }
+  }
+  // Rectangles and circles are kept with left/top first once they're finished.
+  function tidyShape(d) {
+    if (d.shape !== "rect" && d.shape !== "ellipse") return;
+    const b = shapeBox(d);
+    Object.assign(d, b);
   }
   function endDrag() {
     if (!drag) return;
     clearTimeout(sendTimer);
+    sendTimer = 0;
     const it = drag.id ? items.get(drag.id) : null;
     if (drag.type === "pen") {
       flushPen();
       if (it) record({ t: "add", d: snapshot(it) });
-    } else if (drag.type === "move" || drag.type === "resize") {
+    } else if (drag.type === "shape" && it) {
+      if (Math.abs(it.d.w) < 4 && Math.abs(it.d.h) < 4) {              // a click, not a drag: make a default size
+        const def = { rect: [160, 100], ellipse: [140, 100], line: [160, 0], arrow: [160, 0] }[it.d.shape];
+        it.d.w = def[0]; it.d.h = def[1];
+      }
+      tidyShape(it.d);
+      draw(it);
+      sendMove(it.d);
+      record({ t: "add", d: snapshot(it) });
+    } else if (drag.type === "move") {
       flushMove();
-      if (it && drag.moved) {
-        const keys = it.d.kind === "image" ? ["x", "y", "w", "h"] : ["x", "y"];
-        const pick = o => Object.fromEntries(keys.map(k => [k, o[k]]));
+      if (drag.moved) {
+        const list = [];
+        for (const [id, st] of drag.starts) {
+          const m = items.get(id);
+          if (m) list.push({ t: "move", id, from: st, to: { x: m.d.x, y: m.d.y } });
+        }
+        if (list.length) record(list.length === 1 ? list[0] : { t: "many", list });
+      }
+      for (const id of drag.starts.keys()) busy.delete(id);
+    } else if (drag.type === "resize" && it) {
+      if (it.d.kind === "shape") tidyShape(it.d);
+      draw(it);
+      sendMove(it.d);
+      if (drag.moved) {
+        const pick = o => ({ x: o.x, y: o.y, w: o.w, h: o.h });
         record({ t: "move", id: it.d.id, from: pick(drag.start), to: pick(it.d) });
       }
     } else if (drag.type === "erase" && drag.erased.length) {
       record(drag.erased.length === 1 ? drag.erased[0] : { t: "many", list: drag.erased });
+    } else if (drag.type === "box") {
+      marquee.hidden = true;
+      if (drag.rect) {
+        const r = drag.rect, picked = [];
+        for (const m of items.values()) {
+          if (m.el.style.display === "none" || !(m.d.by === me || state.isHost) || m.draft) continue;
+          const b = itemBox(m);
+          if (b.x < r.x1 && b.x + b.w > r.x0 && b.y < r.y1 && b.y + b.h > r.y0) picked.push(m.d.id);
+        }
+        setSel([...new Set([...drag.add, ...picked])]);
+      }
     }
-    sendTimer = 0;
     if (drag.id) busy.delete(drag.id);
     viewport.classList.remove("panning");
     drag = null;
   }
   function cancelDrag() {
     if (!drag) return;
-    if (drag.type === "pen" && items.get(drag.id)?.d.p.length <= 4) {     // a stroke just begun by the first finger
-      busy.delete(drag.id);
+    if ((drag.type === "pen" && items.get(drag.id)?.d.p.length <= 4) || drag.type === "shape") {
+      busy.delete(drag.id);                             // a stroke or shape just begun by the first finger
       deleteItem(drag.id);
       drag = null;
       return;
     }
+    if (drag.type === "box") { marquee.hidden = true; drag = null; return; }
     endDrag();
   }
   const pointerUp = e => {
@@ -689,7 +914,7 @@
   viewport.addEventListener("dblclick", e => {
     const it = itemAt(e.target);
     if (it && it.d.by === me && it.d.kind === "text") startEdit(it.d.id);
-    else if (!it && tool === "select") newText(toBoard(e));
+    else if (!it && tool === "select") newText(toBoard(e), false);
   });
 
   // ---- Live cursors --------------------------------------------------------------------------
@@ -741,12 +966,15 @@
     }
   }
 
-  // ---- Text ----------------------------------------------------------------------------------
+  // ---- Text and sticky notes -----------------------------------------------------------------
   let editTimer = 0;
-  function newText(pt) {
+  function newText(pt, isNote) {
     if (!roomFor("text")) return;
     const id = newId();
-    const it = applyItem({ id, by: me, kind: "text", x: pt.x, y: Math.round(pt.y - textSize / 2), text: "", c: colour, s: textSize });
+    const d = isNote
+      ? { id, by: me, kind: "text", x: pt.x - 110, y: pt.y - 30, text: "", c: "#1f2328", s: NOTE_SIZE, bg: noteColour }
+      : { id, by: me, kind: "text", x: pt.x, y: Math.round(pt.y - textSize / 2), text: "", c: ink, s: textSize };
+    const it = applyItem(d);
     it.draft = true;                    // not sent until there's something in it
     startEdit(id);
   }
@@ -760,7 +988,7 @@
     editing = id;
     editStart = { id, text: it.d.text, isNew: !!it.draft };
     busy.add(id);
-    select(id);
+    setSel([id]);
     const el = it.el;
     el.contentEditable = "true";
     el.spellcheck = true;
@@ -769,9 +997,9 @@
     const range = document.createRange();
     range.selectNodeContents(el);
     range.collapse(false);
-    const sel = getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
+    const s = getSelection();
+    s.removeAllRanges();
+    s.addRange(range);
   }
   function sendText(it) {
     clearTimeout(editTimer);
@@ -796,8 +1024,8 @@
     it.el.classList.remove("editing");
     const text = readText(it.el);
     if (!text.trim()) {
-      const snap = deleteItem(id);                    // an emptied text box goes away
-      if (snap && start && !start.isNew) record({ t: "del", d: { ...snap, text: start.text } });
+      const entry = deleteItem(id);                   // an emptied text box goes away
+      if (entry && start && !start.isNew) record({ t: "del", d: { ...entry.d, text: start.text } });
       return;
     }
     sendText(it);
@@ -867,9 +1095,25 @@
     record({ t: "add", d: { ...d } });
     note("");
     setTool("select");
-    select(d.id);
+    setSel([d.id]);
   }
 
+  const typing = e => e.target.closest && e.target.closest("input, textarea, select, [contenteditable='true']");
+  document.addEventListener("copy", e => {
+    if (!state || $("gameView").hidden || editing || typing(e) || getSelection().toString()) return;
+    if (!copySelected()) return;
+    e.preventDefault();
+    e.clipboardData.setData("text/plain", CLIP_MARK + clipToken);
+  });
+  document.addEventListener("cut", e => {
+    if (!state || $("gameView").hidden || editing || typing(e) || getSelection().toString()) return;
+    if (!copySelected()) return;
+    e.preventDefault();
+    e.clipboardData.setData("text/plain", CLIP_MARK + clipToken);
+    const own = new Set(ownSel().map(it => it.d.id));
+    setSel([...own]);
+    deleteSelected();
+  });
   document.addEventListener("paste", e => {
     if (!state || $("gameView").hidden) return;
     const files = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith("image/"));
@@ -880,17 +1124,23 @@
       return;
     }
     if (e.target.closest && e.target.closest("input, textarea")) return;
+    const text = e.clipboardData.getData("text/plain");
+    if (clip && text === CLIP_MARK + clipToken) {      // our own copied things
+      e.preventDefault();
+      pasteCount++;
+      placeCopies(clip, 30 * pasteCount, 30 * pasteCount);
+      return;
+    }
     if (files.length) {
       e.preventDefault();
       const c = viewCentre();
       files.forEach((f, i) => addImageFile(f, { x: c.x + i * 40, y: c.y + i * 40 }));
       return;
     }
-    const text = e.clipboardData.getData("text/plain");
-    if (text && text.trim() && roomFor("text")) {
+    if (text && text.trim() && !text.startsWith(CLIP_MARK) && roomFor("text")) {
       e.preventDefault();
       const c = viewCentre();
-      const d = { id: newId(), kind: "text", x: Math.round(c.x - 100 / cam.z), y: c.y, text: text.slice(0, LIM.text), c: colour, s: textSize };
+      const d = { id: newId(), kind: "text", x: Math.round(c.x - 100 / cam.z), y: c.y, text: text.slice(0, LIM.text), c: ink, s: textSize };
       addItem(d);
       record({ t: "add", d: { ...d } });
     }
@@ -920,85 +1170,190 @@
     if (f) addImageFile(f, viewCentre());
   });
 
+  // ---- Download the board as a picture -------------------------------------------------------
+  // Drawn again on a canvas from the items themselves (what you can see: hidden players are left out).
+  function wrapLines(g, text, maxW) {
+    const out = [];
+    for (const para of text.split("\n")) {
+      let line = "";
+      for (const word of para.split(/(\s+)/)) {
+        if (g.measureText(line + word).width <= maxW || !line.trim()) {
+          line += word;
+          while (g.measureText(line).width > maxW && line.length > 1) {      // one very long word
+            let cut = line.length - 1;
+            while (cut > 1 && g.measureText(line.slice(0, cut)).width > maxW) cut--;
+            out.push(line.slice(0, cut));
+            line = line.slice(cut);
+          }
+        } else {
+          out.push(line.trimEnd());
+          line = word.trimStart();
+        }
+      }
+      out.push(line);
+    }
+    return out;
+  }
+  function downloadPicture() {
+    const b = visibleBounds();
+    if (!b) return note("There's nothing on the board to download yet.");
+    const pad = 40, w = b.x1 - b.x0 + pad * 2, h = b.y1 - b.y0 + pad * 2;
+    const scale = Math.min(2, 8000 / Math.max(w, h), Math.sqrt(40e6 / (w * h)));
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(w * scale));
+    c.height = Math.max(1, Math.round(h * scale));
+    const g = c.getContext("2d");
+    g.fillStyle = "#fbfaf7";
+    g.fillRect(0, 0, c.width, c.height);
+    g.setTransform(scale, 0, 0, scale, (pad - b.x0) * scale, (pad - b.y0) * scale);
+    for (const el of world.querySelectorAll(".bd-item")) {
+      const it = items.get(el.dataset.id);
+      if (!it || el.style.display === "none") continue;
+      const d = it.d;
+      g.save();
+      if (d.kind === "image") {
+        g.drawImage(el.firstChild, d.x, d.y, d.w, d.h);
+      } else if (d.kind === "text") {
+        const box = itemBox(it), note = !!d.bg, inset = note ? 16 : 4;
+        if (note) {
+          g.shadowColor = "rgba(0,0,0,.18)"; g.shadowBlur = 10; g.shadowOffsetY = 3;
+          g.fillStyle = d.bg;
+          g.fillRect(d.x, d.y, box.w, box.h);
+          g.shadowColor = "transparent";
+        }
+        g.font = `500 ${d.s}px ${FONT}`;
+        g.fillStyle = d.c;
+        g.textBaseline = "top";
+        const lh = d.s * 1.25;
+        wrapLines(g, d.text, box.w - inset * 2).forEach((line, i) => g.fillText(line, d.x + inset, d.y + (note ? inset : 2) + i * lh + (lh - d.s) / 2));
+      } else {
+        const path = new Path2D(el.children[1].getAttribute("d"));
+        g.lineCap = g.lineJoin = "round";
+        g.strokeStyle = d.c;
+        if (d.kind === "pen") {
+          g.translate(d.x, d.y);
+          g.lineWidth = d.w;
+          if (d.hl) { g.globalAlpha = 0.4; g.globalCompositeOperation = "multiply"; g.lineCap = "butt"; }
+        } else {
+          g.lineWidth = d.sw;
+          if (d.fill) { g.globalAlpha = 0.18; g.fillStyle = d.c; g.fill(path); g.globalAlpha = 1; }
+        }
+        g.stroke(path);
+      }
+      g.restore();
+    }
+    c.toBlob(blob => {
+      if (!blob) return note("The picture couldn't be made. Try zooming in on part of the board.");
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `ace-board-${room || "board"}.png`;
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    }, "image/png");
+  }
+  $("downloadBtn").addEventListener("click", downloadPicture);
+
   // ---- Toolbar -------------------------------------------------------------------------------
   function setTool(t) {
     if (editing) finishEdit();
     tool = t;
     viewport.dataset.tool = t;
     document.querySelectorAll("#tools .tb").forEach(b => b.classList.toggle("on", b.dataset.tool === t));
-    if (t !== "select" && t !== "text" && selected) select(null);
+    if (t !== "select" && sel.size) setSel([]);
     syncToolbar();
   }
-  function selectedOwn() {
-    const it = selected && items.get(selected);
-    return it && it.d.by === me && (it.d.kind === "text" || it.d.kind === "pen") ? it : null;
+  // What the colour buttons change: sticky notes' paper, highlighter, or ink (text, pen, shapes).
+  function paletteMode() {
+    const own = ownSel();
+    if (tool === "note" || (own.length && own.every(it => it.d.bg))) return "note";
+    if (tool === "hl" || (own.length && own.every(it => it.d.hl))) return "hl";
+    return "ink";
   }
+  function button(cls, title, inner, on, click) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = cls + (on ? " on" : "");
+    b.title = title;
+    b.setAttribute("aria-label", title);
+    if (inner instanceof Node) b.append(inner); else b.innerHTML = inner;
+    b.addEventListener("click", click);
+    return b;
+  }
+  const SHAPE_ICONS = {
+    rect: ['Box', '<svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="1"/></svg>'],
+    ellipse: ['Circle', '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8" ry="6"/></svg>'],
+    line: ['Line', '<svg viewBox="0 0 24 24"><path d="M5 19L19 5"/></svg>'],
+    arrow: ['Arrow', '<svg viewBox="0 0 24 24"><path d="M5 19L19 5M10 5h9v9"/></svg>'],
+  };
   function syncToolbar() {
-    const sel = selectedOwn();
-    const textMode = tool === "text" || (sel && sel.d.kind === "text");
-    const showSizes = tool === "pen" || textMode;
-    const pen = tool === "pen";
-    const sizes = pen ? PEN_SIZES : TEXT_SIZES;
-    const current = pen ? penSize : (sel && sel.d.kind === "text" ? sel.d.s : textSize);
-    const curColour = sel ? sel.d.c : colour;
-    $("sizes").hidden = !showSizes;
-    $("sizes").innerHTML = "";
-    sizes.forEach(v => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "tb sz" + (v === current ? " on" : "");
-      b.title = (pen ? "Pen size " : "Text size ") + v;
-      b.setAttribute("aria-label", b.title);
-      const dot = document.createElement("i");
-      if (pen) {
-        dot.style.width = dot.style.height = Math.min(22, v + 2) + "px";
-      } else {
-        dot.className = "t";
-        dot.textContent = "A";
-        dot.style.fontSize = Math.round(11 + (v - 18) / 3) + "px";
-      }
-      b.append(dot);
-      b.addEventListener("click", () => {
-        if (pen) penSize = v;
-        else {
-          textSize = v;
-          const s = selectedOwn();
-          if (s && s.d.kind === "text" && s.d.s !== v) {
-            if (!s.draft) record({ t: "edit", id: s.d.id, from: { s: s.d.s }, to: { s: v } });
-            editItem(s.d.id, { s: v });
-          }
-        }
-        syncToolbar();
-      });
-      $("sizes").append(b);
-    });
-    document.querySelectorAll("#swatches .sw").forEach(b => b.classList.toggle("on", b.dataset.c === curColour));
-  }
-  function buildToolbar() {
-    COLOURS.forEach(c => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "sw";
-      b.dataset.c = c;
+    const own = ownSel();
+    const one = own.length === 1 ? own[0] : null;
+    const mode = paletteMode();
+    // Colours
+    const palette = mode === "note" ? NOTES : mode === "hl" ? HL : INK;
+    const current = one ? (one.d.bg || one.d.c) : mode === "note" ? noteColour : mode === "hl" ? hlColour : ink;
+    const sw = $("swatches");
+    sw.innerHTML = "";
+    sw.hidden = tool === "eraser" || (tool === "select" && sel.size && !own.some(it => it.d.kind !== "image"));
+    for (const c of palette) {
+      const b = button("sw", (mode === "note" ? "Note colour " : "Colour ") + c, "", c === current, () => pickColour(c));
       b.style.setProperty("--c", c);
-      b.title = "Colour " + c;
-      b.setAttribute("aria-label", b.title);
-      b.addEventListener("click", () => {
-        colour = c;
-        const s = selectedOwn();
-        if (s && s.d.c !== c) {
-          if (!s.draft) record({ t: "edit", id: s.d.id, from: { c: s.d.c }, to: { c } });
-          editItem(s.d.id, { c });
-        }
-        syncToolbar();
-        if (editing) items.get(editing)?.el.focus({ preventScroll: true });
-      });
-      $("swatches").append(b);
+      sw.append(b);
+    }
+    // Sizes and shape options
+    const box = $("sizes");
+    box.innerHTML = "";
+    const sizeButtons = (list, cur, label, dot, set) => list.forEach(v => {
+      const i = document.createElement("i");
+      dot(i, v);
+      box.append(button("tb sz", `${label} ${v}`, i, v === cur, () => { set(v); syncToolbar(); }));
     });
-    document.querySelectorAll("#tools .tb").forEach(b => b.addEventListener("click", () => setTool(b.dataset.tool)));
-    setTool("select");
-    syncUndo();
+    const textItem = one && one.d.kind === "text" ? one : null;
+    if (tool === "pen") sizeButtons(PEN_SIZES, penSize, "Pen size", (i, v) => { i.style.width = i.style.height = Math.min(22, v + 2) + "px"; }, v => { penSize = v; });
+    else if (tool === "hl") sizeButtons(HL_SIZES, hlSize, "Highlighter size", (i, v) => { i.className = "bar"; i.style.height = Math.round(v / 2.2) + "px"; }, v => { hlSize = v; });
+    else if (tool === "shape") {
+      for (const [k, [name, icon]] of Object.entries(SHAPE_ICONS)) box.append(button("tb", name, icon, k === shapeKind, () => { shapeKind = k; syncToolbar(); }));
+      if (shapeKind === "rect" || shapeKind === "ellipse") {
+        box.append(button("tb", shapeFill ? "Filled (click for outline only)" : "Outline only (click to fill)",
+          `<svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2" ${shapeFill ? 'fill="currentColor" fill-opacity=".35"' : ""}/></svg>`,
+          shapeFill, () => { shapeFill = !shapeFill; syncToolbar(); }));
+      }
+      sizeButtons(SHAPE_SIZES, shapeSize, "Line thickness", (i, v) => { i.className = "bar"; i.style.height = v + 1 + "px"; }, v => { shapeSize = v; });
+    } else if (tool === "text" || textItem) {
+      const cur = textItem ? textItem.d.s : textSize;
+      sizeButtons(TEXT_SIZES.concat(textItem && textItem.d.bg && !TEXT_SIZES.includes(cur) ? [cur] : []).sort((a, b) => a - b), cur, "Text size",
+        (i, v) => { i.className = "t"; i.textContent = "A"; i.style.fontSize = Math.round(11 + (v - 18) / 3) + "px"; },
+        v => {
+          if (!textItem) { textSize = v; return; }
+          if (textItem.d.s === v) return;
+          if (!textItem.draft) record({ t: "edit", id: textItem.d.id, from: { s: textItem.d.s }, to: { s: v } });
+          editItem(textItem.d.id, { s: v });
+        });
+    }
+    box.hidden = !box.children.length;
   }
+  function pickColour(c) {
+    const mode = paletteMode();
+    if (mode === "note") noteColour = c; else if (mode === "hl") hlColour = c; else ink = c;
+    // Change your selected things too (pictures have no colour).
+    const changes = [];
+    for (const it of ownSel()) {
+      if (it.d.kind === "image") continue;
+      const key = it.d.bg ? "bg" : "c";
+      if ((mode === "note") !== !!it.d.bg || it.d[key] === c) continue;
+      if ((mode === "hl") !== !!it.d.hl && it.d.kind === "pen") continue;
+      if (!it.draft) changes.push({ t: "edit", id: it.d.id, from: { [key]: it.d[key] }, to: { [key]: c } });
+      editItem(it.d.id, { [key]: c });
+    }
+    if (changes.length) record(changes.length === 1 ? changes[0] : { t: "many", list: changes });
+    syncToolbar();
+    if (editing) items.get(editing)?.el.focus({ preventScroll: true });
+  }
+  document.querySelectorAll("#tools .tb").forEach(b => b.addEventListener("click", () => setTool(b.dataset.tool)));
+  $("dupBtn").addEventListener("click", duplicateSelected);
+  $("delBtn").addEventListener("click", deleteSelected);
   // Colour and size buttons shouldn't take focus away from a text box being typed in.
   document.querySelector(".bd-bar").addEventListener("pointerdown", e => {
     if (editing && e.target.closest(".sw, .sz")) e.preventDefault();
@@ -1006,11 +1361,13 @@
 
   document.addEventListener("keydown", e => {
     if (!state || $("gameView").hidden || editing) return;
-    if (e.target.closest && e.target.closest("input, textarea, select, [contenteditable='true']")) return;
+    if (typing(e)) return;
     const k = e.key.toLowerCase();
     if (e.ctrlKey || e.metaKey) {
       if (k === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
       else if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); redo(); }
+      else if (k === "d") { e.preventDefault(); duplicateSelected(); }
+      else if (k === "a") { e.preventDefault(); setTool("select"); setSel([...items.values()].filter(it => it.d.by === me && it.el.style.display !== "none").map(it => it.d.id)); }
       else if (k === "=" || k === "+") { e.preventDefault(); zoomAt(cam.z * 1.25); }
       else if (k === "-") { e.preventDefault(); zoomAt(cam.z / 1.25); }
       else if (k === "0") { e.preventDefault(); fitAll(); }
@@ -1018,15 +1375,17 @@
     }
     if (e.altKey) return;
     if (e.key === " ") { spaceDown = true; viewport.classList.add("can-pan"); e.preventDefault(); return; }
-    const keys = { v: "select", t: "text", p: "pen", e: "eraser" };
+    const keys = { v: "select", t: "text", n: "note", p: "pen", h: "hl", s: "shape", e: "eraser" };
     if (keys[k]) { setTool(keys[k]); return; }
-    if ((e.key === "Delete" || e.key === "Backspace") && selected) {
+    if ((e.key === "Delete" || e.key === "Backspace") && sel.size) {
       e.preventDefault();
-      const snap = deleteItem(selected);
-      if (snap) record({ t: "del", d: snap });
-    } else if (e.key === "Escape") select(null);
+      deleteSelected();
+    } else if (e.key === "Escape") setSel([]);
     else if (e.key === "Home") recentre();
-    else if (e.key === "Enter" && selectedOwn()?.d.kind === "text") { e.preventDefault(); startEdit(selected); }
+    else if (e.key === "Enter" && sel.size === 1) {
+      const [it] = selItems();
+      if (it.d.by === me && it.d.kind === "text") { e.preventDefault(); startEdit(it.d.id); }
+    }
   });
   document.addEventListener("keyup", e => {
     if (e.key === " ") { spaceDown = false; viewport.classList.remove("can-pan"); }
@@ -1061,32 +1420,29 @@
     for (const it of items.values()) if (!it.draft) counts[it.d.by] = (counts[it.d.by] || 0) + 1;
     const list = $("players");
     list.innerHTML = "";
-    const people = [...state.players].sort((a, b) => (b.id === me) - (a.id === me) || b.online - a.online);
+    // People in the room, then anyone whose things are on a saved board but who isn't here.
+    const people = [...state.players].sort((a, b) => (b.id === me) - (a.id === me) || b.online - a.online)
+      .concat(Object.entries(state.authors || {}).map(([id, name]) => ({ id, name, online: false, absent: true })));
     for (const p of people) {
       const li = document.createElement("li");
       li.className = "bd-player" + (p.online ? "" : " away") + (hidden.has(p.id) ? " off" : "");
-      li.append(FX.avatar(p.name, state.colours[p.id] ?? 0, "sm"));
+      li.append(FX.avatar(p.name, colourIndex(p.id), "sm"));
       const name = document.createElement("span");
       name.className = "bd-pname";
-      name.textContent = p.name + (p.id === me ? " (you)" : "") + (p.online ? "" : " · away");
+      name.textContent = p.name + (p.id === me ? " (you)" : "") + (p.absent ? " · not here" : p.online ? "" : " · away");
       const n = document.createElement("span");
       n.className = "muted small";
       n.textContent = counts[p.id] ? String(counts[p.id]) : "";
       n.title = "Things on the board";
-      const eye = document.createElement("button");
-      eye.type = "button";
-      eye.className = "eye";
       const off = hidden.has(p.id);
-      eye.innerHTML = off ? EYE_SHUT : EYE_OPEN;
-      eye.setAttribute("aria-pressed", String(!off));
-      eye.title = (off ? "Show " : "Hide ") + (p.id === me ? "your" : p.name + "'s") + " writing";
-      eye.setAttribute("aria-label", eye.title);
-      eye.addEventListener("click", () => {
+      const eye = button("eye", (off ? "Show " : "Hide ") + (p.id === me ? "your" : p.name + "'s") + " writing", off ? EYE_SHUT : EYE_OPEN, false, () => {
         if (hidden.has(p.id)) hidden.delete(p.id); else hidden.add(p.id);
-        if (selected && items.get(selected)?.d.by === p.id) select(null);
+        setSel([...sel].filter(id => items.get(id)?.d.by !== p.id));
         for (const it of items.values()) if (it.d.by === p.id) draw(it);
+        syncCursors();
         renderPanel();
       });
+      eye.setAttribute("aria-pressed", String(!off));
       li.append(name, n, eye);
       list.append(li);
     }
@@ -1096,13 +1452,15 @@
     $("clearAll").hidden = !state.isHost;
     syncCursors();
     const pics = [...items.values()].filter(i => i.d.kind === "image").length;
-    $("boardInfo").textContent = `${items.size} thing${items.size === 1 ? "" : "s"} on the board, ${pics} picture${pics === 1 ? "" : "s"}.`;
+    $("boardInfo").textContent = `${items.size} thing${items.size === 1 ? "" : "s"} on the board, ${pics} picture${pics === 1 ? "" : "s"}.`
+      + (state.isHost ? " As leader you can also select and delete anyone's things." : "");
   }
 
   function initPanel() {
     $("showAll").addEventListener("click", () => {
       hidden.clear();
       for (const it of items.values()) draw(it);
+      syncCursors();
       renderPanel();
     });
     $("clearMine").addEventListener("click", () => {
@@ -1147,7 +1505,8 @@
     });
   }
 
-  buildToolbar();
+  setTool("select");
+  syncUndo();
   initPanel();
   initStart();
 })();

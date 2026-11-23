@@ -78,8 +78,25 @@ sid_index = {}                     # socket id -> (room code, player id)
 def new_code():
     while True:
         code = "".join(random.choice(CODE_LETTERS) for _ in range(4))
-        if code not in rooms:
+        if code not in rooms and not any(getattr(g, "reserved", lambda c: False)(code) for g in GAMES.values()):
             return code
+
+
+def restore_room(code):
+    """A game that saves its rooms (ACE Board) can bring one back after a restart or once it closed
+    when idle: its restore(code) returns the saved state, or None."""
+    if len(rooms) >= MAX_ROOMS:
+        return None
+    for game in GAMES.values():
+        restore = getattr(game, "restore", None)
+        state = restore(code) if restore else None
+        if state:
+            room = Room(code, game, {})
+            room.state = state
+            rooms[code] = room
+            log(f"room {code} brought back from disk ({game.name})")
+            return room
+    return None
 
 
 def clean_name(value):
@@ -175,7 +192,7 @@ def on_join(data):
     if not PLAYER_ID.match(pid):
         return {"error": "Couldn't join. Reload the page and try again."}
     with lock:
-        room = rooms.get(code)
+        room = rooms.get(code) or restore_room(code)
         if not room:
             return {"error": f"There's no room {code}. Check the code, or create a new room."}
         err = seat_player(room, pid, clean_name(data.get("name")), request.sid)
