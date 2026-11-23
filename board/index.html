@@ -30,22 +30,31 @@
       pictures, and everyone in the room sees it live.</p>
   </section>
   <div class="start-grid">
-    <form id="onlineForm" class="box mode" autocomplete="off">
-      <h2>Open a board</h2>
-      <p class="muted small">Everyone joins from their own phone or PC with the room code or invite link.</p>
-      <p id="serverStatus" class="server-status">Checking the game server…</p>
-      <label class="field" for="playerName">Your name
-        <input id="playerName" maxlength="20" placeholder="Name the others will see">
-      </label>
-      <button id="createBtn" class="btn primary" type="submit">New board</button>
-      <div class="divider"><span>or join a board</span></div>
-      <div class="row">
-        <label class="sr" for="roomInput">Room code</label>
-        <input id="roomInput" maxlength="4" placeholder="Room code, e.g. KQTZ" autocapitalize="characters">
-        <button id="joinBtn" class="btn" type="button">Join</button>
-      </div>
-      <p id="startError" class="error" hidden></p>
-    </form>
+    <div class="start-col">
+      <form id="onlineForm" class="box mode" autocomplete="off">
+        <h2>Make a board</h2>
+        <p id="serverStatus" class="server-status">Checking the game server…</p>
+        <label class="field" for="playerName">Your name
+          <input id="playerName" maxlength="20" placeholder="Name the others will see">
+        </label>
+        <label class="field" for="boardName">Board name
+          <input id="boardName" maxlength="40" placeholder="e.g. Biology revision, Clan event ideas">
+        </label>
+        <button id="createBtn" class="btn primary" type="submit">Make board</button>
+        <p class="muted small">Boards are kept on the ACE server for everyone, with their own link. Only the person who
+          makes a board can delete it.</p>
+        <p id="startError" class="error" role="alert" hidden></p>
+      </form>
+      <section class="box">
+        <div class="list-head">
+          <h2>Boards <small id="boardCount" class="muted"></small></h2>
+          <label class="sr" for="boardSearch">Search boards</label>
+          <input id="boardSearch" type="search" placeholder="Search">
+        </div>
+        <ul id="boardList" class="board-list" aria-live="polite"></ul>
+        <p id="listNote" class="muted small"></p>
+      </section>
+    </div>
     <details class="box rules" open>
       <summary><h2>How it works</h2></summary>
       <ul class="how">
@@ -60,8 +69,8 @@
         <li><b>Delete</b>: select your things and press Delete (or the bin button), or rub them out with the eraser. The leader can delete anyone's.</li>
         <li><b>The eye</b> next to each player hides or shows their writing, just on your screen.</li>
       </ul>
-      <p class="muted small">Boards are saved on the ACE server, so you can come back with the same code later. A board nobody
-        opens for 30 days is deleted. Download picture saves a copy for yourself.</p>
+      <p class="muted small">Every board is saved on the ACE server and listed here, so anyone can open it again while the
+        server is running. Download picture saves a copy for yourself.</p>
     </details>
   </div>
 </main>
@@ -122,8 +131,14 @@
 
   <aside id="panel" class="bd-panel bd-float" aria-label="Room and players">
     <div class="bd-sec">
-      <button id="copyInvite" class="btn primary" type="button">Copy invite link</button>
+      <h2 id="boardTitle" class="board-title"></h2>
+      <div class="link-row">
+        <label class="sr" for="boardLink">Link to this board</label>
+        <input id="boardLink" readonly>
+        <button id="copyInvite" class="btn primary small-btn" type="button">Copy</button>
+      </div>
       <span id="inviteNote" class="muted small invite-note" aria-live="polite"></span>
+      <a class="link-btn" href="./">All boards</a>
       <div class="row me-row">
         <span class="small muted">You're <b id="myName"></b></span>
         <button id="renameBtn" class="link-btn" type="button">Change name</button>
@@ -145,6 +160,7 @@
         <button id="downloadBtn" class="btn small-btn" type="button">Download picture</button>
         <button id="clearMine" class="btn small-btn" type="button">Clear my things</button>
         <button id="clearAll" class="btn danger small-btn" type="button" hidden>Clear board</button>
+        <button id="deleteBoard" class="btn danger small-btn" type="button" hidden>Delete board</button>
       </div>
       <p id="boardInfo" class="muted small"></p>
     </div>

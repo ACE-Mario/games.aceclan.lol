@@ -12,10 +12,11 @@ who joins or reconnects gets the whole board. Pictures can be big, so the full b
 to a browser that doesn't have it yet (see view); other room updates just list the item ids, which
 lets each browser drop anything it shouldn't have and ask for the board again if it missed something.
 
-Boards are saved to server/saved/boards/<CODE>.json a few seconds after each change, so restarting
-the server or a room closing when idle doesn't lose them: joining with the code brings the board
-back (server.py asks restore()). A saved board is deleted after SAVE_DAYS without being used, and
-a code with a saved board is never given to a new room (reserved()).
+Every board has a name its maker picks ("Biology revision"), which is also its room name ("b:biology-revision")
+and its link (board/?b=biology-revision). Boards are kept for good: each is saved to
+server/saved/boards/<slug>.json a few seconds after each change, so restarting the server or a room closing
+when idle doesn't lose it, and opening the link brings it back (server.py asks restore()). The board page
+lists them all (listing(), served at /api/board/list). Only the person who made a board can delete it.
 
 There are no points: only the daily games have those.
 """
@@ -38,13 +39,13 @@ MAX_CHUNK = 400                   # numbers in one live piece of a line
 TEXT_SIZES = (14, 18, 20, 24, 36, 56, 80)
 SHAPES = ("rect", "ellipse", "line", "arrow")
 
-SAVE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "saved", "boards")
+SAVE_DIR = os.environ.get("ACE_BOARD_DIR") or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "saved", "boards")
 SAVE_AFTER = 3                    # seconds after a change before the board is written to disk
-SAVE_DAYS = 30                    # saved boards nobody has opened for this long are deleted
-MAX_SAVED = 400                   # and only the newest this many are kept
+MAX_BOARDS = 300                  # boards kept on disk at most (new ones are refused past this)
+MAX_NAME = 40
 
 ITEM_ID = re.compile(r"^[A-Za-z0-9]{6,24}$")
-ROOM_CODE = re.compile(r"^[A-Z]{4}$")
+SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 COLOUR = re.compile(r"^#[0-9a-f]{6}$")
 IMAGE = re.compile(r"^data:image/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+=*$")
 
@@ -84,71 +85,126 @@ def points(value):
     return out
 
 
+def clean_name(value):
+    return re.sub(r"\s+", " ", re.sub(r"[\x00-\x1f\x7f]", "", str(value or ""))).strip()[:MAX_NAME].strip()
+
+
+def slug_of(name):
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:MAX_NAME].strip("-")
+
+
+def slug_from_key(code):
+    """"b:biology-revision" -> "biology-revision" (or None if it isn't a board's room name)."""
+    if not isinstance(code, str) or not code.startswith("b:"):
+        return None
+    slug = code[2:]
+    return slug if SLUG.match(slug) and len(slug) <= MAX_NAME else None
+
+
 # ---- Saving boards to disk -----------------------------------------------------------------
+# Each file is two lines: a short summary (name, maker, dates, how many things) and then the board
+# itself, so the list of boards only has to read the first line of each file.
 # Writing happens on one background thread, so a big board never holds up the live server.
-_writes = {}                      # room code -> json text to write (None: delete the file)
+_writes = {}                      # slug -> text to write (None: delete the file)
 _wake = threading.Condition()
 _writer = None
+_index = None                     # slug -> summary, for the list of boards (read from the files once)
 
 
-def _path(code):
-    return os.path.join(SAVE_DIR, code + ".json")
+def _path(slug):
+    return os.path.join(SAVE_DIR, slug + ".json")
 
 
 def _write_loop():
-    _prune()
     while True:
         with _wake:
             while not _writes:
                 _wake.wait()
-            code, text = _writes.popitem()
+            slug, text = _writes.popitem()
         try:
             os.makedirs(SAVE_DIR, exist_ok=True)
             if text is None:
-                if os.path.exists(_path(code)):
-                    os.remove(_path(code))
+                if os.path.exists(_path(slug)):
+                    os.remove(_path(slug))
             else:
-                tmp = _path(code) + ".tmp"
+                tmp = _path(slug) + ".tmp"
                 with open(tmp, "w", encoding="utf-8") as f:
                     f.write(text)
-                os.replace(tmp, _path(code))
+                os.replace(tmp, _path(slug))
         except OSError as e:
-            print(time.strftime("%H:%M:%S"), f"board {code} not saved: {e!r}", flush=True)
+            print(time.strftime("%H:%M:%S"), f"board {slug} not saved: {e!r}", flush=True)
 
 
-def _queue_write(code, text):
+def _queue_write(slug, text):
     global _writer
     with _wake:
-        _writes[code] = text
+        _writes[slug] = text
         if _writer is None:
             _writer = threading.Thread(target=_write_loop, name="board-saver", daemon=True)
             _writer.start()
         _wake.notify()
 
 
-def _prune():
-    """Delete saved boards nobody has opened for SAVE_DAYS, and the oldest past MAX_SAVED."""
-    try:
-        files = [os.path.join(SAVE_DIR, f) for f in os.listdir(SAVE_DIR) if f.endswith(".json")]
-    except OSError:
+def _convert_old(fname):
+    """Boards saved before they had names (server/saved/boards/ABCD.json, one line) become "Board ABCD"."""
+    path = os.path.join(SAVE_DIR, fname)
+    with open(path, encoding="utf-8") as fh:
+        old = json.loads(fh.read())
+    if not isinstance(old, dict) or "code" not in old or not isinstance(old.get("items"), list):
         return
-    files.sort(key=os.path.getmtime, reverse=True)
-    cutoff = time.time() - SAVE_DAYS * 86400
-    for n, f in enumerate(files):
-        if n >= MAX_SAVED or os.path.getmtime(f) < cutoff:
+    items = [i for i in old["items"] if isinstance(i, dict) and "by" in i]
+    slug = "board-" + slug_of(str(old["code"]))     # not just "blla": Windows sees blla.json as BLLA.json
+    if len(slug) < 2 or os.path.exists(_path(slug)):
+        return
+    authors = [i["by"] for i in items]
+    owner = max(set(authors), key=authors.count) if authors else None   # whoever made the most of it
+    when = int(old.get("saved") or time.time())
+    meta = {"name": "Board " + str(old["code"]).upper(), "slug": slug, "owner": owner, "created": when,
+            "updated": when, "items": len(items)}
+    body = {"items": items, "names": old.get("names") if isinstance(old.get("names"), dict) else {}}
+    with open(_path(slug), "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(meta) + "\n" + json.dumps(body, separators=(",", ":")))
+    os.remove(path)
+
+
+def _boards():
+    """The summaries of every saved board, read from the first line of each file the first time."""
+    global _index
+    if _index is None:
+        _index = {}
+        try:
+            for f in os.listdir(SAVE_DIR):
+                if re.fullmatch(r"[A-Z]{4}\.json", f):
+                    try:
+                        _convert_old(f)
+                    except (OSError, ValueError) as e:
+                        print(time.strftime("%H:%M:%S"), f"old board {f} not converted: {e!r}", flush=True)
+        except OSError:
+            pass
+        try:
+            files = [f for f in os.listdir(SAVE_DIR) if f.endswith(".json")]
+        except OSError:
+            files = []
+        for f in files:
             try:
-                os.remove(f)
-            except OSError:
+                with open(os.path.join(SAVE_DIR, f), encoding="utf-8") as fh:
+                    meta = json.loads(fh.readline())
+                if isinstance(meta, dict) and meta.get("slug") == f[:-5]:
+                    _index[meta["slug"]] = meta
+            except (OSError, ValueError):
                 pass
+    return _index
 
 
 class Board:
     id = "board"
     name = "ACE Board"
-    _last_prune = 0.0
 
     def new_state(self, options=None, old=None):
-        return {"items": {}, "names": {}, "synced": {}, "ink": 0, "log": [], "dirty": False, "changed": 0.0}
+        name = clean_name((options or {}).get("name"))
+        return {"items": {}, "names": {}, "synced": {}, "ink": 0, "log": [], "board": name, "slug": slug_of(name),
+                "owner": None, "created": int(time.time()), "deleted": False,
+                "dirty": True, "changed": 0.0}               # a new board is saved straight away, so it shows in the list
 
     def default_seat(self, room):
         return {}
@@ -164,45 +220,71 @@ class Board:
     def _image_chars(self, s):
         return sum(len(i["src"]) for i in s["items"].values() if i["kind"] == "image")
 
-    # ---- Saving and bringing boards back (server.py calls restore and reserved) -------------
+    # ---- Naming, saving, listing and bringing boards back (server.py calls these) -----------
+    def room_key(self, options):
+        """The room name for a new board, from the name its maker typed: (key, None) or (None, error)."""
+        name = clean_name(options.get("name"))
+        slug = slug_of(name)
+        if len(slug) < 2:
+            return None, 'Give the board a name, using letters or numbers (like "Biology revision").'
+        if slug in _boards():
+            return None, f'There\'s already a board called "{_boards()[slug]["name"]}". Open it from the list, or pick another name.'
+        if len(_boards()) >= MAX_BOARDS:
+            return None, f"There are {MAX_BOARDS} boards already, which is the most the server keeps. Delete an old one first."
+        return "b:" + slug, None
+
+    def reserved(self, code):
+        slug = slug_from_key(code)
+        return bool(slug) and slug in _boards()
+
+    def closed(self, room):
+        return room.state.get("deleted")
+
     def tick(self, room, now):
         s = room.state
-        if s.get("dirty") and now - s["changed"] >= SAVE_AFTER:
+        told = False
+        if not s.get("owner") and room.host:
+            s["owner"] = room.host                    # whoever made the board (one brought back keeps its maker)
+            told = True                               # so their page shows the Delete board button
+        if s.get("dirty") and not s.get("deleted") and now - s["changed"] >= SAVE_AFTER:
             s["dirty"] = False
             items = list(s["items"].values())
-            names = {p: s["names"].get(p, "") for p in {i["by"] for i in items}}
-            _queue_write(room.code, json.dumps({"code": room.code, "saved": int(now), "items": items, "names": names},
-                                               separators=(",", ":")) if items else None)
-        if now - Board._last_prune > 86400:
-            Board._last_prune = now
-            threading.Thread(target=_prune, daemon=True).start()
-        return False
+            meta = {"name": s["board"], "slug": s["slug"], "owner": s["owner"], "created": s["created"],
+                    "updated": int(now), "items": len(items)}
+            body = {"items": items, "names": {p: s["names"].get(p, "") for p in {i["by"] for i in items}}}
+            _boards()[s["slug"]] = meta
+            _queue_write(s["slug"], json.dumps(meta) + "\n" + json.dumps(body, separators=(",", ":")))
+        return told
 
     def restore(self, code):
-        """The saved board for this room code, as a fresh room state (or None if there isn't one)."""
-        if not ROOM_CODE.match(code) or not os.path.exists(_path(code)):
+        """The saved board for this room name, as a fresh room state (or None if there isn't one)."""
+        slug = slug_from_key(code)
+        if not slug or slug not in _boards():
             return None
         try:
-            with open(_path(code), encoding="utf-8") as f:
-                data = json.load(f)
+            with open(_path(slug), encoding="utf-8") as f:
+                meta = json.loads(f.readline())
+                body = json.loads(f.readline() or "{}")
         except (OSError, ValueError):
             return None
-        s = self.new_state()
-        for it in data.get("items", []):
+        s = self.new_state({"name": meta.get("name") or slug})
+        s.update(slug=slug, owner=meta.get("owner"), created=meta.get("created") or int(time.time()), dirty=False)
+        for it in body.get("items", []):
             if isinstance(it, dict) and ITEM_ID.match(str(it.get("id", ""))) and it.get("kind") in ("text", "image", "pen", "shape"):
                 s["items"][it["id"]] = it
         s["ink"] = sum(len(i.get("p", [])) for i in s["items"].values() if i["kind"] == "pen")
-        names = data.get("names")
+        names = body.get("names")
         if isinstance(names, dict):
             s["names"] = {str(k): str(v)[:20] for k, v in names.items()}
-        try:
-            os.utime(_path(code))                    # opened again: keep it another SAVE_DAYS
-        except OSError:
-            pass
         return s
 
-    def reserved(self, code):
-        return os.path.exists(_path(code))
+    def listing(self, online):
+        """Every board, for the board page: people in it now first, then the most recently changed."""
+        boards = [{"name": m.get("name") or slug, "slug": slug, "items": m.get("items", 0),
+                   "updated": m.get("updated", 0), "created": m.get("created", 0), "online": online.get("b:" + slug, 0)}
+                  for slug, m in _boards().items()]
+        boards.sort(key=lambda b: (-b["online"], -b["updated"]))
+        return {"boards": boards, "max": MAX_BOARDS}
 
     # ---- Room actions (these send everyone a fresh room update) ----------------------------
     def handle(self, room, pid, action, data):
@@ -226,6 +308,14 @@ class Board:
             s["ink"] = 0
             self._log(s, f"{name} cleared the board.", "admin")
             self._changed(s)
+            return None
+        if action == "delete_board":
+            if pid != s.get("owner"):
+                return "Only the person who made this board can delete it."
+            s["deleted"] = True
+            s["items"].clear()
+            _boards().pop(s["slug"], None)
+            _queue_write(s["slug"], None)
             return None
         return "Unknown action."
 
@@ -365,6 +455,8 @@ class Board:
         if full:
             s["synced"][pid] = sids
         out = {
+            "board": {"name": s["board"], "slug": s["slug"]}, "isOwner": pid == s.get("owner"),
+            "deleted": bool(s.get("deleted")),
             "ids": list(s["items"]),
             "colours": {p: n for n, p in enumerate(room.players)},     # player colour = order they arrived
             # People whose things are on the board but who aren't in the room (a board brought back from disk).

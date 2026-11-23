@@ -47,6 +47,10 @@ those come back).
   anyone's things. No turns and no points. Each player's eye button hides or shows that player's writing (and pointer),
   on your own screen only. Download picture saves the board as a PNG. Pictures are shrunk in the browser before
   they're sent (`board.js`); the server caps their size.
+  Boards have names instead of codes: the start page makes one by name and lists every board (people in it now
+  first), each with Open and Copy link. A board's link is `board/?b=<name-as-slug>` (e.g. `?b=biology-revision`),
+  and the open board's panel shows it with a Copy button. Boards are kept for good; only the person who made one
+  can delete it.
 - `shared/cards.js`: draws playing cards for poker and canasta (corner indices and face-card art).
 - `shared/board.js` and `shared/board.css`: the clan leaderboard (Today and All time) on the results of the daily
   games ACE Mini, Squads and Map Pin (Map Pin has one board for VALORANT and one for League). Scores are kept by
@@ -64,9 +68,13 @@ those come back).
   - `games/canasta.py`: Canasta rules: melds, wild cards, the frozen pile, red and black 3s, going out and scoring.
   - `games/board.py`: ACE Board. Keeps every item, lets people change only their own (the leader can delete
     anyone's), and caps picture sizes (700 KB each, 15 MB a board). Changes go out as live messages; the whole board
-    is only sent to a tab that doesn't have it yet. Boards are saved to `server/saved/boards/<CODE>.json` (not in git)
-    a few seconds after each change, and joining with the code after a restart brings the board back
-    (`restore_room` in `server.py`). Saved boards are deleted after 30 days unused.
+    is only sent to a tab that doesn't have it yet. A board's room name is `b:<slug>` (picked by the game through
+    `room_key()`, which `server.py` asks for instead of making a 4-letter code). Boards are saved to
+    `server/saved/boards/<slug>.json` (not in git; line 1 is a summary, line 2 the board) a few seconds after each
+    change and kept until their maker deletes them (`closed()` then shuts the room). Opening a link after a restart
+    brings the board back (`restore_room` in `server.py`). `GET /api/board/list` gives the list for the start page
+    (`listing()`). At most 300 boards. Boards saved under the old 4-letter codes are turned into "Board ABCD" the
+    first time the list is read. `ACE_BOARD_DIR` moves the save folder (for testing on a second port).
   - `games/__init__.py`: list of games the server can host.
   - `cloudflared.yml`: tunnel settings for play.aceclan.lol. The tunnel's secret credentials stay in
     `C:\Users\User\.cloudflared`, not here.

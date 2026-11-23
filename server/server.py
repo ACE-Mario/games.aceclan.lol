@@ -175,7 +175,17 @@ def on_create(data):
     with lock:
         if len(rooms) >= MAX_ROOMS:
             return {"error": "The server has too many rooms open right now."}
-        room = Room(new_code(), game, data.get("options") or {})
+        options = data.get("options") or {}
+        room_key = getattr(game, "room_key", None)       # a game can name its own rooms (ACE Board: the board's name)
+        if room_key:
+            code, err = room_key(options)
+            if err:
+                return {"error": err}
+            if code in rooms or getattr(game, "reserved", lambda c: False)(code):
+                return {"error": "That name is already taken. Pick another name, or open that one from the list."}
+        else:
+            code = new_code()
+        room = Room(code, game, options)
         rooms[room.code] = room
         room.host = pid
         seat_player(room, pid, clean_name(data.get("name")), request.sid)
@@ -188,7 +198,8 @@ def on_create(data):
 def on_join(data):
     data = data or {}
     pid = str(data.get("playerId", ""))
-    code = str(data.get("room", "")).upper().strip()
+    raw = str(data.get("room", "")).strip()
+    code = raw.upper() if re.fullmatch(r"[A-Za-z]{4}", raw) else raw[:80]   # 4-letter codes, or a game's own room names
     if not PLAYER_ID.match(pid):
         return {"error": "Couldn't join. Reload the page and try again."}
     with lock:
@@ -232,6 +243,10 @@ def on_action(data):
         room.touched = time.time()
         if not err:
             broadcast(room)
+            closed = getattr(room.game, "closed", None)
+            if closed and closed(room):                  # e.g. an ACE Board that was deleted
+                rooms.pop(room.code, None)
+                log(f"room {room.code} closed ({room.game.name})")
         return {"error": err} if err else {"ok": True}
 
 
@@ -266,7 +281,7 @@ def on_disconnect(*_):
 @app.after_request
 def cors(resp):
     origin = request.headers.get("Origin")
-    if origin in ALLOWED_ORIGINS and request.path == "/health":
+    if origin in ALLOWED_ORIGINS and (request.path == "/health" or request.path.startswith("/api/")):
         resp.headers["Access-Control-Allow-Origin"] = origin
     return resp
 
@@ -274,6 +289,18 @@ def cors(resp):
 @app.route("/health")
 def health():
     return jsonify(ok=True, games=list(GAMES), rooms=len(rooms))
+
+
+@app.route("/api/<game_id>/list")
+def game_list(game_id):
+    """Rooms a game keeps and lists for everyone (ACE Board's named boards)."""
+    game = GAMES.get(game_id)
+    listing = getattr(game, "listing", None)
+    if not listing:
+        abort(404)
+    with lock:
+        online = {c: sum(1 for p in r.players.values() if p["sids"]) for c, r in rooms.items() if r.game is game}
+        return jsonify(listing(online))
 
 
 @app.route("/", defaults={"path": ""})

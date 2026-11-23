@@ -63,7 +63,10 @@ body.on-board .sitebar, body.on-board .site-foot { display: none; }
   border: 1px solid var(--line); background: var(--bg2); color: var(--muted); cursor: pointer; font: 600 .85rem/1 var(--body);
 }
 .bd-pill:hover, .bd-pill[aria-expanded="true"] { border-color: var(--accent); }
-.bd-pill .code { font: 700 1.2rem/1 var(--display); letter-spacing: 3px; color: var(--gold); }
+.bd-pill .code {
+  font: 700 1.1rem/1 var(--display); letter-spacing: 1px; color: var(--gold);
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 .bd-panel {
   right: max(10px, env(safe-area-inset-right, 0px)); top: calc(max(10px, env(safe-area-inset-top, 0px)) + 58px);
@@ -164,3 +167,21 @@ body.on-board .sitebar, body.on-board .site-foot { display: none; }
   .bd-panel { top: auto; bottom: 66px; width: min(300px, calc(100vw - 20px)); max-height: 55%; }
   .bd-notes { bottom: 66px; max-width: calc(100vw - 20px); }
 }
+
+/* Start page: the list of boards */
+.start-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.list-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.list-head input { flex: 0 1 200px; }
+.board-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 60vh; overflow: auto; }
+.board-row {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px;
+  background: var(--bg2); border: 1px solid var(--line);
+}
+.board-row.live { border-color: color-mix(in srgb, #3fbf7f 55%, var(--line)); }
+.board-row.wanted { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.board-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.board-info a { color: var(--text); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.board-info a:hover { color: var(--accent); }
+.board-title { overflow-wrap: anywhere; }
+.link-row { display: flex; gap: 6px; }
+.link-row input { flex: 1; min-width: 0; font-size: .85rem; padding: 7px 8px; }

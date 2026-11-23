@@ -27,7 +27,6 @@
   const HISTORY = 100;              // how many of your changes Ctrl+Z remembers
   const CLIP_MARK = "[ACE Board items] ";
   const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-  const cleanRoom = v => String(v || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
   const newId = () => {
     const abc = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     return Array.from(crypto.getRandomValues(new Uint8Array(12)), b => abc[b % abc.length]).join("");
@@ -44,7 +43,7 @@
   const sel = new Set();            // selected item ids
   let tool = "select", ink = INK[0], hlColour = HL[0], noteColour = NOTES[0];
   let penSize = 6, hlSize = 24, shapeSize = 4, textSize = 24, shapeKind = "rect", shapeFill = false;
-  let editing = null, editStart = null, lastResync = 0, noteTimer = 0;
+  let editing = null, editStart = null, lastResync = 0, noteTimer = 0, leaveBoard = null;
   const cam = { x: 0, y: 0, z: 1 };        // board point at the top-left of the screen, and the zoom
 
   const world = $("world"), viewport = $("viewport");
@@ -53,19 +52,26 @@
   handle.hidden = true;
   world.append(handle);
 
-  // ---- Start screen --------------------------------------------------------------------------
+  // ---- Start screen: make a board, or open one from the list -------------------------------
+  // Boards are named, and their link is board/?b=<slug>; the server's room name for one is "b:<slug>".
+  const cleanSlug = v => String(v || "").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 40);
+  const boardLink = slug => location.origin + location.pathname + "?b=" + slug;
+  let pendingSlug = "", boards = [], listTimer = 0, serverUp = false;
+
   function startError(msg) {
     $("startError").textContent = msg || "";
     $("startError").hidden = !msg;
   }
-  function showStart(code, error) {
+  function showStart(slug, error) {
     $("gameView").hidden = true;
     $("startView").hidden = false;
     document.body.classList.remove("on-board");
-    history.replaceState(null, "", code ? "?room=" + code : location.pathname);
-    $("roomInput").value = code || "";
+    pendingSlug = slug || "";
+    history.replaceState(null, "", location.pathname);
+    document.title = "ACE Board";
     $("playerName").value = AceLive.name();
     startError(error);
+    loadList();
   }
   function needName() {
     const n = $("playerName").value.trim();
@@ -77,32 +83,100 @@
     AceLive.setName(n);
     return n;
   }
+  function openBoard(slug) {
+    if (!serverUp) return startError("The game server is offline right now, so boards can't be opened.");
+    if (!needName()) { pendingSlug = slug; return; }
+    play({ slug });
+  }
+  function ago(t) {
+    const s = Math.max(0, Date.now() / 1000 - t);
+    if (s < 90) return "just now";
+    if (s < 3600) return Math.round(s / 60) + " min ago";
+    if (s < 86400 * 2) return Math.round(s / 3600) + " h ago";
+    return Math.round(s / 86400) + " days ago";
+  }
+  async function copyText(text, note) {
+    try { await navigator.clipboard.writeText(text); note("Link copied. Paste it anywhere, like Discord."); }
+    catch { note("Copy this link: " + text); }
+  }
+  function renderList() {
+    const q = $("boardSearch").value.trim().toLowerCase();
+    const list = $("boardList");
+    list.innerHTML = "";
+    const shown = boards.filter(b => !q || b.name.toLowerCase().includes(q));
+    for (const b of shown) {
+      const li = document.createElement("li");
+      li.className = "board-row" + (b.slug === pendingSlug ? " wanted" : "");
+      const info = document.createElement("div");
+      info.className = "board-info";
+      const a = document.createElement("a");
+      a.href = "?b=" + b.slug;
+      a.textContent = b.name;
+      a.addEventListener("click", e => { e.preventDefault(); openBoard(b.slug); });
+      const meta = document.createElement("span");
+      meta.className = "muted small";
+      meta.textContent = `${b.items} thing${b.items === 1 ? "" : "s"} · changed ${ago(b.updated)}` + (b.online ? ` · ${b.online} here now` : "");
+      if (b.online) li.classList.add("live");
+      info.append(a, meta);
+      const copy = document.createElement("button");
+      copy.type = "button";
+      copy.className = "btn small-btn";
+      copy.textContent = "Copy link";
+      copy.addEventListener("click", () => copyText(boardLink(b.slug), msg => { $("listNote").textContent = msg; }));
+      const open = document.createElement("button");
+      open.type = "button";
+      open.className = "btn primary small-btn";
+      open.textContent = "Open";
+      open.addEventListener("click", () => openBoard(b.slug));
+      li.append(info, copy, open);
+      list.append(li);
+    }
+    $("boardCount").textContent = boards.length ? `(${boards.length})` : "";
+    if (!serverUp) $("listNote").textContent = "The list shows while the game server is running.";
+    else if (!boards.length) $("listNote").textContent = "No boards yet. Make the first one!";
+    else if (!shown.length) $("listNote").textContent = "No boards match that search.";
+    else if (!$("listNote").textContent.startsWith("Link") && !$("listNote").textContent.startsWith("Copy")) $("listNote").textContent = "";
+  }
+  async function loadList() {
+    clearTimeout(listTimer);
+    if ($("startView").hidden) return;
+    try {
+      const r = await fetch(AceLive.SERVER + "/api/board/list", { cache: "no-store" });
+      if (!r.ok) throw new Error(r.status);
+      boards = (await r.json()).boards || [];
+      serverUp = true;
+    } catch {
+      serverUp = false;
+    }
+    const st = $("serverStatus");
+    st.className = "server-status " + (serverUp ? "up" : "down");
+    st.textContent = serverUp ? "Game server is online."
+      : "Game server is offline right now. Boards open while it's running on the ACE host's PC.";
+    $("createBtn").disabled = !serverUp;
+    if (pendingSlug && serverUp && !boards.some(b => b.slug === pendingSlug) && !$("startError").textContent) {
+      startError(`There's no board at that link any more. It may have been deleted.`);
+      pendingSlug = "";
+    }
+    renderList();
+    listTimer = setTimeout(loadList, 20000);
+  }
   function initStart() {
     FX.soundButton();
-    AceLive.isOnline().then(up => {
-      const st = $("serverStatus");
-      st.className = "server-status " + (up ? "up" : "down");
-      st.textContent = up ? "Game server is online."
-        : "Game server is offline right now. Boards work while it's running on the ACE host's PC.";
-      $("createBtn").disabled = !up;
-      $("joinBtn").disabled = !up;
-    });
     $("onlineForm").addEventListener("submit", e => {
       e.preventDefault();
-      if (needName()) play({ create: true });
-    });
-    $("joinBtn").addEventListener("click", () => {
-      const code = cleanRoom($("roomInput").value);
-      if (code.length !== 4) return startError("Room codes are 4 letters, like KQTZ.");
       if (!needName()) return;
-      play({ room: code });
+      const name = $("boardName").value.trim();
+      if (!name && pendingSlug) return openBoard(pendingSlug);
+      if (!name) { startError("Give the board a name, like \"Biology revision\"."); $("boardName").focus(); return; }
+      play({ create: name });
     });
-    $("roomInput").addEventListener("keydown", e => {
-      if (e.key === "Enter") { e.preventDefault(); $("joinBtn").click(); }
-    });
-    const code = cleanRoom(new URLSearchParams(location.search).get("room"));
-    if (code && AceLive.name() && window.io) play({ room: code });
-    else showStart(code);
+    $("boardSearch").addEventListener("input", renderList);
+    const slug = cleanSlug(new URLSearchParams(location.search).get("b"));
+    if (slug && AceLive.name() && window.io) play({ slug });
+    else {
+      showStart(slug);
+      if (slug) startError("Type your name, then press Open on the board (it's highlighted in the list).");
+    }
   }
 
   // ---- Connection ----------------------------------------------------------------------------
@@ -110,8 +184,9 @@
   function play(opts) {
     if (playing) return;
     playing = true;
-    room = opts.room || null;
-    let create = !!opts.create;
+    clearTimeout(listTimer);
+    room = opts.slug || null;                   // the board's slug
+    let create = opts.create || "";
     $("startView").hidden = true;
     $("gameView").hidden = false;
     document.body.classList.add("on-board");
@@ -121,29 +196,32 @@
     const setConn = msg => { $("connNote").textContent = msg || ""; $("connNote").hidden = !msg; };
     const fail = msg => {
       socket.disconnect();
+      socket = null;
       playing = false;
+      state = null;
+      firstState = true;
       clearBoard();
+      undoList.length = redoList.length = 0;     // a different board next time: start afresh
+      syncUndo();
+      hidden.clear();
       showStart(room, msg);
     };
+    leaveBoard = fail;
     function enter() {
       const base = { playerId: AceLive.playerId(), name: AceLive.name() };
       if (create) {
-        socket.timeout(8000).emit("create", { ...base, game: "board", options: {} }, (err, res) => {
+        socket.timeout(8000).emit("create", { ...base, game: "board", options: { name: create } }, (err, res) => {
           if (err) return fail("The game server didn't answer. Try again in a moment.");
-          if (res.error) return fail(res.error);
-          create = false;
-          room = res.room;
-          history.replaceState(null, "", "?room=" + room);
+          if (res.error) { room = null; return fail(res.error); }
+          create = "";
+          room = res.room.slice(2);
+          history.replaceState(null, "", "?b=" + room);
         });
       } else {
-        history.replaceState(null, "", "?room=" + room);
-        socket.timeout(8000).emit("join", { ...base, room }, (err, res) => {
+        history.replaceState(null, "", "?b=" + room);
+        socket.timeout(8000).emit("join", { ...base, room: "b:" + room }, (err, res) => {
           if (err) return setConn("Can't reach the game server. Retrying…");
-          if (res.error) return fail(res.error);
-          if (res.game && res.game !== "board") {
-            socket.disconnect();
-            location.href = `../${res.game}/?room=${res.room}`;     // that code belongs to another game
-          }
+          if (res.error) return fail("There's no board at that link. It may have been deleted.");
         });
       }
     }
@@ -186,7 +264,8 @@
     const wasHost = state && state.isHost;
     state = s;
     me = s.you;
-    room = s.room;
+    if (s.board) room = s.board.slug;
+    if (s.deleted) { leaveBoard && leaveBoard("That board was deleted."); return; }
     if (s.limits) Object.assign(LIM, s.limits);
     viewport.classList.toggle("host", !!s.isHost);
     const now = Date.now();
@@ -1413,7 +1492,13 @@
 
   function renderPanel() {
     if (!state) return;
-    $("roomCode").textContent = state.room;
+    if (state.board) {
+      $("roomCode").textContent = state.board.name;
+      $("boardTitle").textContent = state.board.name;
+      $("boardLink").value = boardLink(state.board.slug);
+      document.title = state.board.name + " · ACE Board";
+    }
+    $("deleteBoard").hidden = !state.isOwner;
     const mine = state.players.find(p => p.id === me);
     $("myName").textContent = mine ? mine.name : AceLive.name();
     const counts = {};
@@ -1492,16 +1577,14 @@
       $("renameInput").value = AceLive.name();
       if (!$("renameForm").hidden) $("renameInput").focus();
     });
-    $("copyInvite").addEventListener("click", async () => {
-      const u = new URL(location.href);
-      u.search = "?room=" + (room || "");
-      u.hash = "";
-      try {
-        await navigator.clipboard.writeText(u.toString());
-        $("inviteNote").textContent = "Invite link copied. Paste it in Discord.";
-      } catch {
-        $("inviteNote").textContent = u.toString();
-      }
+    $("copyInvite").addEventListener("click", () => {
+      $("boardLink").select();
+      copyText($("boardLink").value, msg => { $("inviteNote").textContent = msg; });
+    });
+    $("boardLink").addEventListener("focus", () => $("boardLink").select());
+    $("deleteBoard").addEventListener("click", () => {
+      const name = state && state.board ? state.board.name : "this board";
+      if (confirm(`Delete "${name}" for everyone? Everything on it is gone for good, and it leaves the list.`)) action("delete_board");
     });
   }
 
