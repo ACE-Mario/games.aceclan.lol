@@ -39,8 +39,8 @@ stops both. Rooms live in memory, so restarting the server ends any games in pro
 - `poker/`: Ace Poker Night, Texas hold'em for points (never real money), 2 to 9 players.
 - `canasta/`: Canasta, classic rules for 2 to 4 players (4 play as two teams of 2).
 - `board/`: ACE Board, a shared live whiteboard (text, pen and pasted or dropped pictures) for ideas and studying.
-  The board has no edges and fills the window (with a full-screen button); drag empty space or scroll to move
-  around, Ctrl+scroll or pinch to zoom. Everyone's pointer shows live with their name. Ctrl+Z / Ctrl+Y undo and
+  The board has no edges and fills the window (with a full-screen button); drag empty space or middle-click
+  drag to move around, the scroll wheel or a pinch zooms, and the target button goes back to the middle (0, 0). Everyone's pointer shows live with their name. Ctrl+Z / Ctrl+Y undo and
   redo your own changes. No turns and no points. Each player's eye button hides or shows that player's writing
   (and pointer), on your own screen only. Pictures are shrunk in the browser before they're sent (`board.js`);
   the server caps their size.

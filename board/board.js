@@ -100,7 +100,7 @@
     $("gameView").hidden = false;
     document.body.classList.add("on-board");
     setPanel(innerWidth > 900);
-    applyCam();
+    recentre();
     socket = AceLive.connect();
     const setConn = msg => { $("connNote").textContent = msg || ""; $("connNote").hidden = !msg; };
     const fail = msg => {
@@ -478,7 +478,7 @@
       x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.h);
     }
     const vw = viewport.clientWidth, vh = viewport.clientHeight;
-    if (!isFinite(x0)) { cam.z = 1; cam.x = -60; cam.y = -60; applyCam(); return; }
+    if (!isFinite(x0)) { recentre(); return; }
     const pad = 80;
     cam.z = Math.max(ZMIN, Math.min(1, Math.min(vw / (x1 - x0 + pad * 2), vh / (y1 - y0 + pad * 2))));
     cam.x = (x0 + x1) / 2 - vw / 2 / cam.z;
@@ -487,18 +487,22 @@
   }
   viewport.addEventListener("wheel", e => {
     e.preventDefault();
+    // The scroll wheel zooms in and out around the pointer (drag or middle-click drag to move around).
     const { sx, sy } = screenPt(e);
-    if (e.ctrlKey || e.metaKey) zoomAt(cam.z * Math.exp(-e.deltaY * (e.deltaMode ? 0.05 : 0.0025)), sx, sy);
-    else {
-      const k = e.deltaMode ? 30 : 1;
-      cam.x += (e.shiftKey && !e.deltaX ? e.deltaY : e.deltaX) * k / cam.z;
-      cam.y += (e.shiftKey && !e.deltaX ? 0 : e.deltaY) * k / cam.z;
-      applyCam();
-    }
+    const dy = Math.max(-120, Math.min(120, e.deltaY * (e.deltaMode ? 33 : 1)));
+    zoomAt(cam.z * Math.exp(-dy * 0.0022), sx, sy);
   }, { passive: false });
+  function recentre() {
+    // Back to the middle of the board (0, 0) at 100%.
+    cam.z = 1;
+    cam.x = -viewport.clientWidth / 2;
+    cam.y = -viewport.clientHeight / 2;
+    applyCam();
+  }
   $("zoomIn").addEventListener("click", () => zoomAt(cam.z * 1.25));
   $("zoomOut").addEventListener("click", () => zoomAt(cam.z / 1.25));
   $("zoomLabel").addEventListener("click", fitAll);
+  $("homeBtn").addEventListener("click", recentre);
 
   // ---- Pointer: select/move, text, pen, eraser, pan, pinch -----------------------------------
   let drag = null;           // what the pointer is doing right now
@@ -1021,6 +1025,7 @@
       const snap = deleteItem(selected);
       if (snap) record({ t: "del", d: snap });
     } else if (e.key === "Escape") select(null);
+    else if (e.key === "Home") recentre();
     else if (e.key === "Enter" && selectedOwn()?.d.kind === "text") { e.preventDefault(); startEdit(selected); }
   });
   document.addEventListener("keyup", e => {
