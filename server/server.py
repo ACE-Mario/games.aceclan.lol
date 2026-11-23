@@ -21,6 +21,7 @@ import time
 from flask import Flask, abort, jsonify, request, send_from_directory
 from flask_socketio import SocketIO, join_room
 
+import songbank
 from games import GAMES
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -42,6 +43,7 @@ PLAYER_ID = re.compile(r"^[A-Za-z0-9]{8,40}$")
 app = Flask(__name__, static_folder=None)
 socketio = SocketIO(app, async_mode="threading", cors_allowed_origins=ALLOWED_ORIGINS)
 lock = threading.RLock()
+songbank.register(app, HERE)       # song.aceclan.lol's songs (/api/songs/...)
 
 
 def log(msg):
