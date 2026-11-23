@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="../shared/site.css?v=20261123">
 <link rel="stylesheet" href="../shared/room.css?v=20261123">
 <link rel="stylesheet" href="../shared/fx.css?v=20261123">
-<link rel="stylesheet" href="style.css?v=20261123">
+<link rel="stylesheet" href="style.css?v=20261124">
 </head>
 <body>
 <header class="sitebar">
@@ -61,6 +61,8 @@
         <li><b>Text</b>: pick the T tool and click anywhere to start typing.</li>
         <li><b>Pen</b>: draw freehand in any colour and size.</li>
         <li><b>Pictures</b>: press Ctrl+V to paste one, drag one onto the board, or use Add picture.</li>
+        <li><b>Documents</b>: drop a PDF or Word (.docx) file on the board, or use Add picture. Its pages appear for
+          everyone, so you can write, highlight and draw on them together.</li>
         <li><b>Move</b>: with the arrow tool, drag your own things around. To look around the board, middle-click and drag, hold Space and drag, or use one finger on a phone. It goes on forever. Double-click your text to change it.</li>
         <li><b>Zoom</b>: the scroll wheel zooms in and out. The target button takes you back to the middle.</li>
         <li><b>Shapes and notes</b>: boxes, circles, lines and arrows for diagrams, sticky notes for ideas, and a highlighter for marking things up.</li>
@@ -78,7 +80,7 @@
 <main id="gameView" class="bd-app" hidden>
   <div id="viewport" class="bd-viewport" tabindex="0" aria-label="Whiteboard. Drag to move around, Ctrl+V pastes pictures.">
     <div id="world" class="bd-world"></div>
-    <div id="dropHint" class="bd-drop" hidden>Drop the picture to add it</div>
+    <div id="dropHint" class="bd-drop" hidden>Drop the picture or document to add it</div>
   </div>
 
   <div class="bd-bar bd-float" role="toolbar" aria-label="Board tools">
@@ -113,9 +115,9 @@
         <svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
     </div>
     <div class="bd-group">
-      <button id="addImage" class="tb" type="button" title="Add picture (or paste with Ctrl+V)" aria-label="Add picture">
+      <button id="addImage" class="tb" type="button" title="Add a picture, PDF or Word document (or paste / drop one)" aria-label="Add a picture or document">
         <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/></svg></button>
-      <input id="imageFile" type="file" accept="image/*" hidden>
+      <input id="imageFile" type="file" accept="image/*,.pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.doc" hidden>
     </div>
   </div>
 
@@ -185,6 +187,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 <script src="../shared/live.js?v=20261123"></script>
 <script src="../shared/fx.js?v=20261123"></script>
-<script src="board.js?v=20261123"></script>
+<script src="board.js?v=20261124"></script>
 </body>
 </html>

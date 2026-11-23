@@ -47,6 +47,10 @@ those come back).
   anyone's things. No turns and no points. Each player's eye button hides or shows that player's writing (and pointer),
   on your own screen only. Download picture saves the board as a PNG. Pictures are shrunk in the browser before
   they're sent (`board.js`); the server caps their size.
+  PDFs and Word (.docx) files can be dropped on or added too: the browser turns each page into a picture (up to 30
+  pages a document) with the file name above, so everyone can write and draw on them. PDFs are drawn with pdf.js;
+  Word files are laid out with docx-preview and photographed with html2canvas (the libraries load only when a
+  document is added, and the server only ever sees pictures). Old .doc files aren't supported.
   Boards have names instead of codes: the start page makes one by name and lists every board (people in it now
   first), each with Open and Copy link. A board's link is `board/?b=<name-as-slug>` (e.g. `?b=biology-revision`),
   and the open board's panel shows it with a Copy button. Boards are kept for good; only the person who made one
@@ -67,7 +71,7 @@ those come back).
     only go to their owner until a showdown.
   - `games/canasta.py`: Canasta rules: melds, wild cards, the frozen pile, red and black 3s, going out and scoring.
   - `games/board.py`: ACE Board. Keeps every item, lets people change only their own (the leader can delete
-    anyone's), and caps picture sizes (700 KB each, 15 MB a board). Changes go out as live messages; the whole board
+    anyone's), and caps picture sizes (700 KB each, 150 pictures and 30 MB a board). Changes go out as live messages; the whole board
     is only sent to a tab that doesn't have it yet. A board's room name is `b:<slug>` (picked by the game through
     `room_key()`, which `server.py` asks for instead of making a 4-letter code). Boards are saved to
     `server/saved/boards/<slug>.json` (not in git; line 1 is a summary, line 2 the board) a few seconds after each

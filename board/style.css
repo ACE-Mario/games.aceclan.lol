@@ -185,3 +185,6 @@ body.on-board .sitebar, body.on-board .site-foot { display: none; }
 .board-title { overflow-wrap: anywhere; }
 .link-row { display: flex; gap: 6px; }
 .link-row input { flex: 1; min-width: 0; font-size: .85rem; padding: 7px 8px; }
+
+/* Word documents are laid out here, out of sight, while their pages are turned into pictures. */
+.bd-docx-render { position: fixed; left: -20000px; top: 0; background: #fff; color: #000; }

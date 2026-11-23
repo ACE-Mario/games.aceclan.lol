@@ -13,7 +13,7 @@
   "use strict";
   const $ = id => document.getElementById(id);
   const FX = window.AceFX;
-  const LIM = { items: 1500, text: 3000, images: 60, image: 700000, imageTotal: 15000000, stroke: 6000, chunk: 400 };
+  const LIM = { items: 1500, text: 3000, images: 150, image: 700000, imageTotal: 30000000, stroke: 6000, chunk: 400 };
   const INK = ["#1f2328", "#e5484d", "#f76b15", "#d6a100", "#2f9e44", "#12a594", "#3e63dd", "#8e4ec6", "#d6409f", "#ffffff"];
   const HL = ["#ffe14d", "#7ee787", "#ff8ccf", "#79c0ff", "#ffa657"];
   const NOTES = ["#fff3a3", "#ffd6a5", "#ffc6d9", "#d7c6ff", "#bde0fe", "#c8f7c5", "#ffffff"];
@@ -1140,15 +1140,16 @@
       img.src = url;
     });
   }
-  function encode(img, scale) {
-    const w = Math.max(1, Math.round(img.naturalWidth * scale)), h = Math.max(1, Math.round(img.naturalHeight * scale));
+  function encode(img, scale, q = 0.82) {            // img: a picture or a canvas
+    const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+    const w = Math.max(1, Math.round(W * scale)), h = Math.max(1, Math.round(H * scale));
     const c = document.createElement("canvas");
     c.width = w; c.height = h;
     const g = c.getContext("2d");
     const webp = c.toDataURL("image/webp", 0.8).startsWith("data:image/webp");
     if (!webp) { g.fillStyle = "#ffffff"; g.fillRect(0, 0, w, h); }        // jpeg has no see-through
     g.drawImage(img, 0, 0, w, h);
-    return webp ? c.toDataURL("image/webp", 0.82) : c.toDataURL("image/jpeg", 0.82);
+    return webp ? c.toDataURL("image/webp", q) : c.toDataURL("image/jpeg", q);
   }
   async function addImageFile(file, at) {
     if (!file || !/^image\//.test(file.type)) return;
@@ -1177,6 +1178,179 @@
     setSel([d.id]);
   }
 
+  // ---- Documents: each page of a PDF or Word file becomes a picture everyone can write on ------
+  // Done in the browser, so the server only ever sees pictures. The libraries load the first time.
+  const DOC_MAX_PAGES = 30;
+  const DOC_PAGE_PX = 1100;          // pages are drawn this many pixels wide (sharp enough to read when zoomed in)
+  const DOC_SHOW_W = 600;            // how wide a page is on the board at 100% zoom
+  const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+  const LIBS = {
+    pdf: [PDFJS + "pdf.min.js"],
+    docx: ["https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
+           "https://cdn.jsdelivr.net/npm/docx-preview@0.3.3/dist/docx-preview.min.js",
+           "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"],
+  };
+  const scripts = {};
+  function loadScript(src) {
+    return scripts[src] || (scripts[src] = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = () => { delete scripts[src]; s.remove(); reject(new Error("couldn't load " + src)); };
+      document.head.append(s);
+    }));
+  }
+  async function loadLibs(kind) { for (const src of LIBS[kind]) await loadScript(src); }
+  function docKind(f) {
+    if (!f) return null;
+    if (f.type === "application/pdf" || /\.pdf$/i.test(f.name)) return "pdf";
+    if (/officedocument\.wordprocessingml/.test(f.type) || /\.docx$/i.test(f.name)) return "docx";
+    if (f.type === "application/msword" || /\.doc$/i.test(f.name)) return "doc";
+    return null;
+  }
+  const isAddable = f => f && (/^image\//.test(f.type) || docKind(f));
+  function addFile(file, at) {
+    if (docKind(file)) addDocFile(file, at);
+    else addImageFile(file, at);
+  }
+
+  async function pdfPages(file, onPage) {
+    await loadLibs("pdf");
+    pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + "pdf.worker.min.js";
+    const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+    try {
+      const n = Math.min(pdf.numPages, DOC_MAX_PAGES);
+      for (let i = 1; i <= n; i++) {
+        const page = await pdf.getPage(i);
+        const vp = page.getViewport({ scale: DOC_PAGE_PX / page.getViewport({ scale: 1 }).width });
+        const c = document.createElement("canvas");
+        c.width = Math.round(vp.width);
+        c.height = Math.round(vp.height);
+        const g = c.getContext("2d");
+        g.fillStyle = "#ffffff";
+        g.fillRect(0, 0, c.width, c.height);
+        await page.render({ canvasContext: g, viewport: vp, intent: "print" }).promise;   // "print": keeps going in a background tab
+        page.cleanup();
+        if (!await onPage(c, i, n)) break;
+      }
+      return pdf.numPages;
+    } finally {
+      pdf.destroy();
+    }
+  }
+
+  function blankPage(c) {                              // nothing but white (a page break can leave one)
+    const s = document.createElement("canvas");
+    s.width = 60; s.height = 85;
+    const g = s.getContext("2d");
+    g.drawImage(c, 0, 0, s.width, s.height);
+    const px = g.getImageData(0, 0, s.width, s.height).data;
+    for (let i = 0; i < px.length; i += 4) if (px[i] < 235 || px[i + 1] < 235 || px[i + 2] < 235) return false;
+    return true;
+  }
+  async function docxPages(file, onPage) {
+    await loadLibs("docx");
+    const box = document.createElement("div");
+    box.className = "bd-docx-render";
+    document.body.append(box);
+    try {
+      await docx.renderAsync(await file.arrayBuffer(), box, null,
+        { inWrapper: false, breakPages: true, ignoreLastRenderedPageBreak: false, experimental: true });
+      await document.fonts.ready;
+      const sections = [...box.querySelectorAll("section.docx")];
+      let made = 0, total = 0;
+      const shots = [];
+      for (const sec of sections) {
+        const c = await html2canvas(sec, { backgroundColor: "#ffffff", scale: DOC_PAGE_PX / Math.max(1, sec.offsetWidth),
+                                          logging: false, windowWidth: sec.scrollWidth + 40 });
+        // A part of the document with no page breaks in it can be very long: cut it into A4-shaped pages.
+        const pageH = Math.round(c.width * 1.414);
+        for (let y = 0; y < c.height; y += pageH) {
+          const h = Math.min(pageH, c.height - y);
+          if (y && h < 60) break;
+          shots.push([c, y, h]);
+        }
+        total = shots.length;
+        if (total >= DOC_MAX_PAGES) break;
+      }
+      const n = Math.min(total, DOC_MAX_PAGES);
+      const pages = [];
+      for (const [c, y, h] of shots.slice(0, n)) {
+        const p = document.createElement("canvas");
+        p.width = c.width;
+        p.height = h;
+        p.getContext("2d").drawImage(c, 0, y, c.width, h, 0, 0, c.width, h);
+        if (!blankPage(p)) pages.push(p);
+      }
+      total -= n - pages.length;
+      for (const p of pages) if (!await onPage(p, ++made, pages.length)) break;
+      return total;
+    } finally {
+      box.remove();
+    }
+  }
+
+  let docBusy = false;
+  async function addDocFile(file, at) {
+    const kind = docKind(file);
+    if (kind === "doc") return note("Old .doc files can't be read. Open it in Word and save it as .docx or PDF, then add that.");
+    if (docBusy) return note("Still adding the last document. Try again when it's done.");
+    if (file.size > 60e6) return note("That document is too big to add.");
+    if (!roomFor("image")) return;
+    docBusy = true;
+    note("Opening the document…");
+    // Pages show about 600 px wide on screen (less on a phone), whatever the zoom.
+    const w = Math.round(Math.max(100, Math.min(4000, Math.min(DOC_SHOW_W, viewport.clientWidth * 0.85) / cam.z)));
+    const x = Math.round(at.x - w / 2);
+    let y = Math.round(at.y - viewport.clientHeight * 0.35 / cam.z);
+    const added = [], ids = [];
+    // The file name goes above the first page, so everyone knows what it is.
+    if (roomFor("text")) {
+      const label = { id: newId(), kind: "text", x, y, text: file.name.slice(0, 120), c: ink, s: 24 };
+      addItem(label);
+      added.push({ t: "add", d: { ...label } });
+      ids.push(label.id);
+      y += 44;
+    }
+    let total = 0, full = false;
+    const onPage = (c, i, n) => {
+      note(`Adding page ${i} of ${n}…`);
+      let scale = 1, src = encode(c, scale, 0.75);
+      while (src.length > LIM.image - 1000 && scale > 0.2) {
+        scale *= 0.8;
+        src = encode(c, scale, 0.75);
+      }
+      if (src.length > LIM.image || !roomFor("image", src.length)) { full = true; return false; }
+      const h = Math.round(w * c.height / c.width);
+      const d = { id: newId(), kind: "image", x, y, w, h, src };
+      addItem(d);
+      added.push({ t: "add", d: { ...d } });
+      ids.push(d.id);
+      y += h + 24;
+      return new Promise(r => setTimeout(() => r(true), 30));      // let the page breathe between pages
+    };
+    try {
+      total = kind === "pdf" ? await pdfPages(file, onPage) : await docxPages(file, onPage);
+      const pages = added.filter(a => a.d.kind === "image").length;
+      if (!pages) note(full ? "There's no room left for pictures on this board. Delete some first." : "That document has no pages to show.");
+      else if (full) note(`Added ${pages} page${pages === 1 ? "" : "s"}, then the board ran out of room for pictures.`);
+      else if (total > pages) note(`Added the first ${pages} pages (of ${total}). A board takes ${DOC_MAX_PAGES} pages of one document at a time.`);
+      else note(`Added ${pages} page${pages === 1 ? "" : "s"}. Everyone can write and draw on ${pages === 1 ? "it" : "them"}.`);
+    } catch (e) {
+      console.warn(e);
+      note(/couldn't load/.test(e.message) ? "Couldn't load the document reader. Check your internet and try again."
+        : /password/i.test(e.message || e.name) ? "That PDF has a password, so it can't be added."
+        : "That document couldn't be read.");
+    } finally {
+      docBusy = false;
+    }
+    if (added.length) {
+      record(added.length === 1 ? added[0] : { t: "many", list: added });
+      setTool("select");
+      setSel(ids);
+    }
+  }
+
   const typing = e => e.target.closest && e.target.closest("input, textarea, select, [contenteditable='true']");
   document.addEventListener("copy", e => {
     if (!state || $("gameView").hidden || editing || typing(e) || getSelection().toString()) return;
@@ -1195,7 +1369,7 @@
   });
   document.addEventListener("paste", e => {
     if (!state || $("gameView").hidden) return;
-    const files = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith("image/"));
+    const files = [...(e.clipboardData?.files || [])].filter(isAddable);
     if (editing) {
       e.preventDefault();               // paste into a text box as plain text
       const text = e.clipboardData.getData("text/plain");
@@ -1213,7 +1387,7 @@
     if (files.length) {
       e.preventDefault();
       const c = viewCentre();
-      files.forEach((f, i) => addImageFile(f, { x: c.x + i * 40, y: c.y + i * 40 }));
+      files.forEach((f, i) => addFile(f, { x: c.x + i * 40, y: c.y + i * 40 }));
       return;
     }
     if (text && text.trim() && !text.startsWith(CLIP_MARK) && roomFor("text")) {
@@ -1239,14 +1413,14 @@
     dragDepth = 0;
     $("dropHint").hidden = true;
     const at = toBoard(e);
-    [...e.dataTransfer.files].filter(f => f.type.startsWith("image/"))
-      .forEach((f, i) => addImageFile(f, { x: at.x + i * 40, y: at.y + i * 40 }));
+    [...e.dataTransfer.files].filter(isAddable)
+      .forEach((f, i) => addFile(f, { x: at.x + i * 40, y: at.y + i * 40 }));
   });
   $("addImage").addEventListener("click", () => $("imageFile").click());
   $("imageFile").addEventListener("change", () => {
     const f = $("imageFile").files[0];
     $("imageFile").value = "";
-    if (f) addImageFile(f, viewCentre());
+    if (f) addFile(f, viewCentre());
   });
 
   // ---- Download the board as a picture -------------------------------------------------------
