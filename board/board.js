@@ -13,7 +13,7 @@
   "use strict";
   const $ = id => document.getElementById(id);
   const FX = window.AceFX;
-  const LIM = { items: 1500, text: 3000, images: 150, image: 700000, imageTotal: 30000000, stroke: 6000, chunk: 400 };
+  const LIM = { text: 3000, image: 700000, imageTotal: 30000000, stroke: 6000, chunk: 400 };
   const INK = ["#1f2328", "#e5484d", "#f76b15", "#d6a100", "#2f9e44", "#12a594", "#3e63dd", "#8e4ec6", "#d6409f", "#ffffff"];
   const HL = ["#ffe14d", "#7ee787", "#ff8ccf", "#79c0ff", "#ffa657"];
   const NOTES = ["#fff3a3", "#ffd6a5", "#ffc6d9", "#d7c6ff", "#bde0fe", "#c8f7c5", "#ffffff"];
@@ -633,10 +633,8 @@
 
   // ---- Limits (the server checks them too; checking here gives a clear message) -------------
   function roomFor(kind, chars = 0) {
-    if (items.size >= LIM.items) { note("The board is full. Clear some things first."); return false; }
     if (kind === "image") {
       const pics = [...items.values()].filter(i => i.d.kind === "image");
-      if (pics.length >= LIM.images) { note(`The board holds ${LIM.images} pictures at most. Delete some first.`); return false; }
       const total = pics.reduce((n, i) => n + i.d.src.length, 0);
       if (total + chars > LIM.imageTotal) { note("There are too many big pictures on this board. Delete some first."); return false; }
     }

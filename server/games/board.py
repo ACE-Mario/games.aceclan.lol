@@ -28,13 +28,10 @@ import time
 
 FAR = 1_000_000                   # the board has no edges; this only keeps numbers sensible
 BIG = 8000                        # widest or tallest a picture or shape can be made
-MAX_ITEMS = 1500
 MAX_TEXT = 3000                   # characters in one text box or sticky note
-MAX_IMAGES = 150                  # pictures, counting each page of an added document
 MAX_IMAGE_CHARS = 700_000         # one picture, as a data: URL (the page shrinks pictures before sending)
 MAX_IMAGE_TOTAL = 30_000_000      # all the pictures on one board together
 MAX_STROKE = 6000                 # numbers in one pen line (x, y, x, y, ...)
-MAX_INK = 400_000                 # numbers in every pen line on the board together
 MAX_CHUNK = 400                   # numbers in one live piece of a line
 TEXT_SIZES = (14, 18, 20, 24, 36, 56, 80)
 SHAPES = ("rect", "ellipse", "line", "arrow")
@@ -329,7 +326,7 @@ class Board:
         if not isinstance(d, dict):
             return None
         iid = str(d.get("id", ""))
-        if not ITEM_ID.match(iid) or iid in s["items"] or len(s["items"]) >= MAX_ITEMS:
+        if not ITEM_ID.match(iid) or iid in s["items"]:
             return None
         kind = d.get("kind")
         x, y = num(d.get("x"), -FAR, FAR), num(d.get("y"), -FAR, FAR)
@@ -350,15 +347,13 @@ class Board:
             w, h = num(d.get("w"), 16, BIG), num(d.get("h"), 16, BIG)
             if w is None or h is None or len(src) > MAX_IMAGE_CHARS or not IMAGE.match(src):
                 return None
-            if sum(1 for i in s["items"].values() if i["kind"] == "image") >= MAX_IMAGES:
-                return None
             if self._image_chars(s) + len(src) > MAX_IMAGE_TOTAL:
                 return None
             return {**base, "w": w, "h": h, "src": src}
         if kind == "pen":                             # x, y is how far the line has been moved
             p = points(d.get("p"))
             w = num(d.get("w"), 1, 80)
-            if not p or w is None or s["ink"] + len(p) > MAX_INK:
+            if not p or w is None:
                 return None
             s["ink"] += len(p)
             item = {**base, "c": colour(d.get("c")), "w": w, "p": p}
@@ -405,7 +400,7 @@ class Board:
         out = None
         if kind == "pts":
             p = points(data.get("p"))
-            if it["kind"] != "pen" or not p or len(it["p"]) + len(p) > MAX_STROKE or s["ink"] + len(p) > MAX_INK:
+            if it["kind"] != "pen" or not p or len(it["p"]) + len(p) > MAX_STROKE:
                 return None
             it["p"] += p
             s["ink"] += len(p)
@@ -463,7 +458,7 @@ class Board:
             "authors": {p: s["names"].get(p) or "Someone" for p in {i["by"] for i in s["items"].values()}
                         if p not in room.players},
             "log": s["log"][-12:],
-            "limits": {"items": MAX_ITEMS, "text": MAX_TEXT, "images": MAX_IMAGES, "image": MAX_IMAGE_CHARS,
+            "limits": {"text": MAX_TEXT, "image": MAX_IMAGE_CHARS,
                        "imageTotal": MAX_IMAGE_TOTAL, "stroke": MAX_STROKE, "chunk": MAX_CHUNK},
         }
         if full:

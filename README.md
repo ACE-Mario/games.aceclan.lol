@@ -71,7 +71,7 @@ those come back).
     only go to their owner until a showdown.
   - `games/canasta.py`: Canasta rules: melds, wild cards, the frozen pile, red and black 3s, going out and scoring.
   - `games/board.py`: ACE Board. Keeps every item, lets people change only their own (the leader can delete
-    anyone's), and caps picture sizes (700 KB each, 150 pictures and 30 MB a board). Changes go out as live messages; the whole board
+    anyone's), and caps picture sizes (700 KB each, 30 MB of pictures a board; there's no limit on how many things a board holds). Changes go out as live messages; the whole board
     is only sent to a tab that doesn't have it yet. A board's room name is `b:<slug>` (picked by the game through
     `room_key()`, which `server.py` asks for instead of making a 4-letter code). Boards are saved to
     `server/saved/boards/<slug>.json` (not in git; line 1 is a summary, line 2 the board) a few seconds after each
