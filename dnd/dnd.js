@@ -73,7 +73,7 @@
   const cam = { x: -1, y: -1, z: 48 };
   let tool = "select", sel = null;
   // The DM's main tabs: each shows its own tools. Players only ever have Play.
-  const MODES = [["play", "Play"], ["map", "Map making"], ["script", "Scripting"], ["tokens", "Tokens"]];
+  const MODES = [["play", "DM play"], ["map", "Map making"], ["script", "Scripting"], ["tokens", "Tokens"]];
   const MODE_TOOL = { play: "select", map: "build", script: "script", tokens: "lib" };             // what a tab starts on
   const TOOL_MODE = { fog: "map", walls: "map", build: "map", script: "script", lib: "tokens" };   // select is in every tab, the rest are Play
   const TRIG = "#f59f00";
@@ -142,14 +142,16 @@
     clearTimeout(noteTimer);
     if (msg) noteTimer = setTimeout(() => { n.hidden = true; }, 5000);
   }
-  function action(type, extra = {}) {
+  function action(type, extra = {}, failed = null) {
     if (!socket) return;
-    socket.timeout(15000).emit("action", { type, ...extra }, (err, res) => {
+    socket.timeout(15000).emit("action", asFake(type, { type, ...extra }), (err, res) => {
       if (err) note("The server didn't answer. Check your connection and try again.");
-      else if (res && res.error) note(res.error);
+      else if (res && res.error) { note(res.error); if (failed) failed(); }
     });
   }
-  const live = msg => socket && socket.emit("live", msg);
+  // A DM playing as a pretend player sends everything as them (except what's about the pretend players).
+  const asFake = (type, msg) => (S && S.playAs && !["fake_add", "fake_del", "play_as", "rename"].includes(type) ? { ...msg, as: S.playAs } : msg);
+  const live = msg => socket && socket.emit("live", asFake("live", msg));
   function throttle(fn, ms) {
     let last = 0, timer = 0, args = null;
     return (...a) => {
@@ -351,7 +353,7 @@
     const was = new Map();
     for (const sc of old.scenes) for (const t of sc.tokens) was.set(t.id, `${sc.id}:${Math.floor(t.x)},${Math.floor(t.y)}`);
     for (const sc of s.scenes) {
-      const traps = (sc.props || []).filter(pr => pr.k === "trap");
+      const traps = (sc.props || []).filter(pr => pr.k === "trap" && !pr.off);
       if (!traps.length) continue;
       for (const t of sc.tokens) {
         if (!(t.owner || t.char) || was.get(t.id) === `${sc.id}:${Math.floor(t.x)},${Math.floor(t.y)}`) continue;
@@ -368,16 +370,26 @@
   }
   function onState(s) {
     const old = S;
-    if (!asPlayer) trapCheck(old, s);
+    trapCheck(old, s);
+    const switched = !!old && (old.playAs || null) !== (s.playAs || null);     // into or out of a pretend player
+    if (switched) popSeen = -1;
     S = s;
     showPops(s);
-    me = s.you;
+    me = s.playAs || s.you;
     if (s.camp) slug = s.camp.slug;
     if (s.deleted) { leave && leave("That campaign was deleted."); return; }
     Object.assign(LIM, s.limits || {});
     if (!s.dm) asPlayer = false;
     document.body.classList.toggle("is-dm", isDm());
-    document.body.classList.toggle("real-dm", !!s.dm);
+    document.body.classList.toggle("real-dm", !!(s.dm || s.playAs));
+    document.body.classList.toggle("as-player", asPlayer || !!s.playAs);
+    if (switched) {
+      if (act) cancelAct();
+      wallPts = null;
+      selectToken(null);
+      if (s.playAs) { setMode("play"); setTab("room"); note(`You're playing as ${s.names[s.playAs]}: you see and do just what they would. Click Back to DM view when you're done.`); }
+      else setTab("scenes");
+    }
     showMode();
     if (!isDm() && TOOL_MODE[tool]) setTool("select");
     document.title = `${s.camp.name} · ACE Tabletop`;
@@ -391,7 +403,7 @@
     for (const id of [...picked]) if (!tokenById(id)) picked.delete(id);
     if (sel && !picked.has(sel)) sel = [...picked].pop() || null;
     if (firstState && !EXTRAS) { setTab(s.dm ? "scenes" : "room"); if (!s.dm) setPanel(false); }
-    if (firstState || (moved && viewSc === s.active)) { fitView(); firstState = false; }
+    if (firstState || switched || (moved && viewSc === s.active)) { fitView(); firstState = false; }
     renderAll(old);
   }
   function renderAll(old) {
@@ -411,6 +423,7 @@
     renderNotes();
     renderScenes();
     renderRoom();
+    showAsBtn();
     renderStats();
     renderCard();
     refreshSheet();
@@ -506,8 +519,9 @@
     if (drawn) {
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(tileLayer(sc, T, wallsOf(sc), !!img), 0, 0, sc.cols, sc.rows);
-      for (const pr of sc.props || []) paintProp(ctx, pr);
     }
+    for (const pr of sc.props || []) if (!pr.hidden) paintProp(ctx, pr, pr.off ? 0.4 : 0);     // a disarmed trap is faint
+    if (isDm()) for (const pr of sc.props || []) if (pr.hidden) paintHiddenProp(pr);
     if (cam.z > 12) for (const pr of sc.props || []) {          // where stairs lead
       const to = isDm() ? pr.to && (S.scenes.find(x => x.id === pr.to) || {}).name : pr.go;
       if (to) tag(`→ ${to}`, pr.x + 0.5, pr.y + 1 + px(8), isDm() && !pr.open ? "#adb5bd" : "#ffd43b", px, 10);
@@ -695,15 +709,24 @@
     };
     const out = {
       ...sc, tokens, tiles,
-      props: (sc.props || []).filter(pr => clear(pr.x, pr.y) && pr.k !== "trap").map(pr => {
+      props: (sc.props || []).filter(pr => clear(pr.x, pr.y) && (pr.k !== "trap" || pr.found) && !pr.hidden).map(pr => {
         const go = pr.open && S.scenes.find(x => x.id === pr.to);
-        return { id: pr.id, k: pr.k, x: pr.x, y: pr.y, r: pr.r, ...(go ? { go: go.name } : {}) };
+        return { id: pr.id, k: pr.k, x: pr.x, y: pr.y, r: pr.r, ...(go ? { go: go.name } : {}), ...(pr.off ? { off: true } : {}) };
       }),
       labels: (sc.labels || []).filter(lb => !lb.dm && clear(lb.x, lb.y)),
-      walls: (sc.walls || []).filter(w => w.door && !w.secret && doorSeen(w)).map(w => ({ id: w.id, p: w.p, door: true, open: !!w.open })),
+      walls: (sc.walls || []).filter(w => w.door && !w.secret && doorSeen(w)).map(w => ({ id: w.id, p: w.p, door: true, open: !!w.open, ...(w.locked && w.showlock ? { locked: true } : {}) })),
     };
     pvMemo = { src: sc, seen: sc.seen, out };
     return out;
+  }
+  function showAsBtn() {
+    const on = asPlayer || !!(S && S.playAs);
+    $("asPlayerBtn").textContent = S && S.playAs ? `Back to DM view (playing as ${S.names[S.playAs] || "someone"})` : on ? "Back to DM view" : "View as player";
+    $("asPlayerBtn").classList.toggle("primary", on);
+  }
+  function makeFake() {
+    const name = prompt("Name for the pretend player (you'll play as them to try things out)", `Pretend player ${Object.keys(S.fakes || {}).length + 1}`);
+    if (name !== null) action("fake_add", { name: name.trim() });
   }
   function setAsPlayer(on) {
     if (on && !(S && S.dm)) return;
@@ -721,8 +744,7 @@
       note("This is what your players see. Click Back to DM view when you're done.");
     } else setTab("scenes");
     showMode();
-    $("asPlayerBtn").textContent = on ? "Back to DM view" : "View as player";
-    $("asPlayerBtn").classList.toggle("primary", on);
+    showAsBtn();
     renderAll();
     renderToolOpts();
     redraw();
@@ -754,10 +776,16 @@
         ctx.textBaseline = "middle";
         ctx.fillText("S", L / 2, th * 0.05);
       }
-      if (w.locked && dm) {                       // a little padlock for the DM
+      if (w.locked) {                             // a padlock: players only get locked doors the DM shows them
+        const r = th * 0.28, shown = !dm || w.showlock;
         ctx.beginPath();
-        ctx.arc(L / 2, 0, th * 0.28, 0, Math.PI * 2);
-        ctx.fillStyle = "#e03131";
+        ctx.arc(L / 2, -r * 0.7, r * 0.75, Math.PI, 0);
+        ctx.strokeStyle = shown ? "#f2c94c" : "#e03131";
+        ctx.lineWidth = lw * 0.9;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.rect(L / 2 - r, -r * 0.7, r * 2, r * 1.6);
+        ctx.fillStyle = shown ? "#f2c94c" : "#e03131";
         ctx.fill();
       }
     } else {
@@ -973,6 +1001,16 @@
   }
 
   // props are drawn in ink too, a square each
+  function paintHiddenProp(pr) {            // only the DM sees these: faint, in a dashed box
+    const px = n => n / cam.z;
+    paintProp(ctx, pr, 0.5);
+    ctx.save();
+    ctx.lineWidth = px(1.5);
+    ctx.setLineDash([px(4), px(3)]);
+    ctx.strokeStyle = "#da77f2";
+    ctx.strokeRect(pr.x + 0.06, pr.y + 0.06, 0.88, 0.88);
+    ctx.restore();
+  }
   function paintProp(g, pr, alpha) {
     g.save();
     g.translate(pr.x + 0.5, pr.y + 0.5);
@@ -1099,7 +1137,8 @@
     }
     if (!hover || act) return;
     const c = cellAt(hover);
-    if (build.mode === "prop") return paintProp(ctx, { k: build.prop, x: c.x, y: c.y, r: build.rot }, 0.55);
+    if (build.mode === "prop") return build.hidden ? paintHiddenProp({ k: build.prop, x: c.x, y: c.y, r: build.rot })
+      : paintProp(ctx, { k: build.prop, x: c.x, y: c.y, r: build.rot }, 0.55);
     if (build.mode === "label") return;
     const n = build.mode === "brush" || build.mode === "erase" ? build.brush : 1, o = Math.floor(n / 2);
     ctx.strokeStyle = build.mode === "erase" ? "#ff6b6b" : "#7048e8";
@@ -1366,9 +1405,9 @@
     if (tool === "build") renderToolOpts();
     note((redo ? "Redone: " : "Undone: ") + step.what);
   }
-  const propSnap = pr => ({ k: pr.k, x: pr.x, y: pr.y, r: pr.r || 0 });
+  const propSnap = pr => ({ k: pr.k, x: pr.x, y: pr.y, r: pr.r || 0, hidden: !!pr.hidden });
   function addProp(pr) { action("prop_add", { sc: viewSc, ...propSnap(pr) }); }
-  function delPropAt(pr) { const q = (scene().props || []).find(x => x.x === pr.x && x.y === pr.y && x.k === pr.k); if (q) action("prop_del", { sc: viewSc, id: q.id }); }
+  function delPropAt(pr) { const q = (scene().props || []).find(x => x.x === pr.x && x.y === pr.y && x.k === pr.k && !!x.hidden === !!pr.hidden); if (q) action("prop_del", { sc: viewSc, id: q.id }); }
   function addLabel(lb) { action("label_add", { sc: viewSc, x: lb.x, y: lb.y, text: lb.text, dm: lb.dm }); }
   function delLabelAt(lb) { const q = (scene().labels || []).find(x => x.x === lb.x && x.y === lb.y && x.text === lb.text); if (q) action("label_del", { sc: viewSc, id: q.id }); }
   function setMap(sc, payload, what) {
@@ -1411,7 +1450,8 @@
     }
     redraw();
   }
-  const propAt = c => (scene().props || []).find(pr => pr.x === c.x && pr.y === c.y);
+  const propsAt = c => (scene().props || []).filter(pr => pr.x === c.x && pr.y === c.y).sort((a, b) => !!a.hidden - !!b.hidden);
+  const propAt = c => propsAt(c)[0];
   function labelAt(p) {
     let best = null, bd = 0.8;
     for (const lb of scene().labels || []) {
@@ -1428,6 +1468,7 @@
   function pickAt(p) {
     const tok = tokenAt(p);
     if (tok) return openTokenForm({ copy: tok });
+    if (mode === "play") return note("Picking floors and props is for Map making.");
     const sc = scene(), c = cellAt(p);
     if (!inScene(sc, c.x, c.y)) return;
     const pr = propAt(c);
@@ -1473,6 +1514,20 @@
       const pr = propAt(c);
       if (pr) openLinkForm(pr);
       else note("Click stairs (or any prop) to choose where it leads.");
+      return;
+    }
+    if (build.mode === "prop" && build.hidden && !rub) {      // hidden: goes under whatever is there
+      const pr = propsAt(c).find(x => x.hidden);
+      if (pr) {
+        const was = propSnap(pr);
+        remember({ what: "taking a hidden prop away", undo: () => addProp(was), redo: () => delPropAt(was) });
+        action("prop_del", { sc: sc.id, id: pr.id });
+      } else {
+        const now = { k: build.prop, x: c.x, y: c.y, r: build.rot, hidden: true };
+        remember({ what: "hiding a prop", undo: () => delPropAt(now), redo: () => addProp(now) });
+        addProp(now);
+        if (propAt(c)) note("Hidden under it. When it's revealed, what's on top gets pushed aside.");
+      }
       return;
     }
     if (build.mode === "prop") {
@@ -1758,6 +1813,101 @@
     return { tiles: T.join(""), wl: "1".repeat(T.length), props, locked };
   }
 
+  // ---- The DM's right-click menu: what's on that square and what you can do with it ---------------
+  function closeMenu() { const m = $("ctxMenu"); if (m) m.remove(); }
+  function openMenu(mx, my, p) {
+    closeMenu();
+    const sc = scene();
+    if (!sc || !isDm()) return;
+    const c = cellAt(p), on = inScene(sc, c.x, c.y), groups = [], play = mode === "play";   // DM play: nothing that reshapes the map
+    const group = title => { const g = { title, items: [] }; groups.push(g); return (txt, fn, cls) => g.items.push({ txt, fn, cls }); };
+    const t = tokenAt(p);
+    if (t) {
+      const add = group(t.name);
+      add("Open its card", () => selectToken(t.id));
+      add(t.hidden ? "Show to players" : "Hide from players", () => action("tok_edit", { sc: sc.id, id: t.id, set: { hidden: !t.hidden } }));
+      add("Bring to front", () => action("tok_front", { sc: sc.id, id: t.id }));
+      add("Trigger: when a player sees it", () => openTrigForm({ tok: t.id }));
+      add("Delete", () => { if (confirm(`Delete ${t.name}?`)) action("tok_del", { sc: sc.id, id: t.id }); }, "danger");
+    }
+    const door = wallAt(p, true, 0.35);
+    if (door) {
+      const T = tilesOf(rawScene()), dc = door.tile ? door.tile.split(",").map(Number) : null;
+      const add = group(door.secret ? "Secret door" : "Door");
+      add(door.open ? "Shut it" : "Open it", () => action("door", { sc: sc.id, id: door.id }));
+      add(door.locked ? "Unlock it" : "Lock it", () => action("door_lock", { sc: sc.id, id: door.id }));
+      if (door.locked) add(door.showlock ? "Hide the padlock from players" : "Show players it's locked", () => action("door_showlock", { sc: sc.id, id: door.id }));
+      if (dc && door.secret) add("They found it (players see a door now)", () => sendTiles([[dc[0], dc[1], "D"]], !play));
+      if (!play) {
+        if (dc && !door.secret) add("Make it a secret door", () => sendTiles([[dc[0], dc[1], "S"]]));
+        if (dc) add("Take the door away", () => sendTiles([[dc[0], dc[1], doorFloor(sc, T, { x: dc[0], y: dc[1] })]]), "danger");
+        else add("Take the door away", () => action("wall_del", { sc: sc.id, id: door.id }), "danger");
+      }
+    }
+    for (const pr of on ? propsAt(c) : []) {
+      const name = (PROP_INFO.find(x => x[0] === pr.k) || [0, pr.k])[1].replace(" (DM)", ""), to = pr.to && S.scenes.find(x => x.id === pr.to);
+      const add = group(name + (pr.hidden ? " (hidden)" : "") + (pr.k === "trap" ? (pr.off ? " (disarmed)" : " (armed)") : "") + (to ? ` → ${to.name}` : ""));
+      if (pr.k === "trap") {
+        add("Set it off…", () => {
+          const text = prompt("What happens? (the player on it sees this)", "Click! You set off a trap.");
+          if (text !== null) action("trap_fire", { sc: sc.id, id: pr.id, text });
+        });
+        add(pr.off ? "Re-arm it" : "Disarm it", () => action("prop_edit", { sc: sc.id, id: pr.id, off: !pr.off }));
+        add(pr.found ? "Hide it from players again" : "Show players where it is", () => action("prop_edit", { sc: sc.id, id: pr.id, found: !pr.found }));
+      } else add(pr.hidden ? "Reveal it to players" : "Hide it from players", () => action("prop_edit", { sc: sc.id, id: pr.id, hidden: !pr.hidden }));
+      add("Turn it", () => action("prop_edit", { sc: sc.id, id: pr.id, r: ((pr.r || 0) + 1) % 4 }));
+      if (pr.k !== "trap" || to) add(to ? "Change where it leads" : "Make it lead to another scene", () => openLinkForm(pr));
+      if (to) add(`Take the party to ${to.name}`, () => { if (confirm(`Take the party to "${to.name}"? Everyone's tokens on this map go with them.`)) action("link_go", { sc: sc.id, id: pr.id }); });
+      if (pr.hidden) add("Trigger: reveal it when a player steps here", () => openTrigForm({ x: c.x, y: c.y, w: 1, h: 1, do: "reveal", when: "enter", name: `Find the ${name.toLowerCase()}` }));
+      else if (pr.k !== "trap" && !propsAt(c).some(x => x.hidden)) add("Hide stairs under it", () => { addProp({ k: "stairs", x: c.x, y: c.y, r: 0, hidden: true }); note("Hidden stairs added. Right-click again to choose where they lead, or to add a trigger that finds them."); });
+      add("Delete", () => { const was = propSnap(pr); remember({ what: "taking a prop away", undo: () => addProp(was), redo: () => delPropAt(was) }); action("prop_del", { sc: sc.id, id: pr.id }); }, "danger");
+    }
+    const lb = labelAt(p);
+    if (lb) {
+      const add = group(`Label: ${lb.text}`);
+      add("Change the words", () => { const text = prompt("Label", lb.text); if (text && text.trim()) action("label_edit", { sc: sc.id, id: lb.id, text: text.trim() }); });
+      add(lb.dm ? "Let players see it" : "Only for DMs", () => action("label_edit", { sc: sc.id, id: lb.id, dm: !lb.dm }));
+      add("Delete", () => action("label_del", { sc: sc.id, id: lb.id }), "danger");
+    }
+    for (const tr of on ? (sc.trig || []).filter(tr => !tr.tok && c.x >= tr.x && c.x < tr.x + tr.w && c.y >= tr.y && c.y < tr.y + tr.h) : []) {
+      const add = group(`⚡ ${tr.name}` + (tr.used ? " (gone off)" : ""));
+      if (tr.used) add("Set it again", () => action("trig_edit", { sc: sc.id, id: tr.id, trig: { who: tr.who, reset: true } }));
+      add("Edit the trigger", () => openTrigForm(tr));
+      add("Delete", () => action("trig_del", { sc: sc.id, id: tr.id }), "danger");
+    }
+    if (on && !propsAt(c).length) {
+      const add = group(`Square ${c.x + 1}, ${c.y + 1}`);
+      add("Hide stairs here", () => { addProp({ k: "stairs", x: c.x, y: c.y, r: 0, hidden: true }); note("Hidden stairs added. Right-click them to choose where they lead."); });
+      add("Trigger here", () => openTrigForm({ x: c.x, y: c.y, w: 1, h: 1 }));
+    }
+    if (!groups.length) return;
+    const m = document.createElement("div");
+    m.id = "ctxMenu";
+    m.className = "tt-menu";
+    m.setAttribute("role", "menu");
+    for (const g of groups) {
+      m.append(Object.assign(document.createElement("div"), { className: "tt-menu-head", textContent: g.title }));
+      for (const it of g.items) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.setAttribute("role", "menuitem");
+        b.className = it.cls || "";
+        b.textContent = it.txt;
+        b.addEventListener("click", () => { closeMenu(); it.fn(); redraw(); });
+        m.append(b);
+      }
+    }
+    document.body.append(m);
+    const r = m.getBoundingClientRect();
+    m.style.left = Math.max(8, Math.min(mx, innerWidth - r.width - 8)) + "px";
+    m.style.top = Math.max(8, Math.min(my, innerHeight - r.height - 8)) + "px";
+    m.querySelector("button").focus({ preventScroll: true });
+  }
+  document.addEventListener("pointerdown", e => { if (!e.target.closest("#ctxMenu")) closeMenu(); }, true);
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu(); });
+  addEventListener("blur", closeMenu);
+  viewport.addEventListener("wheel", closeMenu, { passive: true });
+
   function openLinkForm(pr) {
     const box = $("linkForm"), sc = scene();
     const others = S.scenes.filter(x => x.id !== sc.id);
@@ -1867,6 +2017,7 @@
     }
     if (pointers.size > 2) return;
     const p = worldPt(e), { sx, sy } = screenPt(e);
+    if (e.button === 2 && e.shiftKey && isDm()) { e.preventDefault(); openMenu(e.clientX, e.clientY, p); return; }   // the menu in any tool
     if (tool === "walls" && isDm() && e.button === 2) { finishWall(); return; }
     if (tool === "build" && isDm() && !spaceDown && !e.altKey && (e.button === 0 || e.button === 2)) { buildDown(e, p); return; }
     if (e.button === 1 && e.altKey && isDm()) { e.preventDefault(); pickAt(p); return; }     // like pick block
@@ -1883,7 +2034,10 @@
       if (e.button === 0) { placeFromLib(libArm, p); return; }
       if (e.button === 2) { libArm = null; renderToolOpts(); redraw(); return; }
     }
-    if (e.button === 1 || e.button === 2 || spaceDown) { act = { kind: "pan", sx, sy, cx: cam.x, cy: cam.y }; viewport.classList.add("panning"); e.preventDefault(); return; }
+    if (e.button === 1 || e.button === 2 || spaceDown) {
+      act = { kind: "pan", sx, sy, cx: cam.x, cy: cam.y, menu: e.button === 2 && isDm() && !spaceDown, p, mx: e.clientX, my: e.clientY };
+      viewport.classList.add("panning"); e.preventDefault(); return;
+    }
     if (e.button !== 0) return;
     if (e.altKey || tool === "ping") { ping(p); return; }
     if (tool === "ruler") {
@@ -1999,6 +2153,14 @@
     else if (act.kind === "paint") paintTileAt(p);
     else if (act.kind === "fogbox" || act.kind === "box" || act.kind === "room" || act.kind === "trig") { act.b = p; redraw(); }
   });
+  // Put tokens back where they were when the server won't have the move (a wall in the way, say).
+  function moveTokens(sc, moves) {
+    const was = moves.map(m => { const t = tokenById(m.id); return t && { t, x: t.x, y: t.y }; }).filter(Boolean);
+    const back = () => { for (const w of was) { w.t.x = w.x; w.t.y = w.y; } redraw(); };
+    for (const m of moves) { const t = tokenById(m.id); if (t) { t.x = m.x; t.y = m.y; } }
+    if (moves.length === 1) action("tok_move", { sc, id: moves[0].id, x: moves[0].x, y: moves[0].y }, back);
+    else action("tok_group", { sc, op: "move", moves }, back);
+  }
   function endPointer(e) {
     pointers.delete(e.pointerId);
     if (pinch) { if (pointers.size < 2) pinch = null; return; }
@@ -2006,14 +2168,14 @@
     const a = act;
     act = null;
     viewport.classList.remove("panning");
+    if (a.kind === "pan" && a.menu && a.click !== false) { openMenu(a.mx, a.my, a.p); return; }
     if (a.kind === "token") {
       if (a.moved) {
         // snap the token that was grabbed; the others keep their places around it
         const t = tokenById(a.id), s = snap(t, a.x, a.y), dx = s.x - a.ox, dy = s.y - a.oy;
         const moves = a.group.map(g => ({ id: g.id, x: g.ox + dx, y: g.oy + dy }));
-        for (const m of moves) { const x = tokenById(m.id); if (x) { x.x = m.x; x.y = m.y; } }
-        if (moves.length === 1) action("tok_move", { sc: viewSc, id: a.id, x: s.x, y: s.y });
-        else action("tok_group", { sc: viewSc, op: "move", moves });
+        if (moves.length === 1) { moves[0].x = s.x; moves[0].y = s.y; }
+        moveTokens(viewSc, moves);
       }
     } else if (a.kind === "box") {
       const x0 = Math.min(a.a.x, a.b.x), x1 = Math.max(a.a.x, a.b.x), y0 = Math.min(a.a.y, a.b.y), y1 = Math.max(a.a.y, a.b.y);
@@ -2088,13 +2250,18 @@
     if (typing() || !$("sheet").hidden || !$("tokenForm").hidden || !$("handout").hidden) return;
     if ((e.ctrlKey || e.metaKey) && isDm() && !act && /^[zy]$/i.test(e.key)) {
       e.preventDefault();
+      if (mode === "play") { note("Undo and redo work in Map making, so a stray Ctrl+Z can't change the map mid-game."); return; }
       undoRedo(e.key.toLowerCase() === "y" || e.shiftKey);
       return;
     }
     if (e.key === " ") { spaceDown = true; e.preventDefault(); return; }
     const keys = { v: "select", r: "ruler", d: "draw", e: "erase", g: "ping", f: "fog", w: "walls", b: "build", l: "lib", k: "script" };
     const k = e.key.toLowerCase();
-    if (keys[k] && !e.ctrlKey && !e.metaKey && (!"fwblk".includes(k) || isDm())) { setTool(keys[k]); return; }
+    if (keys[k] && !e.ctrlKey && !e.metaKey && (!"fwblk".includes(k) || isDm())) {
+      if (mode === "play" && TOOL_MODE[keys[k]]) { note("That's for Map making, Scripting or Tokens. Pick that tab at the top first."); return; }   // DM play: no stray map edits
+      setTool(keys[k]);
+      return;
+    }
     if (k === "t" && tool === "build" && build.mode === "prop") { build.rot = (build.rot + 1) % 4; renderToolOpts(); return redraw(); }
     if (k === "a" && (e.ctrlKey || e.metaKey)) {             // select every token you can move
       e.preventDefault();
@@ -2110,9 +2277,7 @@
       const mv = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
       if (mv) {
         e.preventDefault();
-        for (const t of mine) { t.x += mv[0]; t.y += mv[1]; }
-        if (mine.length === 1) action("tok_move", { sc: viewSc, id: mine[0].id, x: mine[0].x, y: mine[0].y });
-        else action("tok_group", { sc: viewSc, op: "move", moves: mine.map(t => ({ id: t.id, x: t.x, y: t.y })) });
+        moveTokens(viewSc, mine.map(t => ({ id: t.id, x: t.x + mv[0], y: t.y + mv[1] })));
         redraw();
       } else if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
@@ -2199,7 +2364,7 @@
       box.append(p({
         wall: "Click grid corners along a wall. Click the last corner again, press Enter or right-click to finish.",
         door: "Click the two ends of a door. Anyone can click a door to open or shut it.",
-        lock: "Click a door to lock or unlock it. Players can't open locked doors (they show red to you).",
+        lock: "Click a door to lock or unlock it. Players can't open locked doors (red padlock to you). They aren't told it's locked unless you right-click it and choose Show players it's locked (gold padlock).",
         remove: "Click a wall or door to take it away.",
       }[wallMode]));
       const sc = scene();
@@ -2266,7 +2431,7 @@
       <label class="field">Then<select name="do">
         <option value="text"${v.do === "text" ? " selected" : ""}>Show a message</option>
         <option value="scene"${v.do === "scene" ? " selected" : ""}>Send them to another scene</option>
-        ${t ? "" : `<option value="reveal"${v.do === "reveal" ? " selected" : ""}>Reveal the hidden tokens in it</option>`}
+        ${t ? "" : `<option value="reveal"${v.do === "reveal" ? " selected" : ""}>Reveal the hidden tokens and props in it</option>`}
         <option value="tell"${v.do === "tell" ? " selected" : ""}>Just tell me</option></select></label>
       <label class="field" data-for="text">Message<textarea name="text" rows="4" maxlength="1000" placeholder="The floor gives way beneath you!">${esc(v.text)}</textarea></label>
       <label class="field" data-for="scene">Scene<select name="to">${others.length ? others.map(x => `<option value="${x.id}"${v.to === x.id ? " selected" : ""}>${esc(x.name)}</option>`).join("") : `<option value="">Make another scene first</option>`}</select></label>
@@ -2520,6 +2685,12 @@
       const r = row();
       r.append(btn("Turn (T)", "btn small-btn", () => { build.rot = (build.rot + 1) % 4; redraw(); }));
       box.append(r);
+      const hid = document.createElement("label");
+      hid.className = "check";
+      hid.title = "Players don't see it, and hidden stairs don't go anywhere, until you or a trigger reveal it";
+      hid.innerHTML = `<input type="checkbox"${build.hidden ? " checked" : ""}> Hidden (it can go under another prop, like stairs under a rug)`;
+      hid.querySelector("input").addEventListener("change", e => { build.hidden = e.target.checked; redraw(); });
+      box.append(hid);
     }
     if (build.mode === "door") box.append(seg([[false, "Door"], [true, "Secret door"]], build.secret, v => { build.secret = v; }));
     if (build.mode === "label") {
@@ -2637,7 +2808,7 @@
             <label class="small muted">AC <input type="number" class="num" data-k="ac" value="${t.ac ?? ""}"></label></div>
           <div class="row"><label class="small muted">Size <select data-k="size">${SIZES.map(([v, l]) => `<option value="${v}"${v === t.size ? " selected" : ""}>${l}</option>`).join("")}</select></label>
             ${ch ? "" : `<label class="small muted">Init <input type="number" class="num" data-k="init" value="${t.init ?? ""}"></label>`}
-            <label class="small muted" title="How far it sees, in squares, when the fog clears as the party explores">Sight <input type="number" class="num" data-k="sight" min="0" max="60" value="${t.sight ?? (t.owner || t.char ? 12 : 0)}"></label></div>
+            ${dm ? `<label class="small muted" title="How far it sees, in squares, when the fog clears as the party explores">Sight <input type="number" class="num" data-k="sight" min="0" max="60" value="${t.sight ?? (t.owner || t.char ? 12 : 0)}"></label>` : ""}</div>
           <div class="row"><label class="small muted" title="How far it can move in a turn">Speed <input type="number" class="num" data-k="speed" min="0" value="${t.speed ?? ""}"></label>
             <label class="small muted" title="Flying (more than 0) or burrowing (less than 0), in ${esc(unit())}">Height <input type="number" class="num" data-k="elev" value="${t.elev ?? ""}"></label>
             <label class="small muted" title="A ring round it, in ${esc(unit())}: its reach, an aura, the light of a torch">Aura <input type="number" class="num" data-k="aura" min="0" value="${t.aura ?? ""}"></label></div>
@@ -3445,6 +3616,7 @@
         ${["#000000", "#ffffff", "#7c3aed"].map(c => `<button type="button" class="sw${sc.gc === c ? " on" : ""}" style="--c:${c}" data-gc="${c}" aria-label="Grid colour"></button>`).join("")}</div>
       <div class="row"><label class="check"><input type="checkbox" data-k="fog"${sc.fog ? " checked" : ""}> Fog of war</label>
         ${sc.fog ? `<button type="button" class="btn small-btn" data-fogall="1">Reveal all</button><button type="button" class="btn small-btn" data-fogall="0">Hide all</button>` : ""}</div>
+      <label class="check" title="Players can't move their tokens through walls or shut doors (the DM always can)"><input type="checkbox" data-k="block"${sc.block !== false ? " checked" : ""}> Walls stop players</label>
       ${sc.fog ? `<label class="check"><input type="checkbox" data-k="auto"${sc.auto ? " checked" : ""}> Reveal as the party explores</label>
         <p class="muted small" style="margin:0">The fog clears around the players' tokens as they move, as far as each one sees (Sight on its card) and not through walls or shut doors. Draw walls with the wall tool (W).</p>` : ""}
       <div class="row">${sc.id !== S.active ? `<button type="button" class="btn primary small-btn" data-show>Show to players</button>` : ""}
@@ -3477,7 +3649,7 @@
     box.addEventListener("change", e => {
       const sc = scene(), k = e.target.dataset.k;
       if (!sc || !k) return;
-      if (k === "grid" || k === "fog" || k === "auto") action("scene_edit", { sc: sc.id, [k]: e.target.checked });
+      if (k === "grid" || k === "fog" || k === "auto" || k === "block") action("scene_edit", { sc: sc.id, [k]: e.target.checked });
       else if (k === "name") action("scene_edit", { sc: sc.id, name: e.target.value });
       else if (k === "cols") { const cols = Number(e.target.value) || sc.cols; action("scene_edit", { sc: sc.id, cols, rows: rowsFor(sc, cols) }); }
       else if (k === "rows") action("scene_edit", { sc: sc.id, rows: Number(e.target.value) || sc.rows });
@@ -3497,7 +3669,9 @@
     });
     $("scenePick").addEventListener("change", e => { viewSc = e.target.value; wallPts = null; selectToken(null); fitView(); renderAll(); });
     $("showScene").addEventListener("click", () => action("scene_show", { sc: viewSc }));
-    $("asPlayerBtn").addEventListener("click", () => setAsPlayer(!asPlayer));
+    $("asPlayerBtn").addEventListener("click", () => { if (S && S.playAs) action("play_as", { id: null }); else setAsPlayer(!asPlayer); });
+    $("fakeBtn").addEventListener("click", makeFake);
+    $("fakeBtn2").addEventListener("click", makeFake);
   }
 
   // ---- Room ----------------------------------------------------------------------------------
@@ -3508,8 +3682,12 @@
     $("myRole").className = "badge" + (isDm() ? " dm" : "");
     const online = new Set(S.players.filter(p => p.online).map(p => p.id));
     const ids = Object.keys(S.names).sort((a, b) => online.has(b) - online.has(a));
+    const fakes = S.fakes || {};
     $("people").innerHTML = ids.map(q => {
       const dm = S.dms.includes(q), owner = q === S.owner;
+      if (q in fakes) return `<li><span class="dot off"></span><span class="nm" style="color:${colourOf(q)}">${esc(S.names[q])}${q === me ? " (you)" : ""}</span>
+        <span class="badge">pretend</span>${q === S.playAs ? "" : `<button type="button" class="link-btn" data-playas="${q}">Play as</button>`}
+        <button type="button" class="link-btn" data-unfake="${q}">Delete</button></li>`;
       return `<li><span class="dot${online.has(q) ? "" : " off"}"></span><span class="nm" style="color:${colourOf(q)}">${esc(S.names[q])}${q === me ? " (you)" : ""}</span>
         ${dm ? `<span class="badge dm">${owner ? "DM, maker" : "DM"}</span>` : ""}
         ${S.isOwner && !owner ? `<button type="button" class="link-btn" data-dm="${q}" data-on="${dm ? "" : "1"}">${dm ? "Make player" : "Make DM"}</button>` : ""}</li>`;
@@ -3534,6 +3712,10 @@
     $("people").addEventListener("click", e => {
       const b = e.target.closest("[data-dm]");
       if (b) action("set_dm", { player: b.dataset.dm, on: !!b.dataset.on });
+      const pa = e.target.closest("[data-playas]");
+      if (pa) action("play_as", { id: pa.dataset.playas });
+      const un = e.target.closest("[data-unfake]");
+      if (un && confirm(`Delete ${S.names[un.dataset.unfake]}? Their tokens go too.`)) action("fake_del", { id: un.dataset.unfake });
     });
     $("newCode").addEventListener("click", () => action("new_dm_code"));
     $("claimForm").addEventListener("submit", e => { e.preventDefault(); action("claim_dm", { code: $("claimCode").value }); $("claimCode").value = ""; });
