@@ -73,9 +73,13 @@
   const cam = { x: -1, y: -1, z: 48 };
   let tool = "select", sel = null;
   // The DM's main tabs: each shows its own tools. Players only ever have Play.
-  const MODES = [["play", "Play"], ["map", "Map making"]];
-  const MODE_TOOL = { play: "select", map: "build" };             // what a tab starts on
-  const TOOL_MODE = { fog: "map", walls: "map", build: "map" };   // select is in every tab, the rest are Play
+  const MODES = [["play", "Play"], ["map", "Map making"], ["tokens", "Tokens"]];
+  const MODE_TOOL = { play: "select", map: "build", tokens: "lib" };             // what a tab starts on
+  const TOOL_MODE = { fog: "map", walls: "map", build: "map", lib: "tokens" };   // select is in every tab, the rest are Play
+  // The Tokens tab: ready tokens by kind, to drag (or click, then click the map) onto the map.
+  const LIB_TABS = [["players", "Players"], ["enemy", "Enemies"], ["boss", "Bosses"], ["npc", "NPCs"]];
+  let libCat = "enemy", libArm = null, libHidden = false, libKey = "";
+  const libSent = new Map();
   let mode = "play";
   const picked = new Set();                 // selected tokens (sel is the one clicked last)
   let wallMode = "wall", wallPts = null;    // the wall being drawn (grid corners x, y, x, y ...)
@@ -407,6 +411,10 @@
     renderStats();
     renderCard();
     refreshSheet();
+    if (tool === "lib") {
+      const k = libSignature();
+      if (k !== libKey) { libKey = k; if (libArm) libArm = libFind(libArm.id) || null; renderToolOpts(); }
+    }
     redraw();
   }
 
@@ -601,6 +609,14 @@
       ctx.setLineDash([]);
     }
     if (tool === "build" && isDm()) paintBuildPreview(sc, px);
+    if (tool === "lib" && libArm && hover && isDm()) {
+      const n = libArm.size || 1, at = libSpot(sc, libArm, hover);
+      ctx.save();
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = libArm.c || "#e5484d";
+      ctx.beginPath(); ctx.arc(at.x + n / 2, at.y + n / 2, n * 0.42, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
     if (tool === "fog" && hover && !act) {
       const c = cellAt(hover), n = fogBox ? 1 : fogBrush, o = Math.floor(n / 2);
       ctx.strokeStyle = fogShow ? "#69db7c" : "#ff6b6b";
@@ -1820,6 +1836,10 @@
     if (tool === "walls" && isDm() && e.button === 2) { finishWall(); return; }
     if (tool === "build" && isDm() && !spaceDown && !e.altKey && (e.button === 0 || e.button === 2)) { buildDown(e, p); return; }
     if (e.button === 1 && e.altKey && isDm()) { e.preventDefault(); pickAt(p); return; }     // like pick block
+    if (tool === "lib" && libArm && isDm() && !spaceDown && !e.altKey) {
+      if (e.button === 0) { placeFromLib(libArm, p); return; }
+      if (e.button === 2) { libArm = null; renderToolOpts(); redraw(); return; }
+    }
     if (e.button === 1 || e.button === 2 || spaceDown) { act = { kind: "pan", sx, sy, cx: cam.x, cy: cam.y }; viewport.classList.add("panning"); e.preventDefault(); return; }
     if (e.button !== 0) return;
     if (e.altKey || tool === "ping") { ping(p); return; }
@@ -1899,7 +1919,7 @@
     hover = p;
     if (!act) {
       if (tool === "select") { const t = tokenAt(p); viewport.classList.toggle("on-token", !!(t && controls(t))); }
-      if (tool === "fog" || tool === "walls" || tool === "build") redraw();
+      if (tool === "fog" || tool === "walls" || tool === "build" || (tool === "lib" && libArm)) redraw();
       if (tool === "select") viewport.classList.toggle("on-door", !!wallAt(p, true, 0.22));
       return;
     }
@@ -2008,6 +2028,7 @@
       if (!$("handout").hidden) return closeModal("handout");
       if (!$("statBlock").hidden) return closeModal("statBlock");
       if (!$("linkForm").hidden) return closeModal("linkForm");
+      if (libArm) { libArm = null; renderToolOpts(); return redraw(); }
       if (act) return cancelAct();
       if (wallPts) { wallPts = null; return redraw(); }
       selectToken(null);
@@ -2021,9 +2042,9 @@
       return;
     }
     if (e.key === " ") { spaceDown = true; e.preventDefault(); return; }
-    const keys = { v: "select", r: "ruler", d: "draw", e: "erase", g: "ping", f: "fog", w: "walls", b: "build" };
+    const keys = { v: "select", r: "ruler", d: "draw", e: "erase", g: "ping", f: "fog", w: "walls", b: "build", l: "lib" };
     const k = e.key.toLowerCase();
-    if (keys[k] && !e.ctrlKey && !e.metaKey && (!"fwb".includes(k) || isDm())) { setTool(keys[k]); return; }
+    if (keys[k] && !e.ctrlKey && !e.metaKey && (!"fwbl".includes(k) || isDm())) { setTool(keys[k]); return; }
     if (k === "t" && tool === "build" && build.mode === "prop") { build.rot = (build.rot + 1) % 4; renderToolOpts(); return redraw(); }
     if (k === "a" && (e.ctrlKey || e.metaKey)) {             // select every token you can move
       e.preventDefault();
@@ -2091,8 +2112,9 @@
   function renderToolOpts() {
     const box = $("toolOpts");
     box.innerHTML = "";
-    box.hidden = !["draw", "fog", "ruler", "erase", "ping", "walls", "build"].includes(tool);
+    box.hidden = !["draw", "fog", "ruler", "erase", "ping", "walls", "build", "lib"].includes(tool);
     box.classList.toggle("build", tool === "build");
+    box.classList.toggle("lib", tool === "lib");
     const p = html => { const el = document.createElement("p"); el.className = "muted small"; el.style.margin = 0; el.innerHTML = html; return el; };
     if (tool === "draw") {
       box.append(seg([["free", "Pen"], ["line", "Line"], ["rect", "Square"], ["circle", "Circle"], ["cone", "Cone"]], drawShape, v => { drawShape = v; }));
@@ -2139,9 +2161,137 @@
       clear.addEventListener("click", () => { if (confirm("Remove every wall and door on this scene?")) action("walls_clear", { sc: viewSc }); });
       box.append(clear);
     } else if (tool === "build") renderBuildOpts(box, p);
+    else if (tool === "lib") renderLib(box, p);
     else if (tool === "ruler") box.append(p(`Drag to measure. Everyone sees your ruler. Each square is ${per()} ${esc(unit())}.`));
     else if (tool === "erase") box.append(p(isDm() ? "Drag over drawings to rub them out." : "Drag over your drawings to rub them out."));
     else if (tool === "ping") box.append(p("Click to make everyone look at a spot. Alt+click pings with any tool."));
+  }
+
+  // ---- The Tokens tab ---------------------------------------------------------------------------
+  function libEntries(cat) {
+    if (cat !== "players") return (S.lib || []).filter(e => e.cat === cat).sort((a, b) => a.name.localeCompare(b.name));
+    return Object.entries(S.names).filter(([q]) => !S.dms.includes(q))
+      .map(([q, n]) => ({ id: "p:" + q, pid: q, name: n, c: colourOf(q), size: 1 }));
+  }
+  const libFind = id => libEntries(id.startsWith("p:") ? "players" : (S.lib.find(e => e.id === id) || {}).cat || "").find(e => e.id === id);
+  function libSpot(sc, e, p) {
+    const n = Math.max(1, e.size || 1), half = n > 1 ? (n - 1) / 2 : 0;
+    return { x: Math.max(0, Math.min(sc.cols - n, Math.floor(p.x - half))), y: Math.max(0, Math.min(sc.rows - n, Math.floor(p.y - half))) };
+  }
+  function placeFromLib(e, p) {
+    const sc = scene();
+    if (!sc || !e) return;
+    const { x, y } = libSpot(sc, e, p);
+    if (e.pid) {                                   // a player's token: move theirs here, or make one
+      const t = sc.tokens.find(t => t.owner === e.pid || (charById(t.char) || {}).owner === e.pid);
+      if (t) { action("tok_move", { sc: sc.id, id: t.id, x, y }); t.x = x; t.y = y; }
+      else action("tok_add", { sc: sc.id, tok: { name: e.name, owner: e.pid, c: e.c, size: 1, x, y } });
+      redraw();
+      return;
+    }
+    // number them: Bandit, Bandit 2... counting ones still on their way to the server
+    const k = sc.id + "|" + e.name, sent = libSent.get(k);
+    const same = Math.max(sc.tokens.filter(t => t.name.replace(/\s+\d+$/, "") === e.name).length, sent && Date.now() - sent.t < 3000 ? sent.n : 0);
+    libSent.set(k, { n: same + 1, t: Date.now() });
+    const tok = { name: same ? `${e.name} ${same + 1}` : e.name, c: e.c, size: e.size || 1, x, y, hp: e.mhp ?? null, mhp: e.mhp ?? null, ac: e.ac ?? null, init: e.init ?? null };
+    for (const k of ["sight", "aura", "speed", "elev", "ac2", "img"]) if (e[k] != null) tok[k] = e[k];
+    tok.stats = e.stats || statsOf(e.name);
+    if (!tok.stats) delete tok.stats;
+    else if (tok.speed == null) tok.speed = parseInt(tok.stats.speed, 10) || null;
+    if (libHidden) tok.hidden = true;
+    action("tok_add", { sc: sc.id, tok });
+  }
+  function renderLib(box, p) {
+    const sc = scene();
+    if (!sc) return;
+    const keep = box.scrollTop;
+    box.append(seg(LIB_TABS, libCat, v => { libCat = v; libArm = null; }));
+    const list = libEntries(libCat);
+    const grid = document.createElement("div");
+    grid.className = "tt-lib";
+    for (const e of list) {
+      const b = document.createElement("div");
+      b.className = "lt" + (libArm && libArm.id === e.id ? " on" : "");
+      b.draggable = true;
+      b.tabIndex = 0;
+      b.dataset.id = e.id;
+      const onMap = e.pid && sc.tokens.some(t => t.owner === e.pid || (charById(t.char) || {}).owner === e.pid);
+      const pic = e.img ? `background-image:url('${assetUrl(e.img)}');` : "";
+      const sub = e.pid ? (onMap ? "On this map" : "Not on this map") : [e.mhp != null ? `HP ${e.mhp}` : "", e.ac != null ? `AC ${e.ac}` : "", e.size > 1 ? `${e.size}×${e.size}` : ""].filter(Boolean).join(" · ");
+      b.innerHTML = `<span class="face" style="background-color:${esc(e.c || "#6b7280")};${pic}">${e.img ? "" : esc(e.name.slice(0, 1).toUpperCase())}</span>
+        <span class="nm">${esc(e.name)}</span><span class="sub">${esc(sub)}</span>
+        ${e.pid ? "" : `<button type="button" class="del" title="Take it off the list" aria-label="Take ${esc(e.name)} off the list">✕</button>`}`;
+      grid.append(b);
+    }
+    box.append(grid);
+    if (!list.length) box.append(p(libCat === "players" ? "Players show up here once they've opened the campaign link." : "Nothing here yet. Put a token on the map, select it, then save it here."));
+    if (libCat !== "players") {
+      const l = document.createElement("label");
+      l.className = "check small";
+      l.innerHTML = `<input type="checkbox" ${libHidden ? "checked" : ""}> Put them down hidden from players`;
+      l.querySelector("input").addEventListener("change", ev => { libHidden = ev.target.checked; });
+      box.append(l);
+      const r = document.createElement("div");
+      r.className = "row";
+      const t = sel && tokenById(sel);
+      const save = document.createElement("button");
+      save.type = "button";
+      save.className = "btn small-btn";
+      save.disabled = !t || !!(t.owner || t.char);
+      save.textContent = t && !save.disabled ? `Save ${t.name} here` : "Save the selected token here";
+      save.title = "Select a monster or NPC on the map, then save it to this list to use again";
+      save.addEventListener("click", () => { if (t) action("lib_add", { sc: sc.id, id: t.id, cat: libCat }); });
+      const make = document.createElement("button");
+      make.type = "button";
+      make.className = "btn small-btn";
+      make.textContent = "Make a new token";
+      make.addEventListener("click", () => openTokenForm());
+      r.append(save, make);
+      box.append(r);
+    }
+    box.append(p(libArm ? `Click the map to put down ${esc(libArm.name)}. Right-click or Esc when you're done.`
+      : libCat === "players" ? "Drag a player onto the map. If they already have a token here, it moves there."
+      : "Drag one onto the map, or click it and then click the map (as many times as you like)."));
+    box.scrollTop = keep;
+  }
+  function libSignature() {
+    const sc = scene();
+    return JSON.stringify([S.lib, S.names, S.dms, sel, sc && sc.id, sc && sc.tokens.map(t => t.owner || "")]);
+  }
+  function initLib() {
+    const box = $("toolOpts");
+    box.addEventListener("click", e => {
+      const card = e.target.closest(".tt-lib .lt");
+      if (!card) return;
+      const en = libFind(card.dataset.id);
+      if (!en) return;
+      if (e.target.closest(".del")) {
+        if (confirm(`Take ${en.name} off the list? Tokens already on the map stay.`)) action("lib_del", { id: en.id });
+        return;
+      }
+      libArm = libArm && libArm.id === en.id ? null : en;
+      renderToolOpts();
+      redraw();
+    });
+    box.addEventListener("keydown", e => {
+      const card = e.target.closest && e.target.closest(".tt-lib .lt");
+      if (card && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); card.click(); }
+    });
+    box.addEventListener("dragstart", e => {
+      const card = e.target.closest && e.target.closest(".tt-lib .lt");
+      if (!card) return;
+      e.dataTransfer.setData("text/x-ace-lib", card.dataset.id);
+      e.dataTransfer.effectAllowed = "copy";
+    });
+    viewport.addEventListener("dragover", e => {
+      if (e.dataTransfer && [...e.dataTransfer.types].includes("text/x-ace-lib")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }
+    });
+    viewport.addEventListener("drop", e => {
+      const id = e.dataTransfer && e.dataTransfer.getData("text/x-ace-lib");
+      if (!id || !isDm()) return;
+      e.preventDefault();
+      placeFromLib(libFind(id), worldPt(e));
+    });
   }
 
   // ---- Selected token(s) ----------------------------------------------------------------------
@@ -2283,6 +2433,7 @@
   }
 
   function selectToken(id, add) {
+    if (tool === "lib") setTimeout(renderToolOpts);          // the Save button names the selected token
     if (!id) picked.clear();
     else if (add) { if (picked.has(id)) picked.delete(id); else picked.add(id); }
     else { picked.clear(); picked.add(id); }
@@ -3267,6 +3418,7 @@
     document.querySelectorAll(".tt-tabs button").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
     $("panelBtn").addEventListener("click", () => setPanel($("panel").classList.contains("closed")));
     initCard();
+    initLib();
     initChat();
     initTurns();
     initParty();

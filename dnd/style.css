@@ -70,16 +70,20 @@ body.is-dm .player-only { display: none !important; }
 body.is-dm .tt-tools { top: 112px; }
 body.is-dm .tt-opts { top: 112px; }
 body.is-dm .tt-turn { top: 112px; }
+@media (max-width: 860px) {                       /* the top bar is a little taller on a phone */
+  .tt-modebar { top: 74px; }
+  body.is-dm .tt-tools, body.is-dm .tt-opts, body.is-dm .tt-turn { top: 124px; }
+}
 .tt-tools {
   left: max(10px, env(safe-area-inset-left, 0px)); top: 70px; display: flex; flex-direction: column; gap: 5px; padding: 6px;
 }
 .tt-sep { height: 1px; background: var(--line); margin: 2px 0; }
 .tt-opts {
-  left: 66px; top: 70px; display: flex; flex-direction: column; gap: 8px; padding: 10px; max-width: 250px; font-size: .85rem;
+  left: 66px; top: 70px; display: flex; flex-direction: column; gap: 8px; padding: 10px; max-width: 270px; font-size: .85rem;
 }
 .tt-opts .row { gap: 5px; }
 .tt-opts > * { flex-shrink: 0; }              /* a long panel scrolls instead of squashing what's in it */
-.tt-opts.build { max-width: 330px; max-height: calc(100% - 90px); overflow-y: auto; }
+.tt-opts.build { max-width: 330px; max-height: calc(100% - 130px); overflow-y: auto; }
 .tt-opts.build > .seg button { padding: 6px 8px; }
 .seg.tt-modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); }
 .seg.tt-modes button + button { border-left: 0; }
@@ -104,6 +108,22 @@ body.is-dm .tt-turn { top: 112px; }
   border-radius: 8px; background: var(--bg2); color: var(--muted); font: 600 .68rem/1.1 var(--body); cursor: pointer; }
 .tt-props button.on { border-color: var(--purple); color: #fff; box-shadow: 0 0 0 1px var(--purple); }
 .tt-props canvas { width: 34px; height: 34px; border-radius: 5px; }
+.tt-opts.lib { width: 320px; max-width: calc(100vw - 80px); max-height: calc(100% - 130px); overflow-y: auto; }
+.tt-lib { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.tt-lib .lt { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 3px 5px;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--bg2); color: var(--text); cursor: grab; text-align: center;
+  font: 600 .72rem/1.15 var(--body); touch-action: manipulation; }
+.tt-lib .lt:hover { border-color: var(--accent); }
+.tt-lib .lt.on { border-color: var(--purple); box-shadow: 0 0 0 1px var(--purple); }
+.tt-lib .face { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; color: #fff; overflow: hidden;
+  font: 700 .95rem/1 var(--display); border: 2px solid #0006; background-size: cover; background-position: center; }
+.tt-lib .nm { overflow-wrap: anywhere; }
+.tt-lib .sub { color: var(--muted); font-size: .66rem; font-weight: 500; }
+.tt-lib .del { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; border: 0; padding: 0;
+  background: var(--bg); color: var(--muted); cursor: pointer; font-size: .7rem; line-height: 18px; display: none; }
+.tt-lib .lt:hover .del, .tt-lib .lt:focus-within .del { display: block; }
+.tt-lib .del:hover { color: #fff; background: var(--red, #e5484d); }
+.tt-opts.lib .seg button { padding: 6px 8px; }
 .tt-opts select { background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 6px; font: inherit; font-size: .8rem; }
 .check { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; cursor: pointer; }
 .check input { width: 16px; height: 16px; margin: 0; accent-color: var(--purple); flex: none !important; }

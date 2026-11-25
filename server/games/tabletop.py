@@ -72,6 +72,20 @@ OLD_WALLED = "foDS"
 PROPS = ("table", "chair", "barrel", "crate", "chest", "bed", "shelf", "pillar", "statue", "stairs", "torch",
          "campfire", "altar", "well", "tree", "bush", "rock", "rubble", "rug", "web", "trap")
 DM_PROPS = ("trap",)                                # players never get these
+# The DM's list of ready tokens to drag onto the map, by kind. A campaign starts with a few of each.
+LIB_CATS = ("enemy", "boss", "npc")
+LIB_COLOUR = {"enemy": "#e5484d", "boss": "#8e4ec6", "npc": "#2f9e44"}
+LIB_KEEP = ("name", "c", "size", "mhp", "ac", "init", "sight", "aura", "speed", "elev", "ac2", "stats", "img")
+MAX_LIB = 200
+STARTER_LIB = (                   # name, kind, HP, AC, initiative bonus, size
+    ("Bandit", "enemy", 11, 12, 1, 1), ("Goblin", "enemy", 7, 15, 2, 1), ("Skeleton", "enemy", 13, 13, 2, 1),
+    ("Zombie", "enemy", 22, 8, -2, 1), ("Wolf", "enemy", 11, 13, 2, 1), ("Giant rat", "enemy", 7, 12, 2, 1),
+    ("Cultist", "enemy", 9, 12, 1, 1), ("Orc", "enemy", 15, 13, 1, 1), ("Giant spider", "enemy", 26, 14, 3, 2),
+    ("Bandit captain", "boss", 65, 15, 3, 1), ("Mage", "boss", 40, 12, 2, 1), ("Wight", "boss", 45, 14, 1, 1),
+    ("Ogre", "boss", 59, 11, -1, 2), ("Troll", "boss", 84, 15, 1, 2), ("Young dragon", "boss", 133, 18, 0, 2),
+    ("Commoner", "npc", 4, 10, 0, 1), ("Guard", "npc", 11, 16, 1, 1), ("Priest", "npc", 27, 13, 0, 1),
+    ("Knight", "npc", 52, 18, 0, 1),
+)
 PC_SIGHT = 12                     # how far a player's token sees when it's made, in squares (60 ft)
 MAX_IMAGE_CHARS = 900_000         # one picture as a data: URL (socket.io takes about 1 MB a message)
 MAX_ASSET_BYTES = 120_000_000     # all of one campaign's pictures
@@ -288,7 +302,7 @@ def _campaigns():
 
 
 SAVED_KEYS = ("name", "slug", "owner", "created", "dms", "dmcode", "names", "scenes", "order", "active", "at",
-              "chars", "notes", "mine", "log", "init", "settings", "assets", "logn")
+              "chars", "notes", "mine", "log", "init", "settings", "assets", "logn", "lib")
 
 
 class Tabletop:
@@ -302,7 +316,7 @@ class Tabletop:
              "dmcode": new_id(6).upper(), "names": {}, "scenes": {}, "order": [], "active": None, "at": {},
              "chars": {}, "notes": {}, "mine": {}, "log": [], "logn": 0,
              "init": {"list": [], "cur": None, "round": 0},
-             "settings": {"per": 5, "unit": "ft"}, "assets": {},
+             "settings": {"per": 5, "unit": "ft"}, "assets": {}, "lib": self._starter_lib(),
              "deleted": False, "dirty": True, "changed": 0.0}
         sc = self._scene("The first map", 24, 16)
         s["scenes"][sc["id"]] = sc
@@ -310,6 +324,14 @@ class Tabletop:
         s["active"] = sc["id"]
         self._sys(s, f'Welcome to {name or "the campaign"}. The DM can add a map from the Scenes tab.')
         return s
+
+    def _starter_lib(self):
+        lib = {}
+        for name, cat, hp, ac, ini, size in STARTER_LIB:
+            e = {"id": new_id(), "cat": cat, "name": name, "c": LIB_COLOUR[cat], "size": size, "mhp": hp, "ac": ac,
+                 "init": ini, "img": None}
+            lib[e["id"]] = e
+        return lib
 
     def _scene(self, name, cols, rows):
         return {"id": new_id(), "name": name, "img": None, "cols": cols, "rows": rows, "ox": 0.0, "oy": 0.0,
@@ -397,6 +419,8 @@ class Tabletop:
             s["active"] = s["order"][0]
         if not isinstance(s.get("at"), dict):
             s["at"] = {}
+        if not isinstance(s.get("lib"), dict):
+            s["lib"] = self._starter_lib()
         for sc in s["scenes"].values():
             sc.setdefault("walls", {})
             sc.setdefault("auto", False)
@@ -457,6 +481,7 @@ class Tabletop:
             used.update(t.get("img") for t in sc["tokens"].values())
         used.update(c.get("img") for c in s["chars"].values())
         used.update(n.get("img") for n in s["notes"].values())
+        used.update(e.get("img") for e in s.get("lib", {}).values())
         for name in [a for a in s["assets"] if a not in used]:
             s["assets"].pop(name, None)
             try:
@@ -1002,6 +1027,30 @@ class Tabletop:
                 if x is not None and y is not None and 0 <= x < sc["cols"] and 0 <= y < sc["rows"]:
                     seen[y * sc["cols"] + x] = mark
             sc["seen"] = "".join(seen)
+            return None
+
+        # -- The DM's token list --
+        if action == "lib_add":                       # save a token on the map to the list
+            if not dm:
+                return need_dm
+            lib = s.setdefault("lib", {})
+            if len(lib) >= MAX_LIB:
+                return f"The list can hold {MAX_LIB} tokens. Take some off first."
+            sc = s["scenes"].get(str(data.get("sc", "")))
+            t = sc["tokens"].get(str(data.get("id", ""))) if sc else None
+            if not t:
+                return "That token isn't there any more."
+            hp, mhp, ac = self._hp_of(s, t)
+            e = {k: t.get(k) for k in LIB_KEEP}
+            e.update(id=new_id(), cat=data.get("cat") if data.get("cat") in LIB_CATS else "enemy",
+                     name=re.sub(r"\s+\d+$", "", t["name"]) or t["name"], mhp=mhp if mhp is not None else hp, ac=ac)
+            lib[e["id"]] = e
+            return None
+        if action == "lib_del":
+            if not dm:
+                return need_dm
+            if s.setdefault("lib", {}).pop(str(data.get("id", "")), None):
+                self._tidy_assets(s)
             return None
 
         # -- Tokens --
@@ -1650,6 +1699,7 @@ class Tabletop:
             "init": {"list": [{**{k: e[k] for k in ("id", "name", "val", "tok", "sc", "by", "pc")}, "hidden": unseen(e)} for e in order],
                      "cur": cur, "round": init["round"]},
             "settings": s["settings"],
+            "lib": list(s.get("lib", {}).values()) if dm else [],
             "conditions": list(CONDITIONS), "skills": SKILLS,
             "limits": {"image": MAX_IMAGE_CHARS, "grid": MAX_GRID, "linePts": MAX_LINE_PTS},
         }
