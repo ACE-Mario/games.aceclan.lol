@@ -1239,6 +1239,31 @@
     const near = [[-1, 0], [1, 0], [0, -1], [0, 1]].map(([dx, dy]) => inScene(sc, c.x + dx, c.y + dy) ? T[(c.y + dy) * sc.cols + c.x + dx] : ".");
     return near.includes("o") ? "o" : "f";
   }
+  // Alt+middle-click: pick what's there to draw more of it (a floor, a prop, a door), or copy a token
+  function pickAt(p) {
+    const tok = tokenAt(p);
+    if (tok) return openTokenForm({ copy: tok });
+    const sc = scene(), c = cellAt(p);
+    if (!inScene(sc, c.x, c.y)) return;
+    const pr = propAt(c);
+    let what;
+    if (pr) {
+      build.mode = "prop"; build.prop = pr.k; build.rot = pr.r || 0;
+      what = (PROP_INFO.find(x => x[0] === pr.k) || [0, pr.k])[1];
+    } else {
+      const t = tilesOf(sc)[c.y * sc.cols + c.x];
+      if (t === "D") { build.mode = "door"; what = "Door"; }
+      else if (t === "." || t === "?") { build.mode = "erase"; what = "Erase"; }
+      else {
+        build.tile = t;
+        if (build.mode !== "room" && build.mode !== "brush") build.mode = "brush";
+        what = (TILE_INFO.find(x => x[0] === t) || [0, t])[1];
+      }
+    }
+    if (tool !== "build") setTool("build"); else renderToolOpts();
+    redraw();
+    note(`Picked: ${what}`);
+  }
   function buildDown(e, p) {
     const sc = scene(), c = cellAt(p), rub = e.button === 2;
     if (build.mode === "room") { act = { kind: "room", a: p, b: p, code: rub ? "." : build.tile }; redraw(); return; }
@@ -1568,6 +1593,7 @@
     const p = worldPt(e), { sx, sy } = screenPt(e);
     if (tool === "walls" && isDm() && e.button === 2) { finishWall(); return; }
     if (tool === "build" && isDm() && !spaceDown && !e.altKey && (e.button === 0 || e.button === 2)) { buildDown(e, p); return; }
+    if (e.button === 1 && e.altKey && isDm()) { e.preventDefault(); pickAt(p); return; }     // like pick block
     if (e.button === 1 || e.button === 2 || spaceDown) { act = { kind: "pan", sx, sy, cx: cam.x, cy: cam.y }; viewport.classList.add("panning"); e.preventDefault(); return; }
     if (e.button !== 0) return;
     if (e.altKey || tool === "ping") { ping(p); return; }
@@ -1944,7 +1970,7 @@
       door: "Click a square in a gap between walls to put a door there, and click it again to take it away.",
       prop: "Click a square to put it there. Click a prop to take it away. T turns it.",
       label: "Click to add a label. Click a label to change it, or right-click to take it away.",
-    }[build.mode]));
+    }[build.mode] + " Alt+middle-click picks what's on a square."));
     // random maps and pictures
     const r = row();
     const kind = document.createElement("select");
@@ -2152,6 +2178,20 @@
     const form = box.querySelector("form");
     box.hidden = false;
     form.elements.name.focus();
+    const copy = prefill.copy;
+    if (copy) {                                   // a copy of a token (Alt+middle-click)
+      const F = form.elements, v = x => (x == null ? "" : x);
+      F.name.value = copy.name;
+      F.hp.value = v(copy.mhp ?? copy.hp);
+      F.ac.value = v(copy.ac);
+      F.init.value = v(copy.init);
+      F.size.value = String(copy.size);
+      if (dm && copy.hidden) F.hidden.checked = true;
+      c = copy.c || c;
+      form.querySelectorAll(".sw").forEach(x => x.classList.toggle("on", x.dataset.colour === c));
+      if (copy.img) form.querySelector("[data-picnote]").textContent = "Same picture as " + copy.name;
+      F.name.select();
+    }
     if (form.elements.monster) form.elements.monster.addEventListener("change", () => {
       const m = MONSTERS[form.elements.monster.value];
       if (!m) return;
@@ -2190,6 +2230,7 @@
         if (!F.name.value.trim() && !ch) tok.name = nameOf(F.owner.value);
       }
       if (newTokPic) tok.src = newTokPic;
+      else if (copy && copy.img) tok.img = copy.img;
       action("tok_add", { sc: sc.id, tok, count: dm ? Number(F.count.value) || 1 : 1 });
       closeModal("tokenForm");
     });
