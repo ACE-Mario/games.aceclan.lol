@@ -86,6 +86,12 @@ STARTER_LIB = (                   # name, kind, HP, AC, initiative bonus, size
     ("Commoner", "npc", 4, 10, 0, 1), ("Guard", "npc", 11, 16, 1, 1), ("Priest", "npc", 27, 13, 0, 1),
     ("Knight", "npc", 52, 18, 0, 1),
 )
+# Triggers (the DM's Scripting tab): an area of squares, or a token, and what happens when a player's token
+# steps into it ("enter") or can see it ("see": any distance, walls and shut doors block, hidden tokens can't be seen).
+TRIG_WHEN = ("enter", "see")
+TRIG_DO = ("tell", "text", "scene", "reveal")      # just tell the DM, show players a message, move them, unhide tokens
+MAX_TRIGS = 100
+MAX_POPS = 30
 PC_SIGHT = 12                     # how far a player's token sees when it's made, in squares (60 ft)
 MAX_IMAGE_CHARS = 900_000         # one picture as a data: URL (socket.io takes about 1 MB a message)
 MAX_ASSET_BYTES = 120_000_000     # all of one campaign's pictures
@@ -316,7 +322,7 @@ class Tabletop:
              "dmcode": new_id(6).upper(), "names": {}, "scenes": {}, "order": [], "active": None, "at": {},
              "chars": {}, "notes": {}, "mine": {}, "log": [], "logn": 0,
              "init": {"list": [], "cur": None, "round": 0},
-             "settings": {"per": 5, "unit": "ft"}, "assets": {}, "lib": self._starter_lib(),
+             "settings": {"per": 5, "unit": "ft"}, "assets": {}, "lib": self._starter_lib(), "pops": [], "popn": 0,
              "deleted": False, "dirty": True, "changed": 0.0}
         sc = self._scene("The first map", 24, 16)
         s["scenes"][sc["id"]] = sc
@@ -337,7 +343,7 @@ class Tabletop:
         return {"id": new_id(), "name": name, "img": None, "cols": cols, "rows": rows, "ox": 0.0, "oy": 0.0,
                 "grid": True, "gc": "#000000", "fog": False, "auto": False, "seen": "0" * (cols * rows),
                 "tokens": {}, "lines": {}, "walls": {}, "tiles": "." * (cols * rows), "wl": "1" * (cols * rows),
-                "props": {}, "labels": {}}
+                "props": {}, "labels": {}, "trig": {}}
 
     def default_seat(self, room):
         return {}
@@ -427,6 +433,7 @@ class Tabletop:
             sc.setdefault("tiles", "." * (sc["cols"] * sc["rows"]))
             sc.setdefault("props", {})
             sc.setdefault("labels", {})
+            sc.setdefault("trig", {})
             if len(sc.get("wl") or "") != len(sc["tiles"]):
                 sc["wl"] = "".join("1" if t in OLD_WALLED or t == "." else "0" for t in sc["tiles"])
         for ch in s["chars"].values():
@@ -627,6 +634,115 @@ class Tabletop:
                             if T[yy * cols + xx] in SOLID_TILES:
                                 seen[yy * cols + xx] = "1"
         sc["seen"] = "".join(seen)
+
+    # ---- Triggers ---------------------------------------------------------------------------
+    def _pop(self, s, title, text_, to=None, dm=False, sc=None, at=None):
+        """A message that pops up: for the DM (dm=True) or for the players in `to`."""
+        s["popn"] = s.get("popn", 0) + 1
+        s.setdefault("pops", []).append({"n": s["popn"], "title": title, "text": text_, "to": list(to or []), "dm": dm,
+                                         "sc": sc, "at": at})
+        del s["pops"][:-MAX_POPS]
+
+    def _trig_cells(self, sc, tr):
+        """The squares a trigger covers, or None if it's on a token that's gone or hidden."""
+        if tr.get("tok"):
+            t = sc["tokens"].get(tr["tok"])
+            if not t or t.get("hidden"):
+                return None
+            n = max(1, int(t["size"]))
+            return [(x, y) for y in range(int(t["y"]), int(t["y"]) + n) for x in range(int(t["x"]), int(t["x"]) + n)]
+        return [(x, y) for y in range(tr["y"], tr["y"] + tr["h"]) for x in range(tr["x"], tr["x"] + tr["w"])]
+
+    def _touches(self, t, cells):
+        n = max(1, int(t["size"]))
+        x0, y0 = int(t["x"] + 0.001), int(t["y"] + 0.001)
+        mine = {(x, y) for y in range(y0, y0 + n) for x in range(x0, x0 + n)}
+        return any(c in mine for c in cells)
+
+    def _sees(self, sc, t, cells, walls):
+        """Can token t see any of these squares, from any distance? Walls and shut doors block."""
+        if self._touches(t, cells):
+            return True
+        half = t["size"] / 2
+        cx, cy = t["x"] + half, t["y"] + half
+        cs = set(cells)                    # only the edge of an area needs checking: sight into it crosses the edge
+        edge = [c for c in cells if not all((c[0] + dx, c[1] + dy) in cs for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))]
+        xs, ys = [c[0] for c in edge] + [cx], [c[1] for c in edge] + [cy]
+        x0, x1, y0, y1 = min(xs) - 1, max(xs) + 2, min(ys) - 1, max(ys) + 2
+        near = [w for w in walls if max(w[0], w[2]) >= x0 and min(w[0], w[2]) <= x1 and max(w[1], w[3]) >= y0 and min(w[1], w[3]) <= y1]
+        for x, y in sorted(edge, key=lambda c: (c[0] + 0.5 - cx) ** 2 + (c[1] + 0.5 - cy) ** 2):
+            for px, py in ((x + 0.5, y + 0.5),) + tuple((x + a, y + b) for a, b in INSIDE):
+                if not any(crosses(cx, cy, px, py, w) for w in near):
+                    return True
+        return False
+
+    def _players_on(self, s, sc):
+        """Everyone (not DMs) who's on this scene."""
+        return [q for q in s["names"] if not self.is_dm(s, q) and self._where(s, q) == sc["id"]]
+
+    def _fire(self, s, sc, tr, t, how):
+        if tr.get("once"):
+            tr["used"] = True
+        who = self._owner_of(s, t)
+        everyone = tr.get("who") == "all"
+        to = self._players_on(s, sc) if everyone else [q for q in [who] if q and not self.is_dm(s, q)]
+        cells = self._trig_cells(sc, tr) or [(tr.get("x", 0), tr.get("y", 0))]
+        at = [sum(c[0] for c in cells) / len(cells) + 0.5, sum(c[1] for c in cells) / len(cells) + 0.5]
+        did = ""
+        if tr["do"] == "text":
+            if to:
+                self._pop(s, tr["name"], tr.get("text") or "", to=to)
+            did = f' Showed {"everyone" if everyone else "them"} the message.'
+        elif tr["do"] == "scene":
+            target = s["scenes"].get(tr.get("to") or "")
+            if target and target is not sc:
+                toks = [o for o in sc["tokens"].values() if self._pc(o)] if everyone else [t]
+                for o in toks:
+                    self._arrive(s, sc, o, target)
+                    q = self._owner_of(s, o)
+                    if q and not self.is_dm(s, q):
+                        s["at"][q] = target["id"]
+                for q in to:
+                    s["at"][q] = target["id"]
+                did = f' Sent {"the party" if everyone else "them"} to {target["name"]}.'
+        elif tr["do"] == "reveal":
+            n = 0
+            for o in sc["tokens"].values():
+                if o.get("hidden") and self._touches(o, cells):
+                    o["hidden"] = False
+                    n += 1
+            if n:
+                self._reveal(sc)
+            did = f" Revealed {n} hidden token{'s' if n != 1 else ''}." if n else ""
+        verb = "stepped into" if how == "enter" else "can see"
+        self._pop(s, tr["name"], f'{t["name"]} {verb} it.{did}', dm=True, sc=sc["id"], at=at)
+
+    def _triggers(self, s, sc, moved=(), by_player=False):
+        """Check this scene's triggers after something changed. moved: tokens that just moved."""
+        trigs = [tr for tr in sc.get("trig", {}).values() if not tr.get("used")]
+        if not trigs:
+            return
+        pcs = [t for t in sc["tokens"].values() if self._pc(t) and not t.get("hidden")]
+        walls = None
+        for tr in trigs:
+            if tr.get("used") or sc["id"] not in s["scenes"]:
+                continue
+            cells = self._trig_cells(sc, tr)
+            if tr["when"] == "enter":
+                inside = set(tr.get("inside") or [])
+                now = {t["id"] for t in pcs if cells and self._touches(t, cells)}
+                for t in pcs:                          # only a player moving their own token sets it off
+                    if t["id"] in now and t["id"] not in inside and by_player and any(m["id"] == t["id"] for m in moved):
+                        self._fire(s, sc, tr, t, "enter")
+                        break
+                tr["inside"] = sorted(now)
+            else:
+                if walls is None:
+                    walls = [w["p"] for w in sc["walls"].values() if not (w.get("door") and w.get("open"))]
+                seer = next((t for t in pcs if cells and self._sees(sc, t, cells, walls)), None)
+                if seer and not tr.get("seen"):
+                    self._fire(s, sc, tr, seer, "see")
+                tr["seen"] = bool(seer)
 
     def _door_seen(self, sc, w):
         """Can players see this door (so they can open it)? Yes if fog is off or a square beside it is clear."""
@@ -1085,6 +1201,7 @@ class Tabletop:
                     t["sight"] = PC_SIGHT
                 sc["tokens"][t["id"]] = t
                 self._reveal(sc, t["id"])
+            self._triggers(s, sc)
             return None
         if action == "tok_group":                     # several selected tokens at once
             sc = self._scene_of(s, data, dm, pid)
@@ -1092,6 +1209,7 @@ class Tabletop:
                 return "That scene isn't there any more."
             op = data.get("op")
             if op == "move":
+                moved = []
                 moves = data.get("moves") if isinstance(data.get("moves"), list) else []
                 for m in moves[:MAX_TOKENS]:
                     t = sc["tokens"].get(str(m.get("id", ""))) if isinstance(m, dict) else None
@@ -1099,6 +1217,9 @@ class Tabletop:
                         self._token_fields(s, t, {"x": m.get("x"), "y": m.get("y")}, dm)
                         self._reveal(sc, t["id"])
                         self._take_stairs(s, sc, t, pid, dm)
+                        if t["id"] in sc["tokens"]:
+                            moved.append(t)
+                self._triggers(s, sc, moved, not dm)
                 return None
             ids = data.get("ids") if isinstance(data.get("ids"), list) else []
             toks = [sc["tokens"][i] for i in map(str, ids[:MAX_TOKENS]) if i in sc["tokens"]]
@@ -1138,6 +1259,8 @@ class Tabletop:
                 self._token_fields(s, t, {"x": data.get("x"), "y": data.get("y")}, dm)
                 self._reveal(sc, t["id"])
                 self._take_stairs(s, sc, t, pid, dm)
+                if t["id"] in sc["tokens"]:
+                    self._triggers(s, sc, [t], not dm)
                 return None
             if action == "tok_edit":
                 d = data.get("set") if isinstance(data.get("set"), dict) else {}
@@ -1151,6 +1274,7 @@ class Tabletop:
                         self._hurt(s, t, delta, dm)
                 self._token_fields(s, t, d, dm)
                 self._reveal(sc, t["id"])
+                self._triggers(s, sc)
                 return None
             if action == "tok_front":
                 sc["tokens"][t["id"]] = sc["tokens"].pop(t["id"])       # drawn last = on top
@@ -1282,6 +1406,61 @@ class Tabletop:
             return None
 
         # -- Walls and doors --
+        if action in ("trig_add", "trig_edit", "trig_del"):
+            if not dm:
+                return need_dm
+            sc = s["scenes"].get(str(data.get("sc", "")))
+            if not sc:
+                return "That scene isn't there any more."
+            trigs = sc.setdefault("trig", {})
+            if action == "trig_del":
+                trigs.pop(str(data.get("id", "")), None)
+                return None
+            d = data.get("trig") if isinstance(data.get("trig"), dict) else {}
+            if action == "trig_add":
+                if len(trigs) >= MAX_TRIGS:
+                    return f"A scene can have {MAX_TRIGS} triggers."
+                tr = {"id": new_id(), "name": "Trigger", "when": "enter", "do": "tell", "who": "them", "once": True,
+                      "used": False, "text": "", "to": None, "tok": None, "x": 0, "y": 0, "w": 1, "h": 1}
+                if d.get("tok") in sc["tokens"]:
+                    tr["tok"], tr["when"] = d["tok"], "see"
+                else:
+                    x, y = num(d.get("x"), 0, sc["cols"] - 1), num(d.get("y"), 0, sc["rows"] - 1)
+                    if x is None or y is None:
+                        return "Couldn't put a trigger there."
+                    tr["x"], tr["y"] = x, y
+                    tr["w"] = num(d.get("w"), 1, sc["cols"] - x) or 1
+                    tr["h"] = num(d.get("h"), 1, sc["rows"] - y) or 1
+            else:
+                tr = trigs.get(str(data.get("id", "")))
+                if not tr:
+                    return "That trigger isn't there any more."
+            tr["name"] = line(d.get("name"), 40) or tr["name"]
+            if d.get("when") in TRIG_WHEN and not tr.get("tok"):
+                tr["when"] = d["when"]
+            if d.get("do") in TRIG_DO:
+                tr["do"] = d["do"]
+            if tr["do"] == "reveal" and tr.get("tok"):
+                tr["do"] = "tell"
+            tr["who"] = "all" if d.get("who") == "all" else "them"
+            if "once" in d:
+                tr["once"] = bool(d["once"])
+            if "text" in d:
+                tr["text"] = text(d["text"], 1000)
+            if "to" in d:
+                tr["to"] = str(d["to"]) if d["to"] in s["scenes"] else None
+            if d.get("reset") or action == "trig_add":
+                tr["used"], tr["seen"], tr["inside"] = False, False, []
+            if tr["when"] == "enter":            # tokens already standing in it don't set it off
+                cells = self._trig_cells(sc, tr) or []
+                tr["inside"] = sorted(t["id"] for t in sc["tokens"].values() if self._pc(t) and self._touches(t, cells))
+            else:                                # nor does something already in sight
+                cells = self._trig_cells(sc, tr)
+                walls = [w["p"] for w in sc["walls"].values() if not (w.get("door") and w.get("open"))]
+                tr["seen"] = bool(cells) and any(self._sees(sc, t, cells, walls) for t in sc["tokens"].values()
+                                                  if self._pc(t) and not t.get("hidden"))
+            trigs[tr["id"]] = tr
+            return None
         if action == "door":
             sc = self._scene_of(s, data, dm, pid)
             w = sc["walls"].get(str(data.get("id", ""))) if sc else None
@@ -1293,6 +1472,7 @@ class Tabletop:
                 return "It's locked."
             w["open"] = not w.get("open")
             self._reveal(sc)
+            self._triggers(s, sc)
             return None
         if action in ("wall_add", "wall_del", "walls_clear", "door_lock"):
             if not dm:
@@ -1632,6 +1812,8 @@ class Tabletop:
         out["tokens"] = toks
         out["lines"] = list(sc["lines"].values())
         out["auto"] = sc.get("auto", False)
+        if dm:
+            out["trig"] = list(sc.get("trig", {}).values())
         tiles, seen, cols = sc.get("tiles", ""), sc["seen"], sc["cols"]
 
         def clear(x, y):
@@ -1700,6 +1882,7 @@ class Tabletop:
                      "cur": cur, "round": init["round"]},
             "settings": s["settings"],
             "lib": list(s.get("lib", {}).values()) if dm else [],
+            "pops": [p for p in s.get("pops", []) if (p["dm"] if dm else pid in p["to"])][-10:],
             "conditions": list(CONDITIONS), "skills": SKILLS,
             "limits": {"image": MAX_IMAGE_CHARS, "grid": MAX_GRID, "linePts": MAX_LINE_PTS},
         }

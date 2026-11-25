@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="../shared/site.css?v=20261123">
 <link rel="stylesheet" href="../shared/room.css?v=20261123">
 <link rel="stylesheet" href="../shared/fx.css?v=20261123">
-<link rel="stylesheet" href="style.css?v=20261127d">
+<link rel="stylesheet" href="style.css?v=20261127e">
 </head>
 <body>
 <header class="sitebar">
@@ -111,6 +111,8 @@
       <svg viewBox="0 0 24 24"><path d="M3 4h7v7H3zM10 7h5v9h5M14 13h7v7h-7zM6 11v6h4"/></svg></button>
     <button class="tb dm-only" type="button" data-tool="lib" data-modes="tokens" title="Ready tokens: drag one onto the map (L)" aria-label="Ready tokens">
       <svg viewBox="0 0 24 24"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M3 19a5 5 0 0 1 10 0M11 19a5 5 0 0 1 10 0"/></svg></button>
+    <button class="tb dm-only" type="button" data-tool="script" data-modes="script" title="Triggers: things that happen when a player steps somewhere or sees something (K)" aria-label="Triggers">
+      <svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></button>
     <button id="addTokenBtn" class="tb" type="button" data-modes="play tokens" title="Add a token" aria-label="Add a token">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M8 12h8"/></svg></button>
     <span class="tt-sep"></span>
@@ -233,6 +235,8 @@
   <div id="tokenForm" class="tt-modal" hidden role="dialog" aria-modal="true" aria-label="Add a token"></div>
   <div id="statBlock" class="tt-modal" hidden role="dialog" aria-modal="true" aria-label="Stat block"></div>
   <div id="linkForm" class="tt-modal" hidden role="dialog" aria-modal="true" aria-label="Where it leads"></div>
+  <div id="trigForm" class="tt-modal" hidden role="dialog" aria-modal="true" aria-label="Trigger"></div>
+  <div id="popMsg" class="tt-modal" hidden role="dialog" aria-modal="true" aria-label="Message"></div>
 
   <div class="tt-notes-pop">
     <p id="connNote" class="conn-note" hidden></p>
@@ -246,6 +250,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 <script src="../shared/live.js?v=20261123"></script>
 <script src="../shared/fx.js?v=20261123"></script>
-<script src="dnd.js?v=20261127b"></script>
+<script src="dnd.js?v=20261127c"></script>
 </body>
 </html>

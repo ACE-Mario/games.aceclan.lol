@@ -73,9 +73,11 @@
   const cam = { x: -1, y: -1, z: 48 };
   let tool = "select", sel = null;
   // The DM's main tabs: each shows its own tools. Players only ever have Play.
-  const MODES = [["play", "Play"], ["map", "Map making"], ["tokens", "Tokens"]];
-  const MODE_TOOL = { play: "select", map: "build", tokens: "lib" };             // what a tab starts on
-  const TOOL_MODE = { fog: "map", walls: "map", build: "map", lib: "tokens" };   // select is in every tab, the rest are Play
+  const MODES = [["play", "Play"], ["map", "Map making"], ["script", "Scripting"], ["tokens", "Tokens"]];
+  const MODE_TOOL = { play: "select", map: "build", script: "script", tokens: "lib" };             // what a tab starts on
+  const TOOL_MODE = { fog: "map", walls: "map", build: "map", script: "script", lib: "tokens" };   // select is in every tab, the rest are Play
+  const TRIG = "#f59f00";
+  let popSeen = -1;
   // The Tokens tab: ready tokens by kind, to drag (or click, then click the map) onto the map.
   const LIB_TABS = [["players", "Players"], ["enemy", "Enemies"], ["boss", "Bosses"], ["npc", "NPCs"]];
   let libCat = "enemy", libArm = null, libHidden = false, libKey = "";
@@ -368,6 +370,7 @@
     const old = S;
     if (!asPlayer) trapCheck(old, s);
     S = s;
+    showPops(s);
     me = s.you;
     if (s.camp) slug = s.camp.slug;
     if (s.deleted) { leave && leave("That campaign was deleted."); return; }
@@ -411,6 +414,7 @@
     renderStats();
     renderCard();
     refreshSheet();
+    if (tool === "script" && !act) renderToolOpts();
     if (tool === "lib") {
       const k = libSignature();
       if (k !== libKey) { libKey = k; if (libArm) libArm = libFind(libArm.id) || null; renderToolOpts(); }
@@ -609,6 +613,7 @@
       ctx.setLineDash([]);
     }
     if (tool === "build" && isDm()) paintBuildPreview(sc, px);
+    if (mode === "script" && isDm()) paintTriggers(sc, px);
     if (tool === "lib" && libArm && hover && isDm()) {
       const n = libArm.size || 1, at = libSpot(sc, libArm, hover);
       ctx.save();
@@ -1049,6 +1054,35 @@
     ctx.strokeText(lb.text, lb.x, lb.y);
     ctx.fillStyle = lb.dm ? "#7048e8" : INKC;
     ctx.fillText(lb.text, lb.x, lb.y);
+  }
+  function paintTriggers(sc, px) {
+    ctx.save();
+    ctx.lineWidth = px(2);
+    ctx.setLineDash([px(7), px(4)]);
+    for (const tr of sc.trig || []) {
+      const c = tr.used ? "#9ca3af" : TRIG;
+      ctx.strokeStyle = c;
+      if (tr.tok) {
+        const t = sc.tokens.find(x => x.id === tr.tok);
+        if (!t) continue;
+        const pos = tokenPos(t), r = t.size / 2;
+        ctx.beginPath(); ctx.arc(pos.x + r, pos.y + r, r + 0.18, 0, Math.PI * 2); ctx.stroke();
+        tag(`⚡ ${tr.name}`, pos.x + r, pos.y - px(14), c, px);
+      } else {
+        ctx.fillStyle = tr.used ? "rgba(156,163,175,0.12)" : "rgba(245,159,0,0.14)";
+        ctx.fillRect(tr.x, tr.y, tr.w, tr.h);
+        ctx.strokeRect(tr.x, tr.y, tr.w, tr.h);
+        tag(`⚡ ${tr.name}`, tr.x + tr.w / 2, tr.y + px(12), c, px);
+      }
+    }
+    if (act && act.kind === "trig") {
+      const [x0, y0, x1, y1] = boxCells(act.a, act.b);
+      ctx.strokeStyle = TRIG;
+      ctx.fillStyle = "rgba(245,159,0,0.2)";
+      ctx.fillRect(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+      ctx.strokeRect(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+    }
+    ctx.restore();
   }
   function paintBuildPreview(sc, px) {
     if (act && act.kind === "room") {
@@ -1836,6 +1870,15 @@
     if (tool === "walls" && isDm() && e.button === 2) { finishWall(); return; }
     if (tool === "build" && isDm() && !spaceDown && !e.altKey && (e.button === 0 || e.button === 2)) { buildDown(e, p); return; }
     if (e.button === 1 && e.altKey && isDm()) { e.preventDefault(); pickAt(p); return; }     // like pick block
+    if (tool === "script" && isDm() && e.button === 0 && !spaceDown && !e.altKey && !e.shiftKey) {
+      const sc = scene(), c = cellAt(p), t = tokenAt(p);
+      const hit = (sc.trig || []).find(tr => (tr.tok && t && tr.tok === t.id)) ||
+        (sc.trig || []).find(tr => !tr.tok && c.x >= tr.x && c.x < tr.x + tr.w && c.y >= tr.y && c.y < tr.y + tr.h);
+      if (hit) { openTrigForm(hit); return; }
+      if (t) { openTrigForm({ tok: t.id }); return; }
+      act = { kind: "trig", a: p, b: p };
+      return;
+    }
     if (tool === "lib" && libArm && isDm() && !spaceDown && !e.altKey) {
       if (e.button === 0) { placeFromLib(libArm, p); return; }
       if (e.button === 2) { libArm = null; renderToolOpts(); redraw(); return; }
@@ -1954,7 +1997,7 @@
     } else if (act.kind === "erase") eraseAt(p);
     else if (act.kind === "fog") paintFogAt(p);
     else if (act.kind === "paint") paintTileAt(p);
-    else if (act.kind === "fogbox" || act.kind === "box" || act.kind === "room") { act.b = p; redraw(); }
+    else if (act.kind === "fogbox" || act.kind === "box" || act.kind === "room" || act.kind === "trig") { act.b = p; redraw(); }
   });
   function endPointer(e) {
     pointers.delete(e.pointerId);
@@ -1990,6 +2033,11 @@
         action("line_add", { sc: viewSc, line: a.line });
       }
     } else if (a.kind === "paint" || a.kind === "room") buildUp(a);
+    else if (a.kind === "trig") {
+      const sc = scene(), [x0, y0, x1, y1] = boxCells(a.a, a.b);
+      const x = Math.max(0, x0), y = Math.max(0, y0);
+      if (x < sc.cols && y < sc.rows) openTrigForm({ x, y, w: Math.min(sc.cols - 1, x1) - x + 1, h: Math.min(sc.rows - 1, y1) - y + 1 });
+    }
     else if (a.kind === "fog") sendFog(a.cells);
     else if (a.kind === "fogbox") {
       const sc = scene(), [x0, y0, x1, y1] = boxCells(a.a, a.b), cells = new Set();
@@ -2029,6 +2077,8 @@
       if (!$("statBlock").hidden) return closeModal("statBlock");
       if (!$("linkForm").hidden) return closeModal("linkForm");
       if (libArm) { libArm = null; renderToolOpts(); return redraw(); }
+      if (!$("trigForm").hidden) return closeModal("trigForm");
+      if (!$("popMsg").hidden) return closeModal("popMsg");
       if (act) return cancelAct();
       if (wallPts) { wallPts = null; return redraw(); }
       selectToken(null);
@@ -2042,9 +2092,9 @@
       return;
     }
     if (e.key === " ") { spaceDown = true; e.preventDefault(); return; }
-    const keys = { v: "select", r: "ruler", d: "draw", e: "erase", g: "ping", f: "fog", w: "walls", b: "build", l: "lib" };
+    const keys = { v: "select", r: "ruler", d: "draw", e: "erase", g: "ping", f: "fog", w: "walls", b: "build", l: "lib", k: "script" };
     const k = e.key.toLowerCase();
-    if (keys[k] && !e.ctrlKey && !e.metaKey && (!"fwbl".includes(k) || isDm())) { setTool(keys[k]); return; }
+    if (keys[k] && !e.ctrlKey && !e.metaKey && (!"fwblk".includes(k) || isDm())) { setTool(keys[k]); return; }
     if (k === "t" && tool === "build" && build.mode === "prop") { build.rot = (build.rot + 1) % 4; renderToolOpts(); return redraw(); }
     if (k === "a" && (e.ctrlKey || e.metaKey)) {             // select every token you can move
       e.preventDefault();
@@ -2112,7 +2162,7 @@
   function renderToolOpts() {
     const box = $("toolOpts");
     box.innerHTML = "";
-    box.hidden = !["draw", "fog", "ruler", "erase", "ping", "walls", "build", "lib"].includes(tool);
+    box.hidden = !["draw", "fog", "ruler", "erase", "ping", "walls", "build", "lib", "script"].includes(tool);
     box.classList.toggle("build", tool === "build");
     box.classList.toggle("lib", tool === "lib");
     const p = html => { const el = document.createElement("p"); el.className = "muted small"; el.style.margin = 0; el.innerHTML = html; return el; };
@@ -2162,9 +2212,117 @@
       box.append(clear);
     } else if (tool === "build") renderBuildOpts(box, p);
     else if (tool === "lib") renderLib(box, p);
+    else if (tool === "script") renderTrigs(box, p);
     else if (tool === "ruler") box.append(p(`Drag to measure. Everyone sees your ruler. Each square is ${per()} ${esc(unit())}.`));
     else if (tool === "erase") box.append(p(isDm() ? "Drag over drawings to rub them out." : "Drag over your drawings to rub them out."));
     else if (tool === "ping") box.append(p("Click to make everyone look at a spot. Alt+click pings with any tool."));
+  }
+
+  // ---- The Scripting tab: triggers -------------------------------------------------------------
+  function trigSummary(tr) {
+    const sc = scene(), t = tr.tok && sc.tokens.find(x => x.id === tr.tok);
+    const when = tr.tok ? `A player sees ${t ? t.name : "a token that's gone"}` : tr.when === "see" ? "A player sees it" : "A player steps in";
+    const to = S.scenes.find(x => x.id === tr.to);
+    const who = tr.who === "all" ? "everyone" : "them";
+    const then = { tell: "tell me", text: `show ${who} a message`, scene: to ? `send ${tr.who === "all" ? "the party" : "them"} to ${to.name}` : "send them… (pick a scene)", reveal: "reveal hidden tokens in it" }[tr.do];
+    return `${when} → ${then}${tr.once ? ", once" : ""}`;
+  }
+  function renderTrigs(box, p) {
+    const sc = scene();
+    if (!sc) return;
+    const list = sc.trig || [];
+    if (list.length) {
+      const ul = document.createElement("ul");
+      ul.className = "tt-trigs";
+      for (const tr of list) {
+        const li = document.createElement("li");
+        li.innerHTML = `<button type="button"><span>⚡ ${esc(tr.name)}${tr.used ? ' <span class="used">(gone off)</span>' : ""}</span><span class="sub">${esc(trigSummary(tr))}</span></button>`;
+        li.querySelector("button").addEventListener("click", () => {
+          const pos = tr.tok ? tokenById(tr.tok) : { x: tr.x + tr.w / 2, y: tr.y + tr.h / 2 };
+          if (pos) centreOn(pos.x, pos.y);
+          openTrigForm(tr);
+        });
+        ul.append(li);
+      }
+      box.append(ul);
+    }
+    box.append(p(list.length ? "Drag out another area, or click a token, to add one. Click one to change it."
+      : "Drag out an area of squares, or click a token, to make a trigger: something that happens when a player's token steps in, or can see it."));
+    box.append(p("Seeing works from any distance; walls and shut doors block it, and a token you've hidden can't be seen. Only you see triggers."));
+  }
+  function openTrigForm(tr) {
+    const box = $("trigForm"), sc = scene(), isNew = !tr.id;
+    const t = tr.tok && sc.tokens.find(x => x.id === tr.tok);
+    const others = S.scenes.filter(x => x.id !== sc.id);
+    const v = { name: tr.name || (t ? `${t.name} is seen` : "Trigger"), when: tr.when || (t ? "see" : "enter"), do: tr.do || "text",
+      who: tr.who || "them", once: tr.once ?? true, text: tr.text || "", to: tr.to || "" };
+    box.innerHTML = `<form class="win narrow" autocomplete="off">
+      <div class="row between"><h2 style="margin:0">${isNew ? "New trigger" : "Trigger"}</h2><button type="button" class="x" data-close aria-label="Close">✕</button></div>
+      <label class="field">Name<input name="name" maxlength="40" value="${esc(v.name)}"></label>
+      ${t ? `<p class="small">When a player's token can see <b>${esc(t.name)}</b>.</p>`
+        : `<label class="field">When<select name="when">
+          <option value="enter"${v.when === "enter" ? " selected" : ""}>A player's token steps into it</option>
+          <option value="see"${v.when === "see" ? " selected" : ""}>A player's token can see it</option></select></label>`}
+      <label class="field">Then<select name="do">
+        <option value="text"${v.do === "text" ? " selected" : ""}>Show a message</option>
+        <option value="scene"${v.do === "scene" ? " selected" : ""}>Send them to another scene</option>
+        ${t ? "" : `<option value="reveal"${v.do === "reveal" ? " selected" : ""}>Reveal the hidden tokens in it</option>`}
+        <option value="tell"${v.do === "tell" ? " selected" : ""}>Just tell me</option></select></label>
+      <label class="field" data-for="text">Message<textarea name="text" rows="4" maxlength="1000" placeholder="The floor gives way beneath you!">${esc(v.text)}</textarea></label>
+      <label class="field" data-for="scene">Scene<select name="to">${others.length ? others.map(x => `<option value="${x.id}"${v.to === x.id ? " selected" : ""}>${esc(x.name)}</option>`).join("") : `<option value="">Make another scene first</option>`}</select></label>
+      <label class="field" data-for="text scene">Who<select name="who">
+        <option value="them"${v.who === "them" ? " selected" : ""}>The player who set it off</option>
+        <option value="all"${v.who === "all" ? " selected" : ""}>Everyone on this map</option></select></label>
+      <label class="check"><input type="checkbox" name="once"${v.once ? " checked" : ""}> Only the first time</label>
+      ${tr.used ? `<label class="check"><input type="checkbox" name="reset" checked> It's gone off: set it again</label>` : ""}
+      <p class="muted small">You get told every time it goes off.</p>
+      <div class="row"><button class="btn primary" type="submit">${isNew ? "Make it" : "Save"}</button>
+        ${isNew ? "" : `<button type="button" class="btn danger" data-del>Delete</button>`}</div>
+    </form>`;
+    box.hidden = false;
+    const form = box.querySelector("form"), F = form.elements;
+    const show = () => form.querySelectorAll("[data-for]").forEach(el => { el.hidden = !el.dataset.for.split(" ").includes(F.do.value); });
+    F.do.addEventListener("change", show);
+    show();
+    F.name.select();
+    form.addEventListener("click", e => {
+      if (e.target.closest("[data-close]")) closeModal("trigForm");
+      else if (e.target.closest("[data-del]")) { action("trig_del", { sc: sc.id, id: tr.id }); closeModal("trigForm"); }
+    });
+    form.addEventListener("submit", e => {
+      e.preventDefault();
+      const d = { name: F.name.value.trim(), do: F.do.value, who: F.who.value, once: F.once.checked, text: F.text.value, to: F.to.value || null };
+      if (F.when) d.when = F.when.value;
+      if (F.reset && F.reset.checked) d.reset = true;
+      if (isNew) action("trig_add", { sc: sc.id, trig: { ...d, ...(t ? { tok: t.id } : { x: tr.x, y: tr.y, w: tr.w, h: tr.h }) } });
+      else action("trig_edit", { sc: sc.id, id: tr.id, trig: d });
+      closeModal("trigForm");
+    });
+  }
+  // Messages from triggers: the DM is told, players get a box to read.
+  function showPops(s) {
+    const list = s.pops || [], top = list.length ? list[list.length - 1].n : 0;
+    if (popSeen < 0 || top < popSeen) { popSeen = top; return; }        // don't replay old ones when the page opens
+    for (const p of list) {
+      if (p.n <= popSeen) continue;
+      if (p.dm) {
+        note(`⚡ ${p.title}: ${p.text}`);
+        FX.sound("buzz");
+        if (p.at && p.sc) pings.push({ x: p.at[0], y: p.at[1], t: Date.now(), c: TRIG, sc: p.sc });
+      } else {
+        const box = $("popMsg");
+        if (box.hidden) {
+          box.innerHTML = `<div class="win narrow pop-msg"><div class="msgs"></div><button type="button" class="btn primary" data-close>OK</button></div>`;
+          box.querySelector("[data-close]").addEventListener("click", () => closeModal("popMsg"));
+          box.hidden = false;
+        }
+        box.querySelector(".msgs").insertAdjacentHTML("beforeend", `<h2>${esc(p.title)}</h2><p>${esc(p.text)}</p>`);
+        box.querySelector("[data-close]").focus();
+        FX.sound("flip");
+      }
+    }
+    popSeen = top;
+    redraw();
   }
 
   // ---- The Tokens tab ---------------------------------------------------------------------------

@@ -124,6 +124,14 @@ body.is-dm .tt-turn { top: 112px; }
 .tt-lib .lt:hover .del, .tt-lib .lt:focus-within .del { display: block; }
 .tt-lib .del:hover { color: #fff; background: var(--red, #e5484d); }
 .tt-opts.lib .seg button { padding: 6px 8px; }
+.tt-trigs { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.tt-trigs button { width: 100%; text-align: left; display: grid; gap: 2px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg2); color: var(--text); cursor: pointer; font: 600 .8rem/1.2 var(--body); }
+.tt-trigs button:hover { border-color: #f59f00; }
+.tt-trigs .sub { color: var(--muted); font-weight: 500; font-size: .72rem; }
+.tt-trigs .used { color: var(--muted); }
+.pop-msg p { white-space: pre-wrap; margin: 0; font-size: 1.05rem; line-height: 1.45; }
+.pop-msg h2 { margin: 0; color: var(--gold, #f5c542); }
 .tt-opts select { background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 6px; font: inherit; font-size: .8rem; }
 .check { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; cursor: pointer; }
 .check input { width: 16px; height: 16px; margin: 0; accent-color: var(--purple); flex: none !important; }

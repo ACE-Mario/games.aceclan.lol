@@ -72,9 +72,12 @@ those come back).
   Also: secret doors and traps only the DM sees, stairs that link scenes (players taking them can end up on
   different scenes: `at` in the campaign, `_where()` on the server), monster stat blocks with rolls (DM only),
   and token speed, height and aura.
-  The DM works in main tabs (Play, Map making, Tokens), each showing only its own tools. Tokens is a list of ready
+  The DM works in main tabs (Play, Map making, Scripting, Tokens), each showing only its own tools. Tokens is a list of ready
   tokens by kind (players, enemies, bosses, NPCs) to drag onto the map; it starts with a few of each (`STARTER_LIB`),
   and the DM can save any token on the map to it (`lib` in the campaign).
+  Scripting makes triggers (`trig` on a scene): an area of squares or a token, set off when a player's token steps
+  into it or can see it (any distance; walls, shut doors and the DM hiding a token block it). They show players a
+  message, send them (or the party) to another scene, reveal hidden tokens, or just tell the DM (`pops`).
   Set it to true to bring them back.
 - `shared/cards.js`: draws playing cards for poker and canasta (corner indices and face-card art).
 - `shared/board.js` and `shared/board.css`: the clan leaderboard (Today and All time) on the results of the daily
