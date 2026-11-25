@@ -1172,6 +1172,11 @@ class Tabletop:
                 if sc["fog"]:                           # a new map starts with the fog back
                     sc["seen"] = "0" * (cols * rows)
                 self._auto_walls(sc)
+                if isinstance(data.get("locked"), list):     # a new map says which of its doors start locked
+                    shut = {str(t) for t in data["locked"][:MAX_AUTO_WALLS]}
+                    for w in sc["walls"].values():
+                        if w.get("auto") and w.get("door"):
+                            w["open"], w["locked"] = False, w.get("tile") in shut
                 self._reveal(sc)
                 return None
             if action == "prop_add":

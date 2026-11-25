@@ -84,7 +84,8 @@
   const fogLocal = new Map();               // cell index -> "0"/"1", painted but not confirmed yet
   const tilesLocal = new Map();             // cell index -> square + "1"/"0" (walls round it), painted but not confirmed yet
   let tilesLocalSc = null;
-  const build = { mode: "room", tile: "f", brush: 1, prop: "barrel", rot: 0, dmLabel: false, size: "", kind: "dungeon", secret: false, walls: true };
+  const build = { mode: "room", tile: "f", brush: 1, prop: "barrel", rot: 0, dmLabel: false, size: "", kind: "dungeon", secret: false, walls: true,
+    gen: { rooms: 2, traps: 1, locked: 1, secret: 1, treasure: 1, water: 2, clutter: 2, trees: 2 } };   // random map sliders, 0 to 3
   let act = null;                           // what the pointer is doing right now
   let noteTimer = 0, spaceDown = false;
 
@@ -1316,6 +1317,7 @@
     const before = {
       sc: sc.id, tiles: (sc.tiles || "").length === sc.cols * sc.rows ? sc.tiles : ".".repeat(sc.cols * sc.rows), wl: sc.wl,
       props: (sc.props || []).map(propSnap), labels: true, cols: sc.cols, rows: sc.rows,
+      locked: (sc.walls || []).filter(w => w.door && w.locked && w.tile).map(w => w.tile),
     };
     const oldLabels = (sc.labels || []).map(lb => ({ x: lb.x, y: lb.y, text: lb.text, dm: lb.dm }));
     remember({
@@ -1464,9 +1466,16 @@
   }
 
   // ---- Random maps: a dungeon, a forest or a house ----------------------------------------------
-  function makeMap(kind, cols, rows) {
-    const T = Array(cols * rows).fill(kind === "dungeon" ? "." : "g"), props = [], taken = new Set();
+  // o holds the sliders, each 0 (none) to 3 (lots).
+  function makeMap(kind, cols, rows, o = build.gen) {
+    const T = Array(cols * rows).fill(kind === "dungeon" ? "." : "g"), props = [], taken = new Set(), locked = [];
     const R = Math.random, ri = (a, b) => a + Math.floor(R() * (b - a + 1));
+    const lv = (k, a) => a[Math.max(0, Math.min(3, o[k] | 0))];
+    const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = ri(0, i); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+    const lockSome = (doors, chance) => { for (const [x, y] of doors) if (R() < chance) locked.push(`${x},${y}`); };
+    const spread = (k, n, cells, r = () => 0) => {          // n of a prop on random free squares from cells
+      for (const [x, y] of shuffle(cells.slice())) { if (n <= 0) break; if (put(k, x, y, r())) n--; }
+    };
     const ok = (x, y) => x >= 0 && y >= 0 && x < cols && y < rows;
     const get = (x, y) => (ok(x, y) ? T[y * cols + x] : ".");
     const set = (x, y, t) => { if (ok(x, y)) T[y * cols + x] = t; };
@@ -1487,24 +1496,36 @@
         if (R() < 0.35) y = Math.max(1, Math.min(rows - 3, y + (R() < 0.5 ? -1 : 1)));
         set(x, y, "d"); set(x, y + 1, "d");
       }
-      const pond = { x: ri(2, Math.max(2, cols - 9)), y: R() < 0.5 ? ri(1, 3) : Math.max(1, rows - 7), w: ri(4, 7), h: ri(3, 5) };
-      const pcx = pond.x + pond.w / 2, pcy = pond.y + pond.h / 2;
-      for (let yy = pond.y; yy < pond.y + pond.h; yy++) for (let xx = pond.x; xx < pond.x + pond.w; xx++) {
-        const d = ((xx + 0.5 - pcx) / (pond.w / 2)) ** 2 + ((yy + 0.5 - pcy) / (pond.h / 2)) ** 2;
-        if (d < 1 - R() * 0.25 && get(xx, yy) === "g") set(xx, yy, "s");
+      const ponds = lv("water", [0, 1, 1, 2]), big = lv("water", [0, 0.7, 1, 1.3]);
+      for (let k = 0; k < ponds; k++) {
+        const pw = Math.min(cols - 4, Math.round(ri(4, 7) * big)), ph = Math.min(rows - 4, Math.round(ri(3, 5) * big));
+        const pond = { x: ri(2, Math.max(2, cols - pw - 2)), y: (k ? R() < 0.5 : R() >= 0.5) ? ri(1, 3) : Math.max(1, rows - ph - 2), w: pw, h: ph };
+        const pcx = pond.x + pond.w / 2, pcy = pond.y + pond.h / 2;
+        for (let yy = pond.y; yy < pond.y + pond.h; yy++) for (let xx = pond.x; xx < pond.x + pond.w; xx++) {
+          const d = ((xx + 0.5 - pcx) / (pond.w / 2)) ** 2 + ((yy + 0.5 - pcy) / (pond.h / 2)) ** 2;
+          if (d < 1 - R() * 0.25 && get(xx, yy) === "g") set(xx, yy, "s");
+        }
       }
       const cx = ri(Math.floor(cols / 3), Math.floor(cols * 2 / 3)), cy = ri(3, rows - 4);
       const clear = (x, y) => Math.hypot(x - cx, y - cy) < 3.2;
       put("campfire", cx, cy);
       for (let yy = 0; yy < rows; yy++) for (let xx = 0; xx < cols; xx++) {
         if (get(xx, yy) !== "g" || clear(xx, yy) || near(xx, yy, t => t === "d")) continue;
-        const r = R();
-        if (r < 0.2) put("tree", xx, yy, ri(0, 3));
-        else if (r < 0.26) put("bush", xx, yy);
-        else if (r < 0.29) put("rock", xx, yy, ri(0, 3));
+        const r = R(), tr = lv("trees", [0.06, 0.12, 0.2, 0.32]), rk = lv("clutter", [0, 0.015, 0.03, 0.06]);
+        if (r < tr) put("tree", xx, yy, ri(0, 3));
+        else if (r < tr * 1.3) put("bush", xx, yy);
+        else if (r < tr * 1.3 + rk) put("rock", xx, yy, ri(0, 3));
       }
-      for (let k = 0; k < 3; k++) put("rock", cx + ri(-2, 2), cy + (R() < 0.5 ? -2 : 2), ri(0, 3));
-      return { tiles: T.join(""), wl: T.map(t => (t === "g" || t === "d" || t === "s" ? "0" : "1")).join(""), props };
+      for (let k = 0; k < lv("clutter", [0, 2, 3, 5]); k++) put("rock", cx + ri(-2, 2), cy + (R() < 0.5 ? -2 : 2), ri(0, 3));
+      // snares and pits on the path, and something worth finding off it
+      const path = [], wild = [];
+      for (let yy = 0; yy < rows; yy++) for (let xx = 0; xx < cols; xx++) {
+        if (get(xx, yy) === "d") path.push([xx, yy]);
+        else if (get(xx, yy) === "g" && !clear(xx, yy) && !near(xx, yy, t => t === "d")) wild.push([xx, yy]);
+      }
+      spread("trap", lv("traps", [0, 2, 4, 8]), path);
+      spread("chest", lv("treasure", [0, 1, 2, 4]), wild);
+      return { tiles: T.join(""), wl: T.map(t => (t === "g" || t === "d" || t === "s" ? "0" : "1")).join(""), props, locked };
     }
 
     if (kind === "house") {
@@ -1515,17 +1536,18 @@
         set(x, y, x === hx || y === hy || x === hx + w - 1 || y === hy + h - 1 ? "w" : "o");
       }
       // split the inside into rooms with walls one square thick, each with a door
+      const inner = [];
       const rooms = [], split = (x, y, rw, rh, depth) => {
         const across = rw >= rh;
         if (depth > 2 || (across ? rw : rh) < 7) { rooms.push({ x, y, w: rw, h: rh }); return; }
         const at = (across ? x : y) + ri(3, (across ? rw : rh) - 4);
         if (across) {
           for (let yy = y; yy < y + rh; yy++) set(at, yy, "w");
-          set(at, ri(y + 1, y + rh - 2), "D");
+          const dy = ri(y + 1, y + rh - 2); set(at, dy, "D"); inner.push([at, dy]);
           split(x, y, at - x, rh, depth + 1); split(at + 1, y, x + rw - at - 1, rh, depth + 1);
         } else {
           for (let xx = x; xx < x + rw; xx++) set(xx, at, "w");
-          set(ri(x + 1, x + rw - 2), at, "D");
+          const dx = ri(x + 1, x + rw - 2); set(dx, at, "D"); inner.push([dx, at]);
           split(x, y, rw, at - y, depth + 1); split(x, at + 1, rw, y + rh - at - 1, depth + 1);
         }
       };
@@ -1533,13 +1555,18 @@
       const fx = ri(hx + 2, hx + w - 3), fy = hy + h - 1;               // the front door and the garden path
       set(fx, fy, "D");
       for (let y = fy + 1; y < rows; y++) set(fx, y, "d");
+      lockSome([[fx, fy]], lv("locked", [0, 0.25, 0.5, 1]));
+      const sec = lv("secret", [0, 0.15, 0.3, 0.6]);
+      for (const [x, y] of inner) if (R() < sec) set(x, y, "S");
+      lockSome(inner.filter(([x, y]) => get(x, y) === "D"), lv("locked", [0, 0.2, 0.4, 0.8]));
       // furniture by room: the first is the hall, the biggest the main room
       rooms.sort((a, b) => b.w * b.h - a.w * a.h);
       const free = (x, y) => get(x, y) === "o" && !taken.has(y * cols + x) && !near(x, y, t => t === "D");
       const kinds = ["main", "bed", "kitchen", "store", "bed", "study"];
       rooms.forEach((r, i) => {
         const k = kinds[i % kinds.length], X = r.x, Y = r.y, mx = X + Math.floor(r.w / 2), my = Y + Math.floor(r.h / 2);
-        const try_ = (p, x, y, rot) => free(x, y) && put(p, x, y, rot);
+        const keep = lv("clutter", [0.25, 0.6, 1, 1]);
+        const try_ = (p, x, y, rot) => (p === "bed" || R() < keep) && free(x, y) && put(p, x, y, rot);
         if (k === "main") {
           if (r.w >= 4 && r.h >= 4) { try_("rug", mx, my); try_("rug", mx - 1, my); try_("rug", mx, my - 1); try_("rug", mx - 1, my - 1); }
           try_("shelf", X + 1, Y, 0); try_("campfire", X + r.w - 1, Y);
@@ -1555,19 +1582,36 @@
           try_("table", mx, my); try_("chair", mx, my + 1, 2); try_("shelf", X, Y, 0); try_("shelf", X + 1, Y, 0);
         }
       });
+      const floor = [];
+      for (let y = hy; y < hy + h; y++) for (let x = hx; x < hx + w; x++) if (free(x, y)) floor.push([x, y]);
+      if (o.clutter >= 3) spread("crate", 3, floor);
+      spread("chest", lv("treasure", [0, 1, 2, 4]), floor);
+      // traps just inside doors and in the rooms
+      const byDoor = [];
+      for (let y = hy; y < hy + h; y++) for (let x = hx; x < hx + w; x++) {
+        if (get(x, y) === "o" && !taken.has(y * cols + x) && near(x, y, t => t === "D" || t === "S")) byDoor.push([x, y]);
+      }
+      const nTraps = lv("traps", [0, 1, 2, 4]);
+      spread("trap", Math.ceil(nTraps / 2), byDoor);
+      spread("trap", Math.floor(nTraps / 2), floor);
       // the garden
+      const tr = lv("trees", [0.03, 0.06, 0.09, 0.15]);
       for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
         if (get(x, y) !== "g" || near(x, y, t => t === "w" || t === "d" || t === "D") || Math.abs(x - fx) < 2) continue;
         const r = R();
-        if (r < 0.09) put("tree", x, y, ri(0, 3));
-        else if (r < 0.14) put("bush", x, y);
+        if (r < tr) put("tree", x, y, ri(0, 3));
+        else if (r < tr * 1.55) put("bush", x, y);
       }
       put("well", Math.max(0, hx - 3), Math.min(rows - 2, hy + h + 1));
-      return { tiles: T.join(""), wl: T.map(t => (t === "g" || t === "d" || t === "s" ? "0" : "1")).join(""), props };
+      if (o.water >= 3) {                                // a garden pond
+        const px = hx + w + 2 < cols - 2 ? hx + w + 1 : 1, py = ri(1, Math.max(1, rows - 4));
+        for (let y = py; y < py + 3; y++) for (let x = px; x < px + 3; x++) if (get(x, y) === "g" && !taken.has(y * cols + x)) set(x, y, "s");
+      }
+      return { tiles: T.join(""), wl: T.map(t => (t === "g" || t === "d" || t === "s" ? "0" : "1")).join(""), props, locked };
     }
 
     // a dungeon: rooms, then corridors joining each to the nearest one already joined, then doors
-    const rooms = [], want = Math.max(3, Math.min(14, Math.round(cols * rows / 110)));
+    const rooms = [], want = Math.max(2, Math.min(18, Math.round(cols * rows / 110 * lv("rooms", [0.5, 0.75, 1, 1.35]))));
     for (let tries = 0; tries < 500 && rooms.length < want; tries++) {
       const w = ri(3, Math.min(9, cols - 4)), h = ri(3, Math.min(7, rows - 4));
       const x = ri(1, cols - w - 1), y = ri(1, rows - h - 1);
@@ -1606,11 +1650,14 @@
         (ud && (inRoom.has(y * cols + x - 1) || inRoom.has(y * cols + x + 1)));
       let doorNear = false;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ("DS".includes(get(x + dx, y + dy))) doorNear = true;
-      if (meets && !doorNear && R() < 0.6) set(x, y, R() < 0.12 ? "S" : "D");
+      if (meets && !doorNear && R() < 0.6) set(x, y, R() < lv("secret", [0, 0.06, 0.12, 0.3]) ? "S" : "D");
     }
+    const doors = [];
+    for (let i = 0; i < T.length; i++) if (T[i] === "D") doors.push([i % cols, Math.floor(i / cols)]);
+    lockSome(doors, lv("locked", [0, 0.15, 0.3, 0.6]));
     // a pool or a pit in some big rooms
     for (const r of rooms) {
-      if (r.w >= 6 && r.h >= 5 && R() < 0.3) {
+      if (r.w >= 6 && r.h >= 5 && R() < lv("water", [0, 0.15, 0.3, 0.6])) {
         const t = R() < 0.7 ? "s" : "p";
         for (let y = r.y + 2; y < r.y + r.h - 2; y++) for (let x = r.x + 2; x < r.x + r.w - 2; x++) set(x, y, t);
       }
@@ -1624,9 +1671,17 @@
       const first = rooms[0];
       const far = rooms.reduce((b, q) => Math.hypot(q.cx - first.cx, q.cy - first.cy) > Math.hypot(b.cx - first.cx, b.cy - first.cy) ? q : b);
       for (const [x, y] of corners(first)) if (free(x, y)) { put("stairs", x, y, ri(0, 3)); break; }
-      if (free(far.cx, far.cy)) put(R() < 0.5 ? "chest" : "altar", far.cx, far.cy); else for (const [x, y] of corners(far)) if (free(x, y)) { put("chest", x, y); break; }
+      if (o.treasure > 0) {
+        if (free(far.cx, far.cy)) put(R() < 0.5 ? "chest" : "altar", far.cx, far.cy); else for (const [x, y] of corners(far)) if (free(x, y)) { put("chest", x, y); break; }
+      }
+      let extra = lv("treasure", [0, 0, 1, 3]);
+      for (const r of shuffle(rooms.filter(q => q !== first && q !== far))) {
+        if (extra <= 0) break;
+        for (const [x, y] of corners(r)) if (free(x, y)) { put("chest", x, y); extra--; break; }
+      }
+      const dress = lv("clutter", [0, 0.45, 1, 1]);
       for (const r of rooms) {
-        if (r === first || r === far) continue;
+        if (r === first || r === far || R() >= dress) continue;
         const theme = ri(0, 4);
         if (theme === 0) for (const [x, y] of corners(r)) { if (free(x, y) && R() < 0.7) put(R() < 0.5 ? "barrel" : "crate", x, y); }
         else if (theme === 1 && r.w >= 5 && r.h >= 5) for (const [x, y] of [[r.x + 1, r.y + 1], [r.x + r.w - 2, r.y + 1], [r.x + 1, r.y + r.h - 2], [r.x + r.w - 2, r.y + r.h - 2]]) { if (free(x, y)) put("pillar", x, y); }
@@ -1635,8 +1690,14 @@
         else { for (const [x, y] of corners(r)) if (free(x, y) && R() < 0.5) put(R() < 0.6 ? "rubble" : "web", x, y, ri(0, 3)); }
       }
     }
-    for (const i of corr) if (R() < 0.04) put(R() < 0.5 ? "rubble" : "web", i % cols, Math.floor(i / cols), ri(0, 3));
-    return { tiles: T.join(""), wl: "1".repeat(T.length), props };
+    for (const i of corr) if (R() < lv("clutter", [0, 0.02, 0.04, 0.1])) put(R() < 0.5 ? "rubble" : "web", i % cols, Math.floor(i / cols), ri(0, 3));
+    // traps: most in corridors and just inside doors, the rest in rooms
+    const nTraps = Math.round(rooms.length * lv("traps", [0, 0.35, 0.7, 1.4]));
+    const halls = [...corr].map(i => [i % cols, Math.floor(i / cols)]).filter(([x, y]) => get(x, y) === "f");
+    const inside = [...inRoom].map(i => [i % cols, Math.floor(i / cols)]).filter(([x, y]) => "fo".includes(get(x, y)));
+    spread("trap", Math.ceil(nTraps * 0.6), halls);
+    spread("trap", Math.floor(nTraps * 0.4), inside);
+    return { tiles: T.join(""), wl: "1".repeat(T.length), props, locked };
   }
 
   function openLinkForm(pr) {
@@ -2152,26 +2213,44 @@
     const kind = document.createElement("select");
     kind.innerHTML = [["dungeon", "Dungeon"], ["forest", "Forest"], ["house", "House"]]
       .map(([v, n]) => `<option value="${v}" ${build.kind === v ? "selected" : ""}>${n}</option>`).join("");
-    kind.addEventListener("change", () => { build.kind = kind.value; });
+    kind.addEventListener("change", () => { build.kind = kind.value; renderToolOpts(); });
     const size = document.createElement("select");
     size.innerHTML = [["", `This size (${sc.cols} × ${sc.rows})`], ["24x16", "Small (24 × 16)"], ["36x24", "Medium (36 × 24)"], ["50x34", "Large (50 × 34)"]]
       .map(([v, n]) => `<option value="${v}" ${build.size === v ? "selected" : ""}>${n}</option>`).join("");
     size.addEventListener("change", () => { build.size = size.value; });
-    r.append(kind, size, btn("Make a random map", "btn small-btn", () => {
+    r.append(kind, size);
+    box.append(r);
+    const make = btn("Make a random map", "btn small-btn", () => {
       const sc = scene();
       const [cols, rows] = build.size ? build.size.split("x").map(Number) : [sc.cols, sc.rows];
       if (cols < 12 || rows < 10) return note("Make the scene at least 12 × 10 squares first.");
       if ((/[^.]/.test(sc.tiles || "") || (sc.props || []).length) && !confirm("Swap the map you've drawn for a new one?")) return;
       const m = makeMap(build.kind, cols, rows);
-      setMap(sc, { sc: sc.id, tiles: m.tiles, wl: m.wl, props: m.props, labels: true, cols, rows }, "the random map");
-    }));
-    box.append(r);
+      setMap(sc, { sc: sc.id, tiles: m.tiles, wl: m.wl, props: m.props, locked: m.locked, labels: true, cols, rows }, "the random map");
+    });
+    const gen = document.createElement("div");
+    gen.className = "tt-gen";
+    const SLIDERS = {
+      dungeon: [["rooms", "Rooms"], ["traps", "Traps"], ["locked", "Locked doors"], ["secret", "Secret doors"], ["treasure", "Treasure"], ["water", "Pools and pits"], ["clutter", "Clutter"]],
+      forest: [["trees", "Trees"], ["water", "Ponds"], ["traps", "Traps"], ["treasure", "Treasure"], ["clutter", "Rocks"]],
+      house: [["locked", "Locked doors"], ["secret", "Secret doors"], ["traps", "Traps"], ["treasure", "Treasure"], ["clutter", "Furniture"], ["trees", "Garden"]],
+    }[build.kind] || [];
+    const AMOUNT = ["None", "A few", "Some", "Lots"];
+    for (const [k, name] of SLIDERS) {
+      const l = document.createElement("label");
+      const low = k === "rooms" ? ["Fewest", "Fewer", "Normal", "Lots"] : k === "trees" ? ["Sparse", "Light", "Normal", "Dense"] : AMOUNT;
+      l.innerHTML = `<span>${name}</span><input type="range" min="0" max="3" step="1" value="${build.gen[k]}"><b>${low[build.gen[k]]}</b>`;
+      const inp = l.querySelector("input"), out = l.querySelector("b");
+      inp.addEventListener("input", () => { build.gen[k] = +inp.value; out.textContent = low[+inp.value]; });
+      gen.append(l);
+    }
+    box.append(gen, make, p("Only you can see the traps and which doors are locked. Players find out the hard way."));
     const r2 = row();
     r2.append(btn("Import a map picture", "btn small-btn", () => importMap(sc)));
     if (sc.img) r2.append(btn("Take the picture off", "btn small-btn", () => action("scene_img", { sc: sc.id, src: "" })));
     r2.append(btn("Clear what I've drawn", "btn danger small-btn", () => {
       const sc = scene();
-      if (confirm("Clear the floors, props and labels you've drawn on this scene? (Ctrl+Z brings them back.)")) setMap(sc, { sc: sc.id, tiles: ".".repeat(sc.cols * sc.rows), wl: "1".repeat(sc.cols * sc.rows), props: [], labels: true }, "clearing the map");
+      if (confirm("Clear the floors, props and labels you've drawn on this scene? (Ctrl+Z brings them back.)")) setMap(sc, { sc: sc.id, tiles: ".".repeat(sc.cols * sc.rows), wl: "1".repeat(sc.cols * sc.rows), props: [], locked: [], labels: true }, "clearing the map");
     }));
     box.append(r2);
     if (!sc.fog || !sc.auto) {

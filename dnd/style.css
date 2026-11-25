@@ -80,6 +80,10 @@ body.is-dm .player-only { display: none !important; }
   border-radius: 8px; background: var(--bg2); color: var(--muted); font: 600 .78rem/1 var(--body); cursor: pointer; }
 .tt-swatch i { width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(0, 0, 0, .5); }
 .tt-swatch.on { border-color: var(--purple); color: #fff; box-shadow: 0 0 0 1px var(--purple); }
+.tt-gen { display: grid; gap: 4px; margin: 2px 0 6px; }
+.tt-gen label { display: grid; grid-template-columns: 96px 1fr 52px; align-items: center; gap: 8px; font-size: .8rem; }
+.tt-gen input[type=range] { width: 100%; margin: 0; accent-color: var(--purple); }
+.tt-gen b { font-weight: 600; color: var(--muted, #999); font-size: .75rem; }
 .tt-props { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
 .tt-props button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 3px; border: 1px solid var(--line);
   border-radius: 8px; background: var(--bg2); color: var(--muted); font: 600 .68rem/1.1 var(--body); cursor: pointer; }

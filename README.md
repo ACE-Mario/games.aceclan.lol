@@ -68,7 +68,7 @@ those come back).
   For now the page is just the battle map (tokens, health, fog of war, walls and doors): `EXTRAS = false` at the top of
   `dnd/dnd.js` hides the chat and dice, turn order, character sheets and notes, which still work on the server.
   The DM's map maker (B) paints the map square by square in an ink-on-paper style: rooms get walls by themselves,
-  plus doors, props, labels and random dungeon, forest and house maps; premade map pictures can be imported too.
+  plus doors, props, labels and random dungeon, forest and house maps (with sliders for traps, locked and secret doors, treasure and more); premade map pictures can be imported too.
   Also: secret doors and traps only the DM sees, stairs that link scenes (players taking them can end up on
   different scenes: `at` in the campaign, `_where()` on the server), monster stat blocks with rolls (DM only),
   and token speed, height and aura.
