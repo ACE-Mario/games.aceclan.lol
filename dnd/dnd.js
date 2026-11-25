@@ -1101,9 +1101,60 @@
     return best;
   }
   const inScene = (sc, x, y) => x >= 0 && y >= 0 && x < sc.cols && y < sc.rows;
-  function sendTiles(edits) {
+  // ---- Undo and redo (Ctrl+Z, Ctrl+Y) for the map maker -------------------------------------------
+  // Each step knows how to undo and redo itself. Props and labels get new ids from the server, so
+  // undoing an added one looks it up again by where it is.
+  const undoStack = [], redoStack = [];
+  function remember(step) {
+    setTimeout(() => { if (tool === "build") renderToolOpts(); });
+    step.sc = viewSc;
+    undoStack.push(step);
+    if (undoStack.length > 100) undoStack.shift();
+    redoStack.length = 0;
+  }
+  function undoRedo(redo) {
+    const from = redo ? redoStack : undoStack, to = redo ? undoStack : redoStack;
+    let step = from.pop();
+    while (step && !S.scenes.some(x => x.id === step.sc)) step = from.pop();     // its scene was deleted
+    if (!step) return note(redo ? "Nothing to redo." : "Nothing to undo.");
+    if (viewSc !== step.sc) { viewSc = step.sc; renderAll(); fitView(); }
+    (redo ? step.redo : step.undo)();
+    to.push(step);
+    if (tool === "build") renderToolOpts();
+    note((redo ? "Redone: " : "Undone: ") + step.what);
+  }
+  const propSnap = pr => ({ k: pr.k, x: pr.x, y: pr.y, r: pr.r || 0 });
+  function addProp(pr) { action("prop_add", { sc: viewSc, ...propSnap(pr) }); }
+  function delPropAt(pr) { const q = (scene().props || []).find(x => x.x === pr.x && x.y === pr.y && x.k === pr.k); if (q) action("prop_del", { sc: viewSc, id: q.id }); }
+  function addLabel(lb) { action("label_add", { sc: viewSc, x: lb.x, y: lb.y, text: lb.text, dm: lb.dm }); }
+  function delLabelAt(lb) { const q = (scene().labels || []).find(x => x.x === lb.x && x.y === lb.y && x.text === lb.text); if (q) action("label_del", { sc: viewSc, id: q.id }); }
+  function setMap(sc, payload, what) {
+    const before = {
+      sc: sc.id, tiles: (sc.tiles || "").length === sc.cols * sc.rows ? sc.tiles : ".".repeat(sc.cols * sc.rows),
+      props: (sc.props || []).map(propSnap), labels: true, cols: sc.cols, rows: sc.rows,
+    };
+    const oldLabels = (sc.labels || []).map(lb => ({ x: lb.x, y: lb.y, text: lb.text, dm: lb.dm }));
+    remember({
+      what,
+      undo: () => { action("map_set", { ...before, sc: viewSc }); oldLabels.forEach(addLabel); },
+      redo: () => action("map_set", { ...payload, sc: viewSc }),
+    });
+    action("map_set", payload);
+  }
+
+  function sendTiles(edits, record = true) {
     const sc = scene();
     if (!sc || !edits.length) return;
+    if (record) {
+      const T = tilesOf(sc), prev = [], now = [];
+      for (const [x, y, t] of edits) {
+        const old = T[y * sc.cols + x];
+        if (old !== t) { prev.push([x, y, old]); now.push([x, y, t]); }
+      }
+      if (!now.length) return;
+      edits = now;
+      remember({ what: "drawing", undo: () => sendTiles(prev, false), redo: () => sendTiles(now, false) });
+    }
     if (tilesLocalSc !== sc.id) { tilesLocal.clear(); tilesLocalSc = sc.id; }
     for (const [x, y, t] of edits) tilesLocal.set(y * sc.cols + x, t);
     action("tiles", { sc: sc.id, edits });
@@ -1146,23 +1197,40 @@
     }
     if (build.mode === "prop") {
       const pr = propAt(c);
-      if (pr) action("prop_del", { sc: sc.id, id: pr.id });
-      else if (!rub) action("prop_add", { sc: sc.id, k: build.prop, x: c.x, y: c.y, r: build.rot });
+      if (pr) {
+        const was = propSnap(pr);
+        remember({ what: "taking a prop away", undo: () => addProp(was), redo: () => delPropAt(was) });
+        action("prop_del", { sc: sc.id, id: pr.id });
+      } else if (!rub) {
+        const now = { k: build.prop, x: c.x, y: c.y, r: build.rot };
+        remember({ what: "adding a prop", undo: () => delPropAt(now), redo: () => addProp(now) });
+        addProp(now);
+      }
       return;
     }
     if (build.mode === "label") {
       const lb = labelAt(p);
       if (lb) {
-        if (rub) return action("label_del", { sc: sc.id, id: lb.id });
-        const t = prompt("Change the label (leave it empty to take it away):", lb.text);
+        const was = { x: lb.x, y: lb.y, text: lb.text, dm: lb.dm };
+        const t = rub ? "" : prompt("Change the label (leave it empty to take it away):", lb.text);
         if (t === null) return;
-        if (!t.trim()) action("label_del", { sc: sc.id, id: lb.id });
-        else action("label_edit", { sc: sc.id, id: lb.id, text: t });
+        if (!t.trim()) {
+          remember({ what: "taking a label away", undo: () => addLabel(was), redo: () => delLabelAt(was) });
+          action("label_del", { sc: sc.id, id: lb.id });
+        } else {
+          const id = lb.id, text = t.trim();
+          remember({ what: "changing a label", undo: () => action("label_edit", { sc: viewSc, id, text: was.text }), redo: () => action("label_edit", { sc: viewSc, id, text }) });
+          action("label_edit", { sc: sc.id, id, text });
+        }
         return;
       }
       if (rub) return;
       const t = prompt(build.dmLabel ? "A label only you can see:" : "A label everyone can see:");
-      if (t && t.trim()) action("label_add", { sc: sc.id, x: +p.x.toFixed(2), y: +p.y.toFixed(2), text: t, dm: build.dmLabel });
+      if (t && t.trim()) {
+        const now = { x: +p.x.toFixed(2), y: +p.y.toFixed(2), text: t.trim().replace(/\s+/g, " ").slice(0, 40), dm: build.dmLabel };
+        remember({ what: "adding a label", undo: () => delLabelAt(now), redo: () => addLabel(now) });
+        addLabel(now);
+      }
     }
   }
   function buildUp(a) {
@@ -1626,6 +1694,11 @@
     }
     if (e.key === "Enter" && wallPts && !typing()) { finishWall(); return; }
     if (typing() || !$("sheet").hidden || !$("tokenForm").hidden || !$("handout").hidden) return;
+    if ((e.ctrlKey || e.metaKey) && isDm() && !act && /^[zy]$/i.test(e.key)) {
+      e.preventDefault();
+      undoRedo(e.key.toLowerCase() === "y" || e.shiftKey);
+      return;
+    }
     if (e.key === " ") { spaceDown = true; e.preventDefault(); return; }
     const keys = { v: "select", r: "ruler", d: "draw", e: "erase", g: "ping", f: "fog", w: "walls", b: "build" };
     const k = e.key.toLowerCase();
@@ -1750,6 +1823,14 @@
       return b;
     };
     const row = () => { const r = document.createElement("div"); r.className = "row"; return r; };
+    const ur = row();
+    const ub = btn("↶ Undo", "btn small-btn", () => undoRedo(false)), rb = btn("↷ Redo", "btn small-btn", () => undoRedo(true));
+    ub.title = "Undo (Ctrl+Z)";
+    rb.title = "Redo (Ctrl+Y)";
+    ub.disabled = !undoStack.length;
+    rb.disabled = !redoStack.length;
+    ur.append(ub, rb);
+    box.append(ur);
     box.append(seg([["room", "Room"], ["brush", "Brush"], ["erase", "Erase"], ["door", "Door"], ["prop", "Props"], ["label", "Label"]],
       build.mode, v => { build.mode = v; }));
     if (build.mode === "room" || build.mode === "brush") {
@@ -1802,7 +1883,7 @@
       brush: "Paint corridors, pools or a river. Grass, dirt and water don't get walls, so use them outdoors. Right-drag rubs out.",
       erase: "Drag to rub squares back out to solid rock.",
       door: "Click a square in a gap between walls to put a door there, and click it again to take it away.",
-      prop: "Click a square to put it there. Click a prop to take it away.",
+      prop: "Click a square to put it there. Click a prop to take it away. T turns it.",
       label: "Click to add a label. Click a label to change it, or right-click to take it away.",
     }[build.mode]));
     // random maps and pictures
@@ -1816,18 +1897,20 @@
       .map(([v, n]) => `<option value="${v}" ${build.size === v ? "selected" : ""}>${n}</option>`).join("");
     size.addEventListener("change", () => { build.size = size.value; });
     r.append(kind, size, btn("Make a random map", "btn small-btn", () => {
+      const sc = scene();
       const [cols, rows] = build.size ? build.size.split("x").map(Number) : [sc.cols, sc.rows];
       if (cols < 12 || rows < 10) return note("Make the scene at least 12 × 10 squares first.");
       if ((/[^.]/.test(sc.tiles || "") || (sc.props || []).length) && !confirm("Swap the map you've drawn for a new one?")) return;
       const m = makeMap(build.kind, cols, rows);
-      action("map_set", { sc: sc.id, tiles: m.tiles, props: m.props, labels: true, cols, rows });
+      setMap(sc, { sc: sc.id, tiles: m.tiles, props: m.props, labels: true, cols, rows }, "the random map");
     }));
     box.append(r);
     const r2 = row();
     r2.append(btn("Import a map picture", "btn small-btn", () => importMap(sc)));
     if (sc.img) r2.append(btn("Take the picture off", "btn small-btn", () => action("scene_img", { sc: sc.id, src: "" })));
     r2.append(btn("Clear what I've drawn", "btn danger small-btn", () => {
-      if (confirm("Clear the floors, props and labels you've drawn on this scene?")) action("map_set", { sc: sc.id, tiles: ".".repeat(sc.cols * sc.rows), props: [], labels: true });
+      const sc = scene();
+      if (confirm("Clear the floors, props and labels you've drawn on this scene? (Ctrl+Z brings them back.)")) setMap(sc, { sc: sc.id, tiles: ".".repeat(sc.cols * sc.rows), props: [], labels: true }, "clearing the map");
     }));
     box.append(r2);
     if (!sc.fog || !sc.auto) {
