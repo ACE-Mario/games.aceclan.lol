@@ -91,6 +91,7 @@
   const images = new Map();                 // asset name -> Image
   const rulers = new Map();                 // player id -> { p, t } (other people's rulers)
   const drags = new Map();                  // token id -> { x, y, t } (other people dragging)
+  const slides = new Map();                 // token id -> { path, t } (a player's token walking its route)
   const pings = [];                         // { x, y, t, c }
   const fogLocal = new Map();               // cell index -> "0"/"1", painted but not confirmed yet
   const tilesLocal = new Map();             // cell index -> square + "1"/"0" (walls round it), painted but not confirmed yet
@@ -519,6 +520,7 @@
     fogLocal.clear();
     tilesLocal.clear();
     drags.clear();
+    noteSlides(old);
     for (const id of [...picked]) if (!tokenById(id)) picked.delete(id);
     if (sel && !picked.has(sel)) sel = [...picked].pop() || null;
     if (pendingImport && s.dm && slug) { const t = pendingImport; pendingImport = null; setTimeout(() => uploadCamp(t), 0); }
@@ -613,6 +615,29 @@
   // ---- Drawing the map -----------------------------------------------------------------------
   let frame = 0;
   function redraw() { if (!frame) frame = requestAnimationFrame(paint); }
+  // A player's move comes back with the squares they walked through: the token walks them, so everyone sees the way it went.
+  const SLIDE_SPEED = 9, SLIDE_MAX = 2.2;          // squares a second, longest walk in seconds
+  function noteSlides(old) {
+    const was = new Map();
+    if (old) for (const x of old.scenes || []) for (const t of x.tokens || []) was.set(t.id, t.path ? JSON.stringify(t.path) : "");
+    for (const x of S.scenes) for (const t of x.tokens) {
+      const k = t.path ? JSON.stringify(t.path) : "";
+      if (!k || t.path.length < 2) { slides.delete(t.id); continue; }
+      if (old && was.has(t.id) && was.get(t.id) !== k) slides.set(t.id, { path: t.path, t: Date.now(), k });
+      else if (slides.has(t.id) && slides.get(t.id).k !== k) slides.delete(t.id);
+    }
+  }
+  function slideAt(t) {
+    const sl = slides.get(t.id);
+    if (!sl) return null;
+    const p = sl.path, last = p[p.length - 1];
+    if (Math.abs(last[0] - t.x) > 0.01 || Math.abs(last[1] - t.y) > 0.01) { slides.delete(t.id); return null; }
+    const speed = Math.max(SLIDE_SPEED, (p.length - 1) / SLIDE_MAX);
+    const along = (Date.now() - sl.t) / 1000 * speed;
+    if (along >= p.length - 1) { slides.delete(t.id); return null; }
+    const i = Math.floor(along), f = along - i, a = p[i], b = p[i + 1];
+    return { x: a[0] + (b[0] - a[0]) * f, y: a[1] + (b[1] - a[1]) * f, i };
+  }
   function tokenPos(t) {
     if (act && act.kind === "token" && act.moved) {
       const g = act.group.find(x => x.id === t.id);
@@ -620,7 +645,7 @@
     }
     const d = drags.get(t.id);
     if (d && Date.now() - d.t < 3000) return d;
-    return t;
+    return slideAt(t) || t;
   }
   function paint() {
     frame = 0;
@@ -696,6 +721,18 @@
 
     // tokens
     const cur = EXTRAS && S.init.cur && S.init.list.find(e => e.id === S.init.cur);
+    for (const t of sc.tokens) {               // the rest of a walking token's route, faintly
+      const at = slides.has(t.id) && slideAt(t);
+      if (!at) continue;
+      const h = t.size / 2;
+      ctx.beginPath();
+      ctx.moveTo(at.x + h, at.y + h);
+      for (const q of slides.get(t.id).path.slice(at.i + 1)) ctx.lineTo(q[0] + h, q[1] + h);
+      ctx.strokeStyle = t.c || colourOf(t.owner || "");
+      ctx.globalAlpha = 0.45; ctx.lineWidth = px(3); ctx.setLineDash([px(6), px(6)]);
+      ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+    }
     for (const t of sc.tokens) paintToken(t, px, cur && cur.tok === t.id);
     for (const t of sc.tokens) if (t.elev) {
       const pos = tokenPos(t);
@@ -792,7 +829,7 @@
       }
       ctx.globalAlpha = 1;
     }
-    if (pings.length) redraw();
+    if (pings.length || slides.size) redraw();
   }
 
   function paintWalls(sc, px) {

@@ -42,6 +42,7 @@ There are no points: only the daily games have those.
 """
 import base64
 import copy
+import heapq
 import json
 import os
 import random
@@ -1285,20 +1286,21 @@ class Tabletop:
         self._reveal(target, t["id"])
 
     def _blocked(self, sc, t, nx, ny):
-        """Would a player's token have to go through a wall or a shut door to get from where it is to (nx, ny)?
-        It may go round: any way there, one square at a time (not diagonally), counts."""
-        if not sc.get("block", True):
-            return False
-        walls = [w["p"] for w in sc["walls"].values() if not (w.get("door") and w.get("open"))]
-        if not walls:
-            return False
+        """Would a player's token have to go through a wall or a shut door to get from where it is to (nx, ny)?"""
+        return self._path(sc, t, nx, ny) is None
+
+    def _path(self, sc, t, nx, ny):
+        """The shortest way for token t to walk to (nx, ny), square by square (diagonals too, but never cutting a
+        wall's corner), round walls and shut doors: the squares after the one it's on, ending on (nx, ny).
+        None if there's no way through."""
         cols, rows = sc["cols"], sc["rows"]
 
         def cell(x, y):
             return max(0, min(cols - 1, int(x + 0.001))), max(0, min(rows - 1, int(y + 0.001)))
         start, goal = cell(t["x"], t["y"]), cell(nx, ny)
         if start == goal:
-            return False
+            return []
+        walls = [w["p"] for w in sc["walls"].values() if not (w.get("door") and w.get("open"))] if sc.get("block", True) else []
         near = {}                                     # the walls that pass through each square
         for p in walls:
             steps = max(1, int(max(abs(p[2] - p[0]), abs(p[3] - p[1])) * 4))
@@ -1312,16 +1314,61 @@ class Tabletop:
         def step_ok(a, b):
             ax, ay, bx, by = a[0] + 0.5, a[1] + 0.5, b[0] + 0.5, b[1] + 0.5
             return not any(meets(ax, ay, bx, by, w) for w in near.get(a, []) + near.get(b, []))
-        seen, todo = {start}, [start]
+
+        def ok(a, b):
+            if a[0] != b[0] and a[1] != b[1]:          # diagonal: both ways round the corner must be open
+                c1, c2 = (b[0], a[1]), (a[0], b[1])
+                return step_ok(a, c1) and step_ok(c1, b) and step_ok(a, c2) and step_ok(c2, b)
+            return step_ok(a, b)
+        dirs = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1))
+
+        def guess(c):                                  # straight-line-ish distance left, so it searches toward the goal
+            dx, dy = abs(goal[0] - c[0]), abs(goal[1] - c[1])
+            return max(dx, dy) + 0.414 * min(dx, dy)
+        # Diagonals cost a little more than straight steps so the route looks like a person walking, not a zigzag.
+        came, cost, todo = {start: None}, {start: 0}, [(guess(start), 0, start)]
         while todo:
-            a = todo.pop()
-            for b in ((a[0] + 1, a[1]), (a[0] - 1, a[1]), (a[0], a[1] + 1), (a[0], a[1] - 1)):
-                if 0 <= b[0] < cols and 0 <= b[1] < rows and b not in seen and step_ok(a, b):
-                    if b == goal:
-                        return False
-                    seen.add(b)
-                    todo.append(b)
-        return True
+            _, g, a = heapq.heappop(todo)
+            if a == goal:
+                break
+            if g > cost[a]:
+                continue
+            for dx, dy in dirs:
+                b = (a[0] + dx, a[1] + dy)
+                if not (0 <= b[0] < cols and 0 <= b[1] < rows):
+                    continue
+                nb = g + (1.414 if dx and dy else 1)
+                if nb < cost.get(b, 1e9) - 1e-9 and ok(a, b):
+                    cost[b], came[b] = nb, a
+                    heapq.heappush(todo, (nb + guess(b), nb, b))
+        if goal not in came:
+            return None
+        out, c = [], goal
+        while c != start:
+            out.append(c)
+            c = came[c]
+        return out[::-1]
+
+    def _walk(self, s, sc, t, cells, pid):
+        """A player's token goes square by square along its path: the fog clears and triggers go off on the way,
+        as if it walked. It stops on an armed trap, or when a trigger moves it or waits for the DM.
+        True if it stopped before the end."""
+        n = max(1, int(t["size"]))
+        t["path"] = [[t["x"], t["y"]]]
+        traps = [pr for pr in sc.get("props", {}).values() if pr["k"] == "trap" and not pr.get("off")]
+        for cx, cy in cells:
+            t["x"], t["y"] = cx, cy
+            t["path"].append([cx, cy])
+            self._reveal(sc, t["id"])
+            waiting = {tr["id"] for tr in sc.get("trig", {}).values() if tr.get("pending")}
+            self._triggers(s, sc, [t], True)
+            if t["id"] not in sc["tokens"] or (t["x"], t["y"]) != (cx, cy):
+                return True                            # a trigger took them somewhere
+            if any(tr.get("pending") and tr["id"] not in waiting for tr in sc.get("trig", {}).values()):
+                return True                            # the DM has a call to make here
+            if any(cx <= pr["x"] < cx + n and cy <= pr["y"] < cy + n for pr in traps):
+                return True                            # click: they stop on the trap
+        return False
 
     def _spawn_spot(self, sc, t):
         """A free square for token t inside the scene's player spawn (or as close to it as it gets), or None."""
@@ -1715,9 +1762,16 @@ class Tabletop:
                 return "That isn't your token. Ask the DM."
             if action == "tok_move":
                 x, y = num(data.get("x"), -50, MAX_GRID + 50, 2), num(data.get("y"), -50, MAX_GRID + 50, 2)
-                if not dm and x is not None and y is not None and self._blocked(sc, t, x, y):
-                    return "There's a wall in the way."
+                t.pop("path", None)
+                if not dm and x is not None and y is not None:
+                    path = self._path(sc, t, x, y)
+                    if path is None:
+                        return "There's a wall in the way."
+                    if len(path) > 1 and self._walk(s, sc, t, path[:-1], pid):   # walked it: something stopped them
+                        return None
                 self._token_fields(s, t, {"x": data.get("x"), "y": data.get("y")}, dm)
+                if t.get("path"):
+                    t["path"] = (t["path"] + [[t["x"], t["y"]]])[-120:]
                 self._reveal(sc, t["id"])
                 self._take_stairs(s, sc, t, pid, dm)
                 if t["id"] in sc["tokens"]:
@@ -1734,6 +1788,8 @@ class Tabletop:
                     y = num(d.get("y", t["y"]), -50, MAX_GRID + 50, 2)
                     if x is not None and y is not None and self._blocked(sc, t, x, y):
                         return "There's a wall in the way."
+                if "x" in d or "y" in d:
+                    t.pop("path", None)
                 if "hpd" in d:                                          # damage or healing
                     delta = num(d.pop("hpd"), -9999, 9999)
                     if delta:
