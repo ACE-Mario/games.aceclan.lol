@@ -18,7 +18,7 @@ import sys
 import threading
 import time
 
-from flask import Flask, abort, jsonify, request, send_from_directory
+from flask import Flask, abort, jsonify, request, send_file, send_from_directory
 from flask_socketio import SocketIO, join_room
 
 import songbank
@@ -303,6 +303,18 @@ def game_list(game_id):
     with lock:
         online = {c: sum(1 for p in r.players.values() if p["sids"]) for c, r in rooms.items() if r.game is game}
         return jsonify(listing(online))
+
+
+@app.route("/api/<game_id>/asset/<path:key>")
+def game_asset(game_id, key):
+    """Pictures a game keeps as files (ACE Tabletop's maps and tokens). Their names never change, so browsers
+    can keep them."""
+    game = GAMES.get(game_id)
+    asset = getattr(game, "asset", None)
+    found = asset(key) if asset else None
+    if not found:
+        abort(404)
+    return send_file(found[0], mimetype=found[1], max_age=365 * 24 * 3600)
 
 
 @app.route("/", defaults={"path": ""})

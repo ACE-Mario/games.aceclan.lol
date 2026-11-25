@@ -55,6 +55,13 @@ those come back).
   first), each with Open and Copy link. A board's link is `board/?b=<name-as-slug>` (e.g. `?b=biology-revision`),
   and the open board's panel shows it with a Copy button. Boards are kept for good; only the person who made one
   can delete it.
+- `dnd/`: ACE Tabletop, an online table for roleplaying campaigns (games.aceclan.lol/dnd). Whoever starts a campaign
+  is its DM; they can make others DMs, and the DM code (Room tab) makes you DM on another device. Scenes are maps on a
+  square grid (a picture, or a blank grid), with tokens, drawings and spell areas, a ruler and pings, and fog of war
+  the DM paints in or out. Players move their own tokens; the DM moves everything. There are also dice (rolled by the
+  server, optionally to the DM only), a turn order with rounds, character sheets you can roll from, DM notes and
+  shared handouts, and private notes for each person. Campaigns are named and kept like ACE Board's boards
+  (`dnd/?c=<slug>`, room name `c:<slug>`). No points.
 - `shared/cards.js`: draws playing cards for poker and canasta (corner indices and face-card art).
 - `shared/board.js` and `shared/board.css`: the clan leaderboard (Today and All time) on the results of the daily
   games ACE Mini, Squads and Map Pin (Map Pin has one board for VALORANT and one for League). Scores are kept by
@@ -70,6 +77,9 @@ those come back).
   - `games/poker.py`: poker rules: dealing, blinds, betting rounds, side pots and hand ranking. Hole cards
     only go to their owner until a showdown.
   - `games/canasta.py`: Canasta rules: melds, wild cards, the frozen pile, red and black 3s, going out and scoring.
+  - `games/tabletop.py`: ACE Tabletop. Players only get what they may see: no hidden tokens, no monsters under the
+    fog, no DM notes, no DM-only rolls. Campaigns are saved to `server/saved/dnd/<slug>.json`, with their pictures
+    as files in `server/saved/dnd/<slug>/`, served at `/api/dnd/asset/<slug>/<file>`.
   - `games/board.py`: ACE Board. Keeps every item, lets people change only their own (the leader can delete
     anyone's), and caps picture sizes (700 KB each, 30 MB of pictures a board; there's no limit on how many things a board holds). Changes go out as live messages; the whole board
     is only sent to a tab that doesn't have it yet. A board's room name is `b:<slug>` (picked by the game through
