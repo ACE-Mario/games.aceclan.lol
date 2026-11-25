@@ -384,7 +384,7 @@ textarea:focus { border-color: var(--accent); outline: none; }
 /* Handouts */
 .note-img { max-width: 100%; max-height: 160px; object-fit: contain; border-radius: 6px; cursor: zoom-in; align-self: flex-start; }
 .handout-img { max-width: 100%; max-height: 70vh; object-fit: contain; border-radius: 8px; align-self: center; }
-#handout .note-text { white-space: pre-wrap; }
+#handout .note-text { white-space: pre-wrap; font-size: 1.05rem; line-height: 1.6; max-width: 70ch; }
 
 /* The DM's right-click menu on the map. */
 .tt-menu { position: fixed; z-index: 30; min-width: 210px; max-width: min(320px, calc(100vw - 16px)); max-height: calc(100vh - 16px);
@@ -439,3 +439,13 @@ textarea:focus { border-color: var(--accent); outline: none; }
 .tt-pin small { opacity: .7; font-size: .7rem; }
 .tt-pin .x { position: absolute; top: 2px; right: 4px; background: none; border: 0; color: #2b2116; cursor: pointer; }
 .tt-pin.lift { cursor: grabbing; z-index: 5; box-shadow: 0 10px 24px #000a; }
+
+/* The typing box (instead of the browser's prompt) */
+.tt-modal.tt-top-modal { z-index: 40; }
+.tt-ask { width: min(640px, 100%); }
+.tt-ask .field { display: flex; flex-direction: column; gap: 6px; }
+.tt-ask .field > span { color: var(--muted, #9aa0aa); font-size: .9rem; }
+.tt-ask textarea { width: 100%; min-height: 8em; resize: vertical; font: 1rem/1.5 system-ui, sans-serif; padding: 10px 12px; }
+.tt-ask input { width: 100%; font-size: 1rem; }
+.tt-ask-btns { justify-content: flex-end; align-items: center; gap: 8px; }
+.tt-ask-btns .muted { margin-right: auto; }

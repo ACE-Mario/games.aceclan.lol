@@ -198,6 +198,32 @@
     }
     throw new Error("too big");
   }
+  // A proper box for typing (instead of the browser's one-line prompt): fields = [{ label, value, multi, rows, number, max }].
+  // Resolves to the values typed, or null when cancelled. Ctrl+Enter saves a long text.
+  function askFields(title, fields, okText = "Save") {
+    return new Promise(done => {
+      const box = $("askBox");
+      box.innerHTML = `<form class="win tt-ask${fields.some(f => f.multi) ? "" : " narrow"}" autocomplete="off"><div class="row between"><h2 style="margin:0">${esc(title)}</h2><button type="button" class="x" data-close aria-label="Close">✕</button></div>
+        ${fields.map((f, i) => `<label class="field">${f.label ? `<span>${esc(f.label)}</span>` : ""}${f.multi
+          ? `<textarea name="f${i}" rows="${f.rows || 8}" maxlength="${f.max || 4000}">${esc(f.value || "")}</textarea>`
+          : `<input name="f${i}" ${f.number ? `type="number" inputmode="numeric"` : `maxlength="${f.max || 200}"`} value="${esc(String(f.value ?? ""))}">`}</label>`).join("")}
+        <div class="row tt-ask-btns">${fields.some(f => f.multi) ? `<span class="muted small">Ctrl+Enter to save</span>` : ""}<button type="button" class="btn small-btn" data-close>Cancel</button><button type="submit" class="btn primary small-btn">${esc(okText)}</button></div></form>`;
+      box.hidden = false;
+      const form = box.querySelector("form");
+      const finish = v => { box.hidden = true; box.innerHTML = ""; box.onclick = null; done(v); };
+      form.addEventListener("submit", e => { e.preventDefault(); finish(fields.map((f, i) => form.elements["f" + i].value)); });
+      box.onclick = e => { if (e.target === box || e.target.closest("[data-close]")) finish(null); };
+      form.addEventListener("keydown", e => {
+        e.stopPropagation();                         // typing here never works the map's shortcuts
+        if (e.key === "Escape") finish(null);
+        else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); form.requestSubmit(); }
+      });
+      const first = form.querySelector("input, textarea");
+      first.focus();
+      if (first.tagName === "INPUT") first.select();
+    });
+  }
+  const askText = async (title, value, opt = {}) => { const r = await askFields(title, [{ ...opt, value }], opt.ok); return r ? r[0] : null; };
   function pickFile() {
     return new Promise(ok => {
       const f = $("fileIn");
@@ -606,6 +632,8 @@
     if (!sc) return;
     const z = cam.z * dpr, px = n => n / cam.z;
     ctx.setTransform(z, 0, 0, z, -cam.x * z, -cam.y * z);
+    taken.length = 0;                               // words on the map keep out of each other's way, and off tokens
+    for (const t of sc.tokens) { const pos = tokenPos(t), g = px(2); taken.push([pos.x + g, pos.y + g, pos.x + t.size - g, pos.y + t.size - g]); }
 
     // the map
     ctx.fillStyle = "#23262f";
@@ -626,8 +654,8 @@
     if (isDm()) for (const pr of sc.props || []) if (pr.hidden) paintHiddenProp(pr);
     if (isDm() && sc.spawn) paintSpawn(sc.spawn, n => n / cam.z);
     if (cam.z > 12) for (const pr of sc.props || []) {          // where stairs lead
-      const to = isDm() ? pr.to && (S.scenes.find(x => x.id === pr.to) || {}).name : pr.go;
-      if (to) tag(`→ ${to}`, pr.x + 0.5, pr.y + 1 + px(8), isDm() && !pr.open ? "#adb5bd" : "#ffd43b", px, 10);
+      const to = isDm() && pr.to && (S.scenes.find(x => x.id === pr.to) || {}).name;   // players never see where stairs lead
+      if (to) tag(`→ ${to}`, pr.x + 0.5, pr.y + 1 + px(8), isDm() && !pr.open ? "#adb5bd" : "#ffd43b", px, 11);
     }
     // auras and reach
     for (const t of sc.tokens) if (t.aura) {
@@ -665,7 +693,6 @@
     // fog of war, then walls and doors on top
     if (sc.fog) paintFog(sc, px);
     paintWalls(sc, px);
-    for (const lb of sc.labels || []) paintLabel(lb, px);
 
     // tokens
     const cur = EXTRAS && S.init.cur && S.init.list.find(e => e.id === S.init.cur);
@@ -674,6 +701,7 @@
       const pos = tokenPos(t);
       tag(`${t.elev > 0 ? "▲" : "▼"} ${Math.abs(t.elev)} ${unit()}`, pos.x + t.size * 0.85, pos.y + px(2), t.elev > 0 ? "#74c0fc" : "#e8b86d", px, 10);
     }
+    for (const lb of sc.labels || []) paintLabel(lb, px);     // after the tokens, so labels move out of their way
 
     // a token being dragged: the path and how far
     if (act && act.kind === "token" && act.moved) {
@@ -823,10 +851,9 @@
     const out = {
       ...sc, tokens, tiles,
       props: (sc.props || []).filter(pr => clear(pr.x, pr.y) && (pr.k !== "trap" || pr.found) && !pr.hidden).map(pr => {
-        const go = pr.open && S.scenes.find(x => x.id === pr.to);
-        return { id: pr.id, k: pr.k, x: pr.x, y: pr.y, r: pr.r, ...(go ? { go: go.name } : {}), ...(pr.off ? { off: true } : {}) };
+        return { id: pr.id, k: pr.k, x: pr.x, y: pr.y, r: pr.r, ...(pr.off ? { off: true } : {}) };
       }),
-      labels: (sc.labels || []).filter(lb => !lb.dm && clear(lb.x, lb.y)),
+      labels: (sc.labels || []).filter(lb => !lb.dm && [-1, 0, 1].every(k => clear(Math.max(0, Math.min(sc.cols - 1, lb.x + k * lb.text.length * 0.16)), Math.min(lb.y, sc.rows - 1)))),
       walls: (sc.walls || []).filter(w => w.door && !w.secret && doorSeen(w)).map(w => ({ id: w.id, p: w.p, door: true, open: !!w.open, ...(w.locked && w.showlock ? { locked: true } : {}) })),
     };
     pvMemo = { src: sc, seen: sc.seen, out };
@@ -846,8 +873,8 @@
       pick.value = (S && S.playAs) || (asPlayer ? "*" : "");
     }
   }
-  function makeFake() {
-    const name = prompt("Name for the pretend player (you'll play as them to try things out)", `Pretend player ${Object.keys(S.fakes || {}).length + 1}`);
+  async function makeFake() {
+    const name = await askText("Make a pretend player", `Pretend player ${Object.keys(S.fakes || {}).length + 1}`, { label: "You'll play as them to try things out.", max: 20, ok: "Make" });
     if (name !== null) action("fake_add", { name: name.trim() });
   }
   function setAsPlayer(on) {
@@ -1248,17 +1275,27 @@
     }
     g.restore();
   }
+  const labelDrawn = new Map();               // label id -> the box it was drawn in, for clicking it
   function paintLabel(lb, px) {
-    const size = Math.max(0.5, px(14));
-    ctx.font = `italic 700 ${size}px Georgia, "Times New Roman", serif`;
+    const size = Math.min(px(14), 0.62);       // steady on screen, but never bigger than about half a square
+    if (size * cam.z < 6) { labelDrawn.delete(lb.id); return; }
+    ctx.font = `700 ${size}px Georgia, "Times New Roman", serif`;
+    const w = ctx.measureText(lb.text).width + size * 0.9, h = size * 1.55;
+    const { x, y } = fit(lb.x, lb.y, w, h, px, true);
+    labelDrawn.set(lb.id, [x - w / 2, y - h / 2, x + w / 2, y + h / 2]);
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(x - w / 2, y - h / 2, w, h, size * 0.3) : ctx.rect(x - w / 2, y - h / 2, w, h);
+    ctx.fillStyle = lb.dm ? "rgba(243, 240, 255, 0.94)" : "rgba(250, 246, 236, 0.94)";
+    ctx.fill();
+    ctx.lineWidth = Math.max(px(1), size * 0.07);
+    ctx.setLineDash(lb.dm ? [size * 0.3, size * 0.2] : []);
+    ctx.strokeStyle = lb.dm ? "#7048e8" : "rgba(60, 50, 40, 0.55)";
+    ctx.stroke();
+    ctx.setLineDash([]);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.lineJoin = "round";
-    ctx.lineWidth = size * 0.25;
-    ctx.strokeStyle = "rgba(242, 237, 225, 0.92)";
-    ctx.strokeText(lb.text, lb.x, lb.y);
-    ctx.fillStyle = lb.dm ? "#7048e8" : INKC;
-    ctx.fillText(lb.text, lb.x, lb.y);
+    ctx.fillStyle = lb.dm ? "#5f3dc4" : "#2b2116";
+    ctx.fillText(lb.text, x, y + size * 0.05);
   }
   function paintTriggers(sc, px) {
     ctx.save();
@@ -1410,9 +1447,27 @@
     }
   }
 
+  // Boxes already holding words (and tokens) this frame: [x0, y0, x1, y1] on the map.
+  const taken = [];
+  const hits = (b, pad) => taken.some(o => b[0] < o[2] + pad && b[2] > o[0] - pad && b[1] < o[3] + pad && b[3] > o[1] - pad);
+  // Where a box w × h centred on x, y can go without covering other words: the spot itself, or a little below or above.
+  const FIT_STEPS = [];                           // nearest first: straight down or up, then a bit to the side
+  for (let j = -6; j <= 6; j++) for (const i of [0, -0.5, 0.5, -1, 1]) FIT_STEPS.push([i, j]);
+  FIT_STEPS.sort((a, b) => Math.hypot(a[0] * 1.5, a[1]) - Math.hypot(b[0] * 1.5, b[1]) || b[1] - a[1]);
+  function fit(x, y, w, h, px, wide) {
+    const step = h + px(3);
+    for (const [i, j] of FIT_STEPS) {
+      if (i && !wide) continue;
+      const cx = x + i * w, cy = y + j * step, b = [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2];
+      if (!hits(b, px(1))) { taken.push(b); return { x: cx, y: cy }; }
+    }
+    taken.push([x - w / 2, y - h / 2, x + w / 2, y + h / 2]);
+    return { x, y };
+  }
   function tag(text, x, y, c, px, size = 12) {
     ctx.font = `600 ${px(size)}px system-ui, sans-serif`;
     const w = ctx.measureText(text).width + px(10), h = px(size + 6);
+    ({ x, y } = fit(x, y, w, h, px));
     ctx.fillStyle = "rgba(10, 11, 15, 0.85)";
     ctx.beginPath();
     ctx.roundRect ? ctx.roundRect(x - w / 2, y - h / 2, w, h, px(4)) : ctx.rect(x - w / 2, y - h / 2, w, h);
@@ -1534,7 +1589,7 @@
     ctx.globalAlpha = 1;
     if (cam.z * Math.max(1, t.size) >= 30) {
       const look = t.look && t.look !== "fine" ? ` · ${t.look}` : "";
-      tag(t.name + look, cx, pos.y + t.size + px(9), t.look === "bloodied" ? "#ff8787" : "#fff", px, 11);
+      tag(t.name + look, cx, pos.y + t.size + px(10), t.look === "bloodied" ? "#ff8787" : "#fff", px, 12);
     }
   }
   const initials = n => (String(n).trim().split(/\s+/).map(w => w[0]).join("").slice(0, 2) || "?").toUpperCase();
@@ -1651,6 +1706,10 @@
   const propsAt = c => (scene().props || []).filter(pr => pr.x === c.x && pr.y === c.y).sort((a, b) => !!a.hidden - !!b.hidden);
   const propAt = c => propsAt(c)[0];
   function labelAt(p) {
+    for (const lb of scene().labels || []) {      // where it was drawn (it may have moved out of the way)
+      const b = labelDrawn.get(lb.id);
+      if (b && p.x >= b[0] && p.x <= b[2] && p.y >= b[1] && p.y <= b[3]) return lb;
+    }
     let best = null, bd = 0.8;
     for (const lb of scene().labels || []) {
       const d = Math.hypot((lb.x - p.x) / Math.max(1, lb.text.length * 0.16), lb.y - p.y);
@@ -1689,7 +1748,7 @@
     redraw();
     note(`Picked: ${what}`);
   }
-  function buildDown(e, p) {
+  async function buildDown(e, p) {
     const sc = scene(), c = cellAt(p), rub = e.button === 2;
     const w = rub || build.mode === "erase" || build.walls ? "1" : "0";
     if (build.mode === "spawn") {
@@ -1750,7 +1809,7 @@
       const lb = labelAt(p);
       if (lb) {
         const was = { x: lb.x, y: lb.y, text: lb.text, dm: lb.dm };
-        const t = rub ? "" : prompt("Change the label (leave it empty to take it away):", lb.text);
+        const t = rub ? "" : await askText("Change the label", lb.text, { label: "Leave it empty to take the label away.", max: 40, ok: "Save" });
         if (t === null) return;
         if (!t.trim()) {
           remember({ what: "taking a label away", undo: () => addLabel(was), redo: () => delLabelAt(was) });
@@ -1763,7 +1822,7 @@
         return;
       }
       if (rub) return;
-      const t = prompt(build.dmLabel ? "A label only you can see:" : "A label everyone can see:");
+      const t = await askText(build.dmLabel ? "A label only you can see" : "A label everyone can see", "", { max: 40, ok: "Add" });
       if (t && t.trim()) {
         const now = { x: +p.x.toFixed(2), y: +p.y.toFixed(2), text: t.trim().replace(/\s+/g, " ").slice(0, 40), dm: build.dmLabel };
         remember({ what: "adding a label", undo: () => delLabelAt(now), redo: () => addLabel(now) });
@@ -2066,8 +2125,8 @@
       const name = (PROP_INFO.find(x => x[0] === pr.k) || [0, pr.k])[1].replace(" (DM)", ""), to = pr.to && S.scenes.find(x => x.id === pr.to);
       const add = group(name + (pr.hidden ? " (hidden)" : "") + (pr.k === "trap" ? (pr.off ? " (disarmed)" : " (armed)") : "") + (to ? ` → ${to.name}` : ""));
       if (pr.k === "trap") {
-        add("Set it off…", () => {
-          const text = prompt("What happens? (the player on it sees this)", "Click! You set off a trap.");
+        add("Set it off…", async () => {
+          const text = await askText("Set off the trap", "Click! You set off a trap.", { label: "What happens? The player on it sees this.", multi: true, rows: 4, max: 1000, ok: "Set it off" });
           if (text !== null) action("trap_fire", { sc: sc.id, id: pr.id, text });
         });
         add(pr.off ? "Re-arm it" : "Disarm it", () => action("prop_edit", { sc: sc.id, id: pr.id, off: !pr.off }));
@@ -2096,22 +2155,22 @@
       const k = bc.x + "," + bc.y, hp = (sc.hp || {})[k], what = "DS".includes(tilesOf(rawScene())[bc.y * sc.cols + bc.x]) ? "door" : "wall";
       const add = group(hp ? `Breakable ${what}: ${hp[0]}/${hp[1]} HP` : `Breakable ${what}`);
       if (hp) {
-        add("Hit it… (take off HP)", () => {
-          const n = prompt(`How much damage? (it has ${hp[0]} HP left)`, "");
+        add("Hit it… (take off HP)", async () => {
+          const n = await askText("Hit it", "", { label: `How much damage? It has ${hp[0]} HP left.`, number: true, ok: "Hit" });
           if (n !== null && n.trim() && !isNaN(+n)) action("break_hit", { sc: sc.id, x: bc.x, y: bc.y, dmg: +n });
         });
         add("Break it now", () => action("break_hit", { sc: sc.id, x: bc.x, y: bc.y, dmg: hp[0] }));
-        add("Change its HP…", () => { const n = prompt("HP", String(hp[1])); if (n !== null && +n > 0) action("break_set", { sc: sc.id, x: bc.x, y: bc.y, hp: +n }); });
+        add("Change its HP…", async () => { const n = await askText("Change its HP", String(hp[1]), { number: true }); if (n !== null && +n > 0) action("break_set", { sc: sc.id, x: bc.x, y: bc.y, hp: +n }); });
         add("Make it unbreakable", () => action("break_set", { sc: sc.id, x: bc.x, y: bc.y, hp: 0 }));
-      } else add(`Make it breakable (give it HP)…`, () => {
-        const n = prompt(`HP for this ${what} square? Players never see it.`, what === "door" ? "15" : "30");
+      } else add(`Make it breakable (give it HP)…`, async () => {
+        const n = await askText(`Make this ${what} breakable`, what === "door" ? "15" : "30", { label: "HP for this square. Players never see it.", number: true });
         if (n !== null && +n > 0) action("break_set", { sc: sc.id, x: bc.x, y: bc.y, hp: +n });
       });
     }
     const lb = labelAt(p);
     if (lb) {
       const add = group(`Label: ${lb.text}`);
-      add("Change the words", () => { const text = prompt("Label", lb.text); if (text && text.trim()) action("label_edit", { sc: sc.id, id: lb.id, text: text.trim() }); });
+      add("Change the words", async () => { const text = await askText("Change the label", lb.text, { max: 40 }); if (text && text.trim()) action("label_edit", { sc: sc.id, id: lb.id, text: text.trim() }); });
       add(lb.dm ? "Let players see it" : "Only for DMs", () => action("label_edit", { sc: sc.id, id: lb.id, dm: !lb.dm }));
       add("Delete", () => action("label_del", { sc: sc.id, id: lb.id }), "danger");
     }
@@ -2511,6 +2570,7 @@
   addEventListener("keydown", e => {
     if (!S || $("gameView").hidden) return;
     if (e.key === "Escape") {
+      if (!$("askBox").hidden) return $("askBox").querySelector("[data-close]").click();
       if (!$("sheet").hidden) return closeModal("sheet");
       if (!$("tokenForm").hidden) return closeModal("tokenForm");
       if (!$("handout").hidden) return closeModal("handout");
@@ -3180,10 +3240,11 @@
     const key = list.length > 1 ? "group:" + list.map(t => t.id).join(",") : list[0].id;
     if (!force && card.dataset.id === key && card.contains(document.activeElement)) return;
     const open = new Set([...card.querySelectorAll("details[open]")].map(d => d.dataset.sec));
+    const shut = card.dataset.id === key ? new Set([...card.querySelectorAll("details:not([open])")].map(d => d.dataset.sec)) : new Set();
     card.dataset.id = key;
     card.hidden = false;
     card.innerHTML = list.length > 1 ? groupCard(list) : tokenCard(tokenById(sel) || list[0]);
-    card.querySelectorAll("details").forEach(d => { if (open.has(d.dataset.sec)) d.open = true; });
+    card.querySelectorAll("details").forEach(d => { if (open.has(d.dataset.sec)) d.open = true; else if (shut.has(d.dataset.sec)) d.open = false; });
   }
   function hpRow() {
     return `<div class="row hp-row"><input type="number" class="num" id="hpDelta" min="0" placeholder="Amount" aria-label="Damage or healing">
@@ -3219,7 +3280,7 @@
         </details>`;
       if (dm) {
         const people = Object.entries(S.names).filter(([q]) => !S.dms.includes(q));
-        h += `<details data-sec="dm"><summary>DM</summary>
+        h += `<details data-sec="dm" open><summary>DM</summary>
           <div class="row"><label class="check"><input type="checkbox" data-k="hidden"${t.hidden ? " checked" : ""}> Hidden from players</label>
             <label class="check"><input type="checkbox" data-k="showhp"${t.showhp ? " checked" : ""}> Players see its HP</label></div>
           <div class="row"><label class="small muted">Moved by <select data-k="owner"><option value="">DM only</option>${people.map(([q, n]) => `<option value="${q}"${t.owner === q ? " selected" : ""}>${esc(n)}</option>`).join("")}</select></label>
@@ -3797,11 +3858,9 @@
       if (e.target.closest("[data-del]")) { if (confirm(`Delete ${it.name}?` + (it.kind === "key" ? " Doors it opened won't have a key any more." : ""))) action("item_del", { id: it.id }); return; }
       if (e.target.closest("[data-pic]")) { const url = await itemPicture(); if (url) action("item_img", { id: it.id, src: url }); return; }
       if (e.target.closest("[data-edit]")) {
-        const name = prompt("Name", it.name);
-        if (name === null) return;
-        const text = prompt("What players read when they open it", it.text || "");
-        if (text === null) return;
-        return action("item_edit", { id: it.id, set: { name: name.trim() || it.name, text } });
+        const r = await askFields(`Edit ${it.name}`, [{ label: "Name", value: it.name, max: 40 }, { label: "What players read when they open it", value: it.text || "", multi: true, rows: 12, max: 4000 }]);
+        if (!r) return;
+        return action("item_edit", { id: it.id, set: { name: r[0].trim() || it.name, text: r[1] } });
       }
       if (e.target.closest("[data-open]")) openItem(it.id);
     });
@@ -3850,7 +3909,7 @@
       const m = worldSel && (S.world.marks || []).find(x => x.id === worldSel);
       if (m && e.target.closest("[data-go]")) { if (confirm(`Take the party to ${m.name}?`)) { action("mark_go", { id: m.id }); closeModal("worldMap"); } return; }
       if (m && e.target.closest("[data-mdel]")) { action("mark_del", { id: m.id }); worldSel = null; return; }
-      if (m && e.target.closest("[data-rename]")) { const n = prompt("Name", m.name); if (n && n.trim()) action("mark_edit", { id: m.id, set: { name: n.trim() } }); return; }
+      if (m && e.target.closest("[data-rename]")) { const n = await askText("Rename this place", m.name, { max: 40 }); if (n && n.trim()) action("mark_edit", { id: m.id, set: { name: n.trim() } }); return; }
     });
     box.addEventListener("change", e => {
       if (!isDm()) return;
@@ -3866,8 +3925,8 @@
       const mk = e.target.closest("[data-mark]");
       if (mk) { e.preventDefault(); drag = { id: mk.dataset.mark, el: mk, area, x0: e.clientX, y0: e.clientY, moved: false }; return; }
       if (!isDm() || !S.world.img) return;
-      const f = frac(e, area), name = prompt("Name of this place", "");
-      if (name && name.trim()) action("mark_add", { x: f.x, y: f.y, name: name.trim(), shown: true });
+      const f = frac(e, area);
+      askText("Name of this place", "", { max: 40, ok: "Add" }).then(name => { if (name && name.trim()) action("mark_add", { x: f.x, y: f.y, name: name.trim(), shown: true }); });
     });
     addEventListener("pointermove", e => {
       if (!drag || !isDm()) return;
@@ -3902,10 +3961,10 @@
     $("boardBtn").addEventListener("click", renderBoard);
     const box = $("boardBox");
     let drag = null;
-    box.addEventListener("click", e => {
+    box.addEventListener("click", async e => {
       if (e.target === box || e.target.closest("[data-close]")) return closeModal("boardBox");
       if (e.target.closest("[data-add]")) {
-        const t = prompt("Your note (everyone can read it)", "");
+        const t = await askText("Pin a note", "", { label: "Everyone can read it.", multi: true, rows: 5, max: 600, ok: "Pin it" });
         if (t && t.trim()) action("board_add", { text: t.trim(), x: 0.05 + Math.random() * 0.6, y: 0.05 + Math.random() * 0.6 });
         return;
       }
@@ -3928,7 +3987,7 @@
       const f = spot(e);
       drag.el.style.left = f.x * 100 + "%"; drag.el.style.top = f.y * 100 + "%";
     });
-    addEventListener("pointerup", e => {
+    addEventListener("pointerup", async e => {
       if (!drag) return;
       const d = drag, f = spot(e);
       drag = null;
@@ -3939,7 +3998,7 @@
       } else if (d.el.dataset.item) openItem(d.el.dataset.item);
       else if (d.el.dataset.note) {
         const n = (S.board || []).find(x => x.id === d.el.dataset.note);
-        if (n && (isDm() || n.by === me)) { const t = prompt("Change the note", n.text); if (t && t.trim()) action("board_edit", { id: n.id, text: t.trim() }); }
+        if (n && (isDm() || n.by === me)) { const t = await askText("Change the note", n.text, { multi: true, rows: 5, max: 600 }); if (t && t.trim()) action("board_edit", { id: n.id, text: t.trim() }); }
       }
     });
   }
@@ -4247,8 +4306,8 @@
     return img ? Math.max(1, Math.min(LIM.grid, Math.round(cols * img.naturalHeight / img.naturalWidth))) : sc.rows;
   }
   function initScenes() {
-    $("newScene").addEventListener("click", () => {
-      const name = prompt("Name the new scene:", "Scene " + (S.scenes.length + 1));
+    $("newScene").addEventListener("click", async () => {
+      const name = await askText("New scene", "Scene " + (S.scenes.length + 1), { label: "Name", max: 40, ok: "Make it" });
       if (name !== null) action("scene_add", { name: name.trim() || "New scene", cols: 24, rows: 16 });
     });
     $("sceneList").addEventListener("click", e => {
@@ -4324,6 +4383,7 @@
     $("newCode").hidden = !S.isOwner;
     if (document.activeElement !== $("perSq")) $("perSq").value = S.settings.per;
     if (document.activeElement !== $("unit")) $("unit").value = S.settings.unit;
+    $("splitOk").checked = !!S.settings.split;
     $("deleteCamp").hidden = !S.isOwner;
   }
   function initRoom() {
@@ -4349,6 +4409,7 @@
     $("claimForm").addEventListener("submit", e => { e.preventDefault(); action("claim_dm", { code: $("claimCode").value }); $("claimCode").value = ""; });
     $("perSq").addEventListener("change", () => action("settings", { per: Number($("perSq").value) || 5 }));
     $("unit").addEventListener("change", () => action("settings", { unit: $("unit").value }));
+    $("splitOk").addEventListener("change", () => action("settings", { split: $("splitOk").checked }));
     $("clearChat").addEventListener("click", () => { if (confirm("Clear the whole chat and roll history?")) action("clear_chat"); });
     $("deleteCamp").addEventListener("click", () => {
       if (confirm(`Delete "${S.camp.name}" for everyone, with all its maps, characters and notes? This can't be undone.`)) action("delete_campaign");

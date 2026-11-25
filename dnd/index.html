@@ -242,6 +242,7 @@
         <label class="field small">Each square is
           <span class="row"><input id="perSq" type="number" min="1" class="num"><input id="unit" maxlength="8" class="num" placeholder="ft"></span>
         </label>
+        <label class="check small"><input id="splitOk" type="checkbox"> Players can take stairs on their own (this splits the party). When it's off, stairs tell you they want to go and you move everyone.</label>
         <button id="clearChat" class="btn small-btn" type="button">Clear chat</button>
         <h3>Campaign file</h3>
         <p class="muted small">Save everything to one file: every scene and map, hidden traps and walls, triggers, tokens, items, the world map and the board. Load one to bring it all back.</p>
@@ -265,6 +266,7 @@
   <div id="trigForm" class="tt-modal" hidden role="dialog" aria-modal="true" aria-label="Trigger"></div>
   <div id="worldMap" class="tt-modal tt-big" hidden role="dialog" aria-modal="true" aria-label="World map"></div>
   <div id="boardBox" class="tt-modal tt-big" hidden role="dialog" aria-modal="true" aria-label="Handout board"></div>
+  <div id="askBox" class="tt-modal tt-top-modal" hidden role="dialog" aria-modal="true" aria-label="Type it in"></div>
   <div id="popMsg" class="tt-modal" hidden role="dialog" aria-modal="true" aria-label="Message"></div>
 
   <div class="tt-notes-pop">

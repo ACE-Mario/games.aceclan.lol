@@ -1340,6 +1340,15 @@ class Tabletop:
         for pr in sc.get("props", {}).values():
             target = s["scenes"].get(pr.get("to") or "")
             if pr.get("open") and not pr.get("hidden") and target and target is not sc and x0 <= pr["x"] < x0 + n and y0 <= pr["y"] < y0 + n:
+                if not s["settings"].get("split"):  # the party stays together: the DM decides when it moves on
+                    asked = self.__dict__.setdefault("_asked", {})
+                    key = (s["slug"], pid, pr["id"])
+                    if time.time() - asked.get(key, 0) > 20:
+                        asked[key] = time.time()
+                        self._pop(s, "The party stays together", f"The way to {target['name']} is here. The DM moves the whole party on when it's time.", to=[pid])
+                        self._pop(s, f"{t['name']} wants to go to {target['name']}",
+                                  "Right-click the stairs and choose \"Take the party to\" when everyone's ready.", dm=True, sc=sc["id"], at=[pr["x"], pr["y"]])
+                    return
                 self._arrive(s, sc, t, target, stairs=True)
                 for who in {pid, self._owner_of(s, t)}:
                     if who and not self.is_dm(s, who):
@@ -1461,6 +1470,8 @@ class Tabletop:
                 s["settings"]["per"] = per
             if "unit" in data:
                 s["settings"]["unit"] = line(data.get("unit"), 8) or "ft"
+            if "split" in data:                       # may players take stairs off on their own?
+                s["settings"]["split"] = bool(data["split"])
             return None
         if action == "clear_chat":
             if not dm:
@@ -2616,11 +2627,13 @@ class Tabletop:
             for pr in sc.get("props", {}).values():
                 if (pr["k"] in DM_PROPS and not pr.get("found")) or pr.get("hidden") or not clear(pr["x"], pr["y"]):
                     continue
-                go = s["scenes"].get(pr.get("to") or "") if pr.get("open") else None
-                out["props"].append({k: pr[k] for k in ("id", "k", "x", "y", "r")} | ({"go": go["name"]} if go else {})
+                out["props"].append({k: pr[k] for k in ("id", "k", "x", "y", "r")}   # never where stairs lead: that's the DM's
                                     | ({"off": True} if pr.get("off") else {}))
-        out["labels"] = [lb for lb in sc.get("labels", {}).values()
-                         if (dm or not lb["dm"]) and clear(min(lb["x"], cols - 1), min(lb["y"], sc["rows"] - 1))]
+        def label_seen(lb):                           # the whole label, end to end, has been seen (not just its middle)
+            half = len(lb["text"]) * 0.16
+            y = max(0, min(lb["y"], sc["rows"] - 1))
+            return all(clear(max(0, min(x, cols - 1)), y) for x in (lb["x"] - half, lb["x"], lb["x"] + half))
+        out["labels"] = [lb for lb in sc.get("labels", {}).values() if dm or (not lb["dm"] and label_seen(lb))]
         if dm:
             out["walls"] = list(sc["walls"].values())
         else:
