@@ -934,6 +934,11 @@ class Tabletop:
             got = ([f"{n} hidden token{'s' if n != 1 else ''}"] * bool(n) + [f"{m} hidden prop{'s' if m != 1 else ''}"] * bool(m)
                    + ["a hidden wall"] * bool(w))
             did = f" Revealed {' and '.join(got)}." if got else ""
+        mk = s["world"]["marks"].get(tr.get("place") or "")
+        if mk and not mk.get("shown"):
+            mk["shown"] = True
+            did += f' {mk["name"]} is on the world map now.'
+            self._new_place(s, mk)
         verb = {"enter": "stepped into", "use": "used"}.get(how, "can see")
         self._pop(s, tr["name"], f'{t["name"]} {verb} it.{did}', dm=True, sc=sc["id"], at=at)
 
@@ -1075,6 +1080,9 @@ class Tabletop:
             t["conds"] = [c for c in CONDITIONS if c in {str(x) for x in d["conds"]}]
         if "note" in d:
             t["note"] = text(d["note"], 500)
+        if "icon" in d:                                 # a game-icons.net icon when it has no picture: a name, "none", or "" (match its name)
+            ic = str(d["icon"] or "")[:60]
+            t["icon"] = ic if re.fullmatch(r"[a-z0-9-]*", ic) else ""
         if "ac2" in d:                                  # the aura's colour
             t["ac2"] = colour(d["ac2"], "#ffd43b")
         if dm and "stats" in d:                         # a monster's stat block (only the DM gets it)
@@ -1088,6 +1096,8 @@ class Tabletop:
                               **{k: text(st.get(k), n) for k, n in (("speed", 80), ("skills", 300), ("saves", 200),
                                  ("senses", 300), ("langs", 200), ("cr", 10), ("traits", 3000), ("actions", 3000))}}
         if dm:
+            if "voice" in d:                            # how an NPC talks: a reminder for the DM, never sent to players
+                t["voice"] = line(d["voice"], 150)
             if "hidden" in d:
                 t["hidden"] = bool(d["hidden"])
             if "showhp" in d:
@@ -1284,6 +1294,8 @@ class Tabletop:
             if e.get("tok") == t["id"]:
                 e["sc"] = target["id"]
         self._reveal(target, t["id"])
+        if self._pc(t):
+            self._places_at(s, target["id"])
 
     def _blocked(self, sc, t, nx, ny):
         """Would a player's token have to go through a wall or a shut door to get from where it is to (nx, ny)?"""
@@ -1760,6 +1772,9 @@ class Tabletop:
                 return "That token isn't there any more."
             if not self._controls(s, pid, t):
                 return "That isn't your token. Ask the DM."
+            if self._cut(s) and not dm and (action == "tok_move" or (action == "tok_edit" and isinstance(data.get("set"), dict)
+                                                                       and ("x" in data["set"] or "y" in data["set"]))):
+                return "Hold on: the DM is showing you something."
             if action == "tok_move":
                 x, y = num(data.get("x"), -50, MAX_GRID + 50, 2), num(data.get("y"), -50, MAX_GRID + 50, 2)
                 t.pop("path", None)
@@ -1868,6 +1883,19 @@ class Tabletop:
             if hp[k][0] == 0:
                 self._break(s, sc, x, y)
             return None
+        if action in ("cut_set", "cut_end"):             # cutscene: players can't move, everyone's camera goes to one spot
+            if not dm:
+                return need_dm
+            if action == "cut_end":
+                s["cut"] = None
+                return None
+            x, y = num(data.get("x"), -50, MAX_GRID + 50, 2), num(data.get("y"), -50, MAX_GRID + 50, 2)
+            if x is None or y is None:
+                return "Couldn't point the cameras there."
+            sc = s["scenes"][s["active"]]
+            s["cut"] = {"sc": sc["id"], "x": x, "y": y, "z": num(data.get("z"), 8, 300) or None,
+                        "text": line(data.get("text"), 120), "n": (s.get("cut") or {}).get("n", 0) + 1}
+            return None
         if action in ("world_img", "world_open", "mark_add", "mark_edit", "mark_del", "mark_go"):   # the world map
             if not dm:
                 return need_dm
@@ -1914,7 +1942,9 @@ class Tabletop:
             if "sc" in d:
                 m["sc"] = str(d["sc"]) if str(d["sc"] or "") in s["scenes"] else None
             if "shown" in d:
-                m["shown"] = bool(d["shown"])
+                was, m["shown"] = m.get("shown"), bool(d["shown"])
+                if m["shown"] and not was:
+                    self._new_place(s, m)
             if "x" in d and "y" in d:
                 mx, my = num(d["x"], 0, 1, 4), num(d["y"], 0, 1, 4)
                 if mx is not None and my is not None:
@@ -2088,6 +2118,7 @@ class Tabletop:
                 for t in [t for t in sc["tokens"].values() if self._pc(t)]:
                     self._arrive(s, sc, t, target)
                 s["active"] = target["id"]
+                self._places_at(s, target["id"])
                 s["at"] = {}
                 self._sys(s, f"The party moves to {target['name']}.")
                 return None
@@ -2173,6 +2204,8 @@ class Tabletop:
                 tr["to"] = str(d["to"]) if d["to"] in s["scenes"] else None
             if "ask" in d:
                 tr["ask"] = bool(d["ask"])
+            if "place" in d:                         # a world map place it shows the players (a quest giver's directions)
+                tr["place"] = str(d["place"]) if str(d["place"] or "") in s["world"]["marks"] else None
             if isinstance(d.get("items"), list):     # what a loot chest gives
                 tr["items"] = [str(k) for k in d["items"][:MAX_ITEMS] if str(k) in s["items"]]
             if "tgt" in d:                         # somewhere else on the map for "reveal" and "open"
@@ -2643,6 +2676,7 @@ class Tabletop:
             v = {**t, "hp": hp, "mhp": mhp, "ac": ac}
             if not dm:
                 v.pop("stats", None)
+                v.pop("voice", None)
             if not dm and not self._pc(t) and not t.get("showhp"):
                 # players see how hurt a monster looks, not its numbers
                 v["hp"] = v["mhp"] = v["ac"] = v["init"] = None
@@ -2699,6 +2733,23 @@ class Tabletop:
                              if w.get("door") and not w.get("secret") and self._door_seen(sc, w)]
         return out
 
+    def _cut(self, s):
+        """The cutscene going on, if any (it ends by itself when the party moves to another scene)."""
+        c = s.get("cut")
+        return c if c and c.get("sc") == s["active"] else None
+
+    def _new_place(self, s, m):
+        """A world map place the players couldn't see before is shown: they're told, if they can open the map."""
+        if s["world"].get("open"):
+            self._sys(s, f'{m["name"]} is on the world map now.')
+
+    def _places_at(self, s, sid):
+        """The party got to a scene: the world map places that lead there aren't secret any more."""
+        for m in s["world"]["marks"].values():
+            if m.get("sc") == sid and not m.get("shown"):
+                m["shown"] = True
+                self._new_place(s, m)
+
     def _world_view(self, s, dm):
         w = s.get("world") or {}
         if dm:
@@ -2720,6 +2771,7 @@ class Tabletop:
                     if q and not self.is_dm(s, q):
                         self._arrive(s, old, t, sc)
         s["active"] = sc["id"]
+        self._places_at(s, sc["id"])
         s["at"] = {}                                    # everyone, wherever they wandered off to
         self._sys(s, f"The party moves to {sc['name']}.")
 
@@ -2811,6 +2863,7 @@ class Tabletop:
             "enc": s.get("enc") if dm else None,
             "items": [i for i in s.get("items", {}).values() if dm or i["given"]],
             "world": self._world_view(s, dm),
+            "cut": self._cut(s),
             "board": list(s.get("board", {}).values()),
             "pops": [p for p in s.get("pops", []) if (p["dm"] if dm else pid in p["to"])][-10:],
             "conditions": list(CONDITIONS), "skills": SKILLS,

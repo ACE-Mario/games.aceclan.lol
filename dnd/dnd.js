@@ -527,6 +527,7 @@
     if (firstState && !EXTRAS) { setTab(s.dm ? "scenes" : "room"); if (!s.dm) setPanel(false); }
     if (firstState || switched || (moved && viewSc === s.active)) { fitView(); firstState = false; }
     renderAll(old);
+    renderCut(old);
     if (wantAny && !s.playAs && s.dm) { wantAny = false; setAsPlayer(true); }
   }
   function renderAll(old) {
@@ -548,6 +549,7 @@
     renderWorldBtn();
     if (!$("worldMap").hidden) renderWorld();
     if (!$("boardBox").hidden) renderBoard();
+    renderCheat();
     renderScenes();
     renderRoom();
     showAsBtn();
@@ -580,7 +582,7 @@
     canvas.height = Math.round(viewport.clientHeight * dpr);
     redraw();
   }
-  const panelW = () => (innerWidth > 860 && !$("panel").classList.contains("closed") ? $("panel").offsetWidth + 20 : 0);
+  const panelW = () => (innerWidth > 860 && $("panel").offsetWidth ? $("panel").offsetWidth + 20 : 0);   // "closed" only hides it on small screens
   function fitView() {
     const sc = scene();
     if (!sc) return;
@@ -830,6 +832,7 @@
       ctx.globalAlpha = 1;
     }
     if (pings.length || slides.size) redraw();
+    if (voiceOn) placeVoice();
   }
 
   function paintWalls(sc, px) {
@@ -1540,6 +1543,23 @@
 
   const COND_COLOUR = { dead: "#111", unconscious: "#6b7280", prone: "#b45309", poisoned: "#2f9e44", concentrating: "#3e63dd",
     blessed: "#d6a100", hasted: "#12a594", invisible: "#a78bfa", stunned: "#d6409f", restrained: "#f76b15" };
+  // Token icons (game-icons.net, CC BY 3.0): the one picked, or one whose word is in the token's name.
+  const ICON_KEYS = Object.keys(window.ICON_WORDS || {}).sort((a, b) => b.length - a.length);
+  const iconCache = new Map();
+  function iconName(t) {
+    const I = window.GAME_ICONS || {};
+    if (t.icon === "none") return null;
+    if (t.icon && I[t.icon]) return t.icon;
+    const n = " " + String(t.name || "").toLowerCase().replace(/[^a-z ]+/g, " ") + " ";
+    const k = ICON_KEYS.find(w => n.includes(" " + w + " ") || n.includes(" " + w + "s "));
+    return k ? window.ICON_WORDS[k] : null;
+  }
+  function iconPath(t) {
+    const n = iconName(t);
+    if (!n) return null;
+    if (!iconCache.has(n)) iconCache.set(n, new Path2D(window.GAME_ICONS[n]));
+    return iconCache.get(n);
+  }
   function paintToken(t, px, isTurn) {
     const pos = tokenPos(t), r = t.size / 2, cx = pos.x + r, cy = pos.y + r;
     const rad = Math.max(r * 0.9, r - px(2));
@@ -1562,6 +1582,15 @@
       ctx.save();
       ctx.clip();
       ctx.drawImage(img, cx - rad, cy - rad, rad * 2, rad * 2);
+      ctx.restore();
+    } else if (iconPath(t)) {                      // a game-icons.net icon that fits its name (or the one picked)
+      ctx.save();
+      ctx.clip();
+      const k = rad * 1.5 / 512;
+      ctx.translate(cx - 256 * k, cy - 256 * k);
+      ctx.scale(k, k);
+      ctx.fillStyle = t.c === "#f4f1ea" ? "#15171d" : "#fff";
+      ctx.fill(iconPath(t));
       ctx.restore();
     } else if (cam.z * t.size > 22) {
       ctx.fillStyle = t.c === "#f4f1ea" ? "#15171d" : "#fff";
@@ -2231,6 +2260,14 @@
         action("spawn_set", { sc: sc.id, x, y, w: Math.min(3, sc.cols), h: Math.min(3, sc.rows) });
       });
     }
+    if (viewSc === S.active) {
+      const add = group("🎬 Cutscene");
+      add(S.cut ? "Point everyone's camera here instead" : "Cutscene: everyone looks here", async () => {
+        const text = await askText("Cutscene", (S.cut && S.cut.text) || "", { label: "A line for the players to read (optional). Nobody can move till you end it.", max: 120, ok: "Start" });
+        if (text !== null) action("cut_set", { x: p.x, y: p.y, z: cam.z, text });
+      });
+      if (S.cut) add("End the cutscene", () => action("cut_end"));
+    }
     if (!groups.length) return;
     const m = document.createElement("div");
     m.id = "ctxMenu";
@@ -2440,6 +2477,8 @@
       if (e.shiftKey || e.ctrlKey || e.metaKey) { selectToken(t.id, true); return; }
       if (!picked.has(t.id)) selectToken(t.id);
       else { sel = t.id; renderCard(true); }
+      if (isDm() && t.voice) showVoice(t);
+      if (controls(t) && S.cut && !isDm()) { note("Hold on: the DM is showing you something."); return; }
       if (controls(t)) {
         const group = [...picked].map(tokenById).filter(x => x && controls(x)).map(x => ({ id: x.id, ox: x.x, oy: x.y }));
         act = { kind: "token", id: t.id, ox: t.x, oy: t.y, x: t.x, y: t.y, dx: p.x - t.x, dy: p.y - t.y, group, moved: false, sx, sy };
@@ -2798,8 +2837,8 @@
     const t = tr.tok && sc.tokens.find(x => x.id === tr.tok);
     const others = S.scenes.filter(x => x.id !== sc.id);
     const v = { name: tr.name || (t ? `${t.name} is seen` : "Trigger"), when: tr.when || (t ? "see" : "enter"), do: tr.do || "text",
-      who: tr.who || "them", once: tr.once ?? true, text: tr.text || "", to: tr.to || "", ask: !!tr.ask, tgt: tr.tgt || null, items: tr.items || [] };
-    const items = S.items || [];
+      who: tr.who || "them", once: tr.once ?? true, text: tr.text || "", to: tr.to || "", ask: !!tr.ask, tgt: tr.tgt || null, items: tr.items || [], place: tr.place || "" };
+    const items = S.items || [], places = (S.world && S.world.marks) || [];
     box.innerHTML = `<form class="win narrow" autocomplete="off">
       <div class="row between"><h2 style="margin:0">${isNew ? "New trigger" : "Trigger"}</h2><button type="button" class="x" data-close aria-label="Close">✕</button></div>
       <label class="field">Name<input name="name" maxlength="40" value="${esc(v.name)}"></label>
@@ -2823,6 +2862,8 @@
       <label class="field" data-for="text scene">Who<select name="who">
         <option value="them"${v.who === "them" ? " selected" : ""}>The player who set it off</option>
         <option value="all"${v.who === "all" ? " selected" : ""}>Everyone on this map</option></select></label>
+      ${places.length ? `<label class="field">Also show a world map place<select name="place"><option value="">No</option>${places.map(m => `<option value="${m.id}"${v.place === m.id ? " selected" : ""}>${esc(m.name)}${m.shown ? "" : " (hidden now)"}</option>`).join("")}</select>
+        <span class="muted small">For a quest: when the NPC tells them where to go, the place shows up on their world map.</span></label>` : ""}
       <label class="check"><input type="checkbox" name="once"${v.once ? " checked" : ""}> Only the first time</label>
       <label class="check" title="It doesn't do anything by itself: you're told, have them roll, then right-click it to set it off or skip"><input type="checkbox" name="ask"${v.ask ? " checked" : ""}> Ask me first (they roll for it)</label>
       ${tr.used ? `<label class="check"><input type="checkbox" name="reset" checked> It's gone off: set it again</label>` : ""}
@@ -2840,6 +2881,7 @@
       const d = { name: F.name.value.trim(), do: F.do.value, who: F.who.value, once: F.once.checked, text: F.text.value, to: F.to.value || null,
         ask: F.ask.checked, tgt: v.tgt, items: [...form.querySelectorAll('[name="item"]:checked')].map(x => x.value) };
       if (F.when) d.when = F.when.value;
+      if (F.place) d.place = F.place.value || null;
       return d;
     };
     form.addEventListener("click", e => {
@@ -3260,6 +3302,143 @@
     }
   }
 
+  // ---- Portraits: upload one, drop one on a token, or find a free one online -------------------------
+  async function setPicture(t, file) {
+    try { action("tok_img", { sc: viewSc, id: t.id, src: (await shrink(file, 256, true)).url }); }
+    catch { note("That picture couldn't be used. Try a PNG or JPG."); }
+  }
+  const COMMONS = "https://commons.wikimedia.org/w/api.php";
+  function openPicFind(t) {
+    const box = $("picFind");
+    box.innerHTML = `<div class="win wide"><div class="row between"><h2 style="margin:0">Find a picture for ${esc(t.name)}</h2><button type="button" class="x" data-close aria-label="Close">✕</button></div>
+      <form class="row" data-search><input name="q" maxlength="80" value="${esc(t.name)}" placeholder="dwarf portrait, goblin, wizard…" style="flex:1"><button class="btn primary small-btn">Search</button></form>
+      <p class="muted small" style="margin:0">Free pictures from Wikimedia Commons. Click one to use it. Paintings and drawings work best: try adding "painting" or "illustration".</p>
+      <div class="tt-picgrid" data-res></div></div>`;
+    box.hidden = false;
+    const res = box.querySelector("[data-res]"), form = box.querySelector("form");
+    const search = async q => {
+      res.innerHTML = `<p class="muted small">Searching…</p>`;
+      const u = `${COMMONS}?action=query&format=json&origin=*&generator=search&gsrnamespace=6&gsrlimit=24&gsrsearch=${encodeURIComponent("filetype:bitmap " + q)}`
+        + "&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=320&iiextmetadatafilter=LicenseShortName|Artist";
+      try {
+        const pages = Object.values(((await (await fetch(u)).json()).query || {}).pages || {}).sort((a, b) => a.index - b.index);
+        const strip = h => { const d = document.createElement("div"); d.innerHTML = h || ""; return d.textContent.trim(); };
+        const got = pages.map(p => p.imageinfo && p.imageinfo[0]).filter(i => i && i.thumburl);
+        res.innerHTML = got.length ? got.map(i => {
+          const m = i.extmetadata || {}, by = [strip(m.Artist && m.Artist.value).slice(0, 40), m.LicenseShortName && m.LicenseShortName.value].filter(Boolean).join(" · ");
+          return `<button type="button" class="tt-picpick" data-url="${esc(i.thumburl)}" title="${esc(by)}"><img src="${esc(i.thumburl)}" alt="" loading="lazy"><span>${esc(by)}</span></button>`;
+        }).join("") : `<p class="muted small">Nothing found. Try other words.</p>`;
+      } catch { res.innerHTML = `<p class="muted small">Couldn't reach Wikimedia Commons. Upload a picture instead.</p>`; }
+    };
+    form.addEventListener("submit", e => { e.preventDefault(); const q = form.elements.q.value.trim(); if (q) search(q); });
+    form.addEventListener("keydown", e => e.stopPropagation());
+    box.onclick = async e => {
+      if (e.target === box || e.target.closest("[data-close]")) { box.onclick = null; return closeModal("picFind"); }
+      const b = e.target.closest("[data-url]");
+      if (!b) return;
+      try {
+        const blob = await (await fetch(b.dataset.url)).blob();
+        await setPicture(t, new File([blob], "picture", { type: blob.type || "image/jpeg" }));
+        box.onclick = null; closeModal("picFind");
+      } catch { note("That picture couldn't be fetched. Try another one."); }
+    };
+    search(t.name);
+  }
+
+  // ---- NPC voice: a reminder of how they talk pops up over them when the DM clicks one ---------------
+  let voiceOn = null, voiceTimer = 0;
+  function showVoice(t) {
+    voiceOn = t.id;
+    const v = $("voicePop");
+    v.textContent = "🗣 " + t.voice;
+    v.hidden = false;
+    clearTimeout(voiceTimer);
+    voiceTimer = setTimeout(() => { voiceOn = null; v.hidden = true; }, 7000);
+    placeVoice();
+  }
+  function placeVoice() {
+    const v = $("voicePop"), t = voiceOn && tokenById(voiceOn);
+    if (!t || !t.voice || !isDm()) { v.hidden = true; return; }
+    const pos = tokenPos(t), r = viewport.getBoundingClientRect();
+    v.style.left = r.left + (pos.x + t.size / 2 - cam.x) * cam.z + "px";
+    v.style.top = r.top + (pos.y - cam.y) * cam.z - 8 + "px";
+  }
+
+  // ---- Cutscene: the DM points every player's camera at one spot, and nobody can move till it's over ----
+  function panTo(x, y, z) {
+    const from = { x: cam.x, y: cam.y, z: cam.z }, zz = z || cam.z;
+    const to = { x: x - (viewport.clientWidth - panelW()) / 2 / zz, y: y - viewport.clientHeight / 2 / zz, z: zz };
+    const t0 = performance.now(), ms = 900;
+    const step = now => {
+      const f = Math.min(1, (now - t0) / ms), e = f < 0.5 ? 2 * f * f : 1 - (-2 * f + 2) ** 2 / 2;
+      cam.x = from.x + (to.x - from.x) * e; cam.y = from.y + (to.y - from.y) * e; cam.z = from.z + (to.z - from.z) * e;
+      redraw();
+      if (f < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+  function renderCut(old) {
+    const c = S.cut, bars = $("cutBars");
+    bars.hidden = !c;
+    if (!c) return;
+    bars.querySelector("[data-cap]").textContent = c.text || "";
+    bars.querySelector("[data-cap]").hidden = !c.text;
+    bars.querySelector("[data-end]").hidden = !isDm();
+    const was = old && old.cut;
+    if (!isDm() && (!was || was.n !== c.n)) panTo(c.x, c.y, c.z);
+  }
+
+  // ---- Scene cheat sheet (DM): what's read aloud, who's here, traps and triggers, in one list ----------
+  let cheatOpen = false;
+  function renderCheat() {
+    const box = $("cheat"), sc = scene();
+    box.hidden = !cheatOpen || !isDm() || !sc;
+    $("cheatBtn").classList.toggle("on", cheatOpen && isDm());
+    if (box.hidden) return;
+    box.style.right = panelW() + 12 + "px";
+    const trig = sc.trig || [], tokName = id => (sc.tokens.find(x => x.id === id) || {}).name || "a token";
+    const DO = { text: "shows a message", scene: "moves them", reveal: "reveals", open: "opens", give: "gives items", tell: "tells you" };
+    const WHEN = { enter: "step in", see: "see it", use: "click it" };
+    const status = tr => tr.pending ? `<b class="warn">waiting on you</b>` : tr.used ? `<span class="muted">gone off</span>` : `<span class="ok">ready</span>`;
+    const read = trig.filter(tr => tr.text && (tr.do === "text" || tr.do === "give"));
+    const npcs = sc.tokens.filter(t => !t.owner && !t.char);
+    const traps = (sc.props || []).filter(p => p.k === "trap");
+    const other = trig.filter(tr => !read.includes(tr));
+    const sec = (title, list, row) => `<details open data-sec="${title}"><summary>${title} <span class="muted">${list.length}</span></summary>${list.length ? `<ul>${list.map(row).join("")}</ul>` : `<p class="muted small">None.</p>`}</details>`;
+    box.innerHTML = `<div class="row between"><h3>${esc(sc.name)}</h3><button type="button" class="x" data-close aria-label="Close">✕</button></div>
+      <p class="muted small" style="margin:0">Click anything to jump to it.</p>
+      ${sec("Read aloud", read, tr => `<li data-trig="${tr.id}"><b>${esc(tr.name)}</b> ${status(tr)}<span class="txt">${esc(tr.text)}</span></li>`)}
+      ${sec("NPCs and monsters", npcs, t => `<li data-tok="${t.id}"><b>${esc(t.name)}</b>${t.hidden ? ` <span class="muted">hidden</span>` : ""}${t.hp != null ? ` <span class="muted">${t.hp}/${t.mhp ?? "?"} HP</span>` : ""}${t.ac != null ? ` <span class="muted">AC ${t.ac}</span>` : ""}${t.voice ? `<span class="txt">🗣 ${esc(t.voice)}</span>` : ""}${t.note ? `<span class="txt muted">${esc(t.note)}</span>` : ""}</li>`)}
+      ${sec("Traps", traps, p => `<li data-prop="${p.id}"><b>Trap</b> ${p.off ? `<span class="muted">disarmed</span>` : `<span class="warn">armed</span>`}${p.hidden ? ` <span class="muted">hidden</span>` : ""} <span class="muted">square ${p.x + 1}, ${p.y + 1}</span></li>`)}
+      ${sec("Triggers", other, tr => `<li data-trig="${tr.id}"><b>${esc(tr.name)}</b> ${status(tr)}<span class="txt muted">When they ${WHEN[tr.when] || tr.when}${tr.tok ? ` (${esc(tokName(tr.tok))})` : ""}, it ${DO[tr.do] || tr.do}${tr.ask ? ", asks you first" : ""}${tr.place ? ", shows a world map place" : ""}</span></li>`)}`;
+  }
+  function initCheat() {
+    $("cheatBtn").addEventListener("click", () => { cheatOpen = !cheatOpen; renderCheat(); });
+    $("cheat").addEventListener("click", e => {
+      if (e.target.closest("[data-close]")) { cheatOpen = false; return renderCheat(); }
+      const li = e.target.closest("li"), sc = scene();
+      if (!li || !sc) return;
+      if (li.dataset.tok) { const t = sc.tokens.find(x => x.id === li.dataset.tok); if (t) { panTo(t.x + t.size / 2, t.y + t.size / 2); selectToken(t.id); } }
+      if (li.dataset.prop) { const p = (sc.props || []).find(x => x.id === li.dataset.prop); if (p) panTo(p.x + 0.5, p.y + 0.5); }
+      if (li.dataset.trig) {
+        const tr = (sc.trig || []).find(x => x.id === li.dataset.trig), t = tr && tr.tok && sc.tokens.find(x => x.id === tr.tok);
+        if (t) panTo(t.x + t.size / 2, t.y + t.size / 2);
+        else if (tr) panTo(tr.x + tr.w / 2, tr.y + tr.h / 2);
+      }
+    });
+    $("cutBars").addEventListener("click", e => { if (e.target.closest("[data-end]")) action("cut_end"); });
+    canvas.addEventListener("dragover", e => { if (e.dataTransfer && [...e.dataTransfer.types].includes("Files")) e.preventDefault(); });
+    canvas.addEventListener("drop", e => {                  // drop a picture on your token to make it its portrait
+      const f = e.dataTransfer && e.dataTransfer.files[0];
+      if (!f || !/^image\//.test(f.type)) return;
+      e.preventDefault();
+      const t = tokenAt(worldPt(e));
+      if (!t) return note("Drop the picture on a token.");
+      if (!controls(t)) return note("That isn't your token.");
+      setPicture(t, f);
+    });
+  }
+
   function selectToken(id, add) {
     if (tool === "lib") setTimeout(renderToolOpts);          // the Save button names the selected token
     if (!id) picked.clear();
@@ -3290,9 +3469,19 @@
   function tokenCard(t) {
     const can = controls(t), dm = isDm(), ch = charById(t.char);
     const hpKnown = t.hp != null || t.mhp != null;
-    let h = `<div class="row between card-head">${can ? `<input class="name" data-k="name" value="${esc(t.name)}" maxlength="40" aria-label="Token name">` : `<h3>${esc(t.name)}</h3>`}
+    let h = `<div class="row between card-head">${t.img ? `<img class="tt-face" src="${assetUrl(t.img)}" alt="">` : ""}${can ? `<input class="name" data-k="name" value="${esc(t.name)}" maxlength="40" aria-label="Token name">` : `<h3>${esc(t.name)}</h3>`}
       ${t.ac != null ? `<span class="badge" title="Armour class">AC ${t.ac}</span>` : ""}<button type="button" class="x" data-close aria-label="Close">✕</button></div>`;
+    if (dm && t.voice) h += `<p class="tt-voice" title="How they talk (only you see this)">🗣 ${esc(t.voice)}</p>`;
     if (ch && EXTRAS) h += `<button type="button" class="link-btn" data-sheet>Open ${esc(ch.name)}'s sheet</button>`;
+    if (can) h += `<div class="row tt-picrow"><span class="small muted">Picture</span><button type="button" class="btn small-btn" data-pic>${t.img ? "Change" : "Upload"}</button>
+      <button type="button" class="btn small-btn" data-picfind title="Search free pictures on Wikimedia Commons">Find one online</button>
+      ${t.img ? `<button type="button" class="btn small-btn" data-picdel>Remove</button>` : ""}</div>`;
+    if (can && !t.img) {
+      const auto = iconName({ name: t.name });
+      h += `<label class="small muted row tt-picrow">Icon <select data-k="icon"><option value="">${auto ? `Match its name (${esc(auto.replace(/-/g, " "))})` : "Match its name (none fits)"}</option>
+        <option value="none"${t.icon === "none" ? " selected" : ""}>No icon: initials</option>
+        ${Object.keys(window.GAME_ICONS || {}).map(n => `<option value="${n}"${t.icon === n ? " selected" : ""}>${n.replace(/-/g, " ")}</option>`).join("")}</select></label>`;
+    }
     if (dm) h += `<button type="button" class="btn small-btn more-btn" data-more>${t.stats ? "More info: stats, skills, attacks" : "More info"}</button>`;
     if (hpKnown) {
       const f = t.mhp ? Math.max(0, Math.min(1, t.hp / t.mhp)) : 0;
@@ -3313,7 +3502,6 @@
             <label class="small muted" title="Flying (more than 0) or burrowing (less than 0), in ${esc(unit())}">Height <input type="number" class="num" data-k="elev" value="${t.elev ?? ""}"></label>
             <label class="small muted" title="A ring round it, in ${esc(unit())}: its reach, an aura, the light of a torch">Aura <input type="number" class="num" data-k="aura" min="0" value="${t.aura ?? ""}"></label></div>
           <div class="row">${TOKEN_COLOURS.map(c => `<button type="button" class="sw${c === t.c ? " on" : ""}" style="--c:${c}" data-colour="${c}" aria-label="Colour"></button>`).join("")}</div>
-          <button type="button" class="btn small-btn" data-pic>${t.img ? "Change picture" : "Add a picture"}</button>
         </details>`;
       if (dm) {
         const people = Object.entries(S.names).filter(([q]) => !S.dms.includes(q));
@@ -3322,6 +3510,7 @@
             <label class="check"><input type="checkbox" data-k="showhp"${t.showhp ? " checked" : ""}> Players see its HP</label></div>
           <div class="row"><label class="small muted">Moved by <select data-k="owner"><option value="">DM only</option>${people.map(([q, n]) => `<option value="${q}"${t.owner === q ? " selected" : ""}>${esc(n)}</option>`).join("")}</select></label>
             <label class="small muted extra">Sheet <select data-k="char"><option value="">None</option>${S.chars.map(c => `<option value="${c.id}"${t.char === c.id ? " selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label></div>
+          ${t.owner || t.char ? "" : `<label class="small muted tt-stack">How they talk (only you see it)<input data-k="voice" maxlength="150" value="${esc(t.voice || "")}" placeholder="Gruff, short sentences, calls everyone 'friend'"></label>`}
           <label class="small muted">Note<textarea data-k="note" rows="2" maxlength="500" placeholder="Only DMs and whoever moves it see this">${esc(t.note || "")}</textarea></label>
         </details>`;
       } else h += `<label class="small muted">Note<textarea data-k="note" rows="2" maxlength="500">${esc(t.note || "")}</textarea></label>`;
@@ -3392,10 +3581,10 @@
       if (b.dataset.front != null) return action("tok_front", { sc: viewSc, id: t.id });
       if (b.dataset.pic != null) {
         const f = await pickFile();
-        if (!f) return;
-        try { action("tok_img", { sc: viewSc, id: t.id, src: (await shrink(f, 256, true)).url }); }
-        catch { note("That picture couldn't be used. Try a PNG or JPG."); }
+        if (f) setPicture(t, f);
       }
+      if (b.dataset.picfind != null) openPicFind(t);
+      if (b.dataset.picdel != null) action("tok_img", { sc: viewSc, id: t.id, src: null });
     });
     card.addEventListener("change", e => {
       const t = picked.size === 1 && tokenById(sel), k = e.target.dataset.k;
@@ -3404,7 +3593,7 @@
       if (["hp", "mhp", "ac", "init", "sight", "speed", "elev", "aura"].includes(k)) v = v === "" ? null : Number(v);
       if (k === "size") v = Number(v);
       editToken(t, { [k]: v });
-      if (k !== "name" && k !== "note") renderCard(true);
+      if (k !== "name" && k !== "note" && k !== "voice") renderCard(true);
     });
     card.addEventListener("keydown", e => {
       if (e.key === "Enter" && e.target.id === "hpDelta") { e.preventDefault(); card.querySelector('[data-hp="-1"]').click(); }
@@ -3920,14 +4109,14 @@
       <button type="button" class="btn small-btn" data-img>${w.img ? "New picture" : "Add a picture"}</button>` : ""}
       <button type="button" class="x" data-close aria-label="Close">✕</button></div></div>
       <div class="tt-world${dm ? " dm" : ""}"><div class="tt-wi">${w.img ? `<img src="${assetUrl(w.img)}" alt="" draggable="false">` : `<div class="tt-world-empty">${dm ? "Add a picture of your world, then click it to add places." : "No map yet."}</div>`}
-      ${marks.map(x => `<button type="button" class="tt-mark${x.here || (dm && x.sc === S.active) ? " here" : ""}${dm && !x.shown ? " hid" : ""}${x.id === worldSel ? " on" : ""}" data-mark="${x.id}" style="left:${x.x * 100}%;top:${x.y * 100}%" title="${esc(x.name)}"><i></i><span>${esc(x.name)}${x.here || (dm && x.sc === S.active) ? " (you are here)" : ""}</span></button>`).join("")}</div></div>
+      ${marks.map(x => `<button type="button" class="tt-mark${x.here || (dm && x.sc === S.active) ? " here" : ""}${dm && !x.shown ? " hid" : ""}${x.id === worldSel ? " on" : ""}" data-mark="${x.id}" style="left:${x.x * 100}%;top:${x.y * 100}%" title="${esc(x.name)}"><i></i><span>${esc(x.name)}${x.here || (dm && x.sc === S.active) ? " (you are here)" : ""}${dm && !x.shown ? " (hidden)" : ""}</span></button>`).join("")}</div></div>
       ${dm && m ? `<div class="tt-markedit row"><b>${esc(m.name)}</b>
         <label class="small">Scene <select data-msc><option value="">None</option>${S.scenes.map(x => `<option value="${x.id}"${x.id === m.sc ? " selected" : ""}>${esc(x.name)}</option>`).join("")}</select></label>
-        <label class="check small"><input type="checkbox" data-mshown ${m.shown ? "checked" : ""}> Players see it</label>
+        <label class="check small"><input type="checkbox" data-mhide ${m.shown ? "" : "checked"}> Hidden from players</label>
         <button type="button" class="btn primary small-btn" data-go ${m.sc ? "" : "disabled"}>Take the party there</button>
         <button type="button" class="btn small-btn" data-rename>Rename</button>
         <button type="button" class="btn danger small-btn" data-mdel>Delete</button></div>`
-        : dm ? `<p class="muted small" style="margin:0">Click the map to add a place. Click a place to link it to a scene and send the party there (they land on that scene's player spawn). Drag places to move them.</p>` : ""}</div>`;
+        : dm ? `<p class="muted small" style="margin:0">Click the map to add a place. New places are hidden from players until you show them: right-click a place, tick it off, or have a trigger show it (an NPC giving the quest). Taking the party there shows it too. Click a place to link it to a scene and send the party there (they land on that scene's player spawn). Drag places to move them.</p>` : ""}</div>`;
     box.hidden = false;
   }
   function initWorld() {
@@ -3948,12 +4137,21 @@
       if (m && e.target.closest("[data-mdel]")) { action("mark_del", { id: m.id }); worldSel = null; return; }
       if (m && e.target.closest("[data-rename]")) { const n = await askText("Rename this place", m.name, { max: 40 }); if (n && n.trim()) action("mark_edit", { id: m.id, set: { name: n.trim() } }); return; }
     });
+    box.addEventListener("contextmenu", e => {         // right-click a place: show it to the players, or hide it again
+      const mk = e.target.closest("[data-mark]");
+      if (!mk || !isDm()) return;
+      e.preventDefault();
+      const m = (S.world.marks || []).find(x => x.id === mk.dataset.mark);
+      if (!m) return;
+      action("mark_edit", { id: m.id, set: { shown: !m.shown } });
+      note(m.shown ? `${m.name} is hidden from players again.` : `Players can see ${m.name} now.`);
+    });
     box.addEventListener("change", e => {
       if (!isDm()) return;
       if (e.target.matches("[data-open]")) return action("world_open", { open: e.target.checked });
       const m = worldSel && (S.world.marks || []).find(x => x.id === worldSel);
       if (m && e.target.matches("[data-msc]")) action("mark_edit", { id: m.id, set: { sc: e.target.value } });
-      if (m && e.target.matches("[data-mshown]")) action("mark_edit", { id: m.id, set: { shown: e.target.checked } });
+      if (m && e.target.matches("[data-mhide]")) action("mark_edit", { id: m.id, set: { shown: !e.target.checked } });
     });
     const frac = (e, area) => { const r = area.getBoundingClientRect(); return { x: Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), y: Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)) }; };
     box.addEventListener("pointerdown", e => {
@@ -3963,7 +4161,7 @@
       if (mk) { e.preventDefault(); drag = { id: mk.dataset.mark, el: mk, area, x0: e.clientX, y0: e.clientY, moved: false }; return; }
       if (!isDm() || !S.world.img) return;
       const f = frac(e, area);
-      askText("Name of this place", "", { max: 40, ok: "Add" }).then(name => { if (name && name.trim()) action("mark_add", { x: f.x, y: f.y, name: name.trim(), shown: true }); });
+      askText("Name of this place", "", { max: 40, ok: "Add" }).then(name => { if (name && name.trim()) action("mark_add", { x: f.x, y: f.y, name: name.trim(), shown: false }); });
     });
     addEventListener("pointermove", e => {
       if (!drag || !isDm()) return;
@@ -4474,7 +4672,8 @@
     document.body.classList.toggle("extras", EXTRAS);
     initStats();
     document.querySelectorAll(".tt-tools [data-tool]").forEach(b => b.addEventListener("click", () => setTool(b.dataset.tool)));
-    $("modeBar").innerHTML = MODES.map(([m, label]) => `<button type="button" data-mode="${m}">${label}</button>`).join("");
+    const MODE_ICON = {"play": "<svg class=\"ic\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><polyline points=\"14.5 17.5 3 6 3 3 6 3 17.5 14.5\"/> <line x1=\"13\" x2=\"19\" y1=\"19\" y2=\"13\"/> <line x1=\"16\" x2=\"20\" y1=\"16\" y2=\"20\"/> <line x1=\"19\" x2=\"21\" y1=\"21\" y2=\"19\"/> <polyline points=\"14.5 6.5 18 3 21 3 21 6 17.5 9.5\"/> <line x1=\"5\" x2=\"9\" y1=\"14\" y2=\"18\"/> <line x1=\"7\" x2=\"4\" y1=\"17\" y2=\"20\"/> <line x1=\"3\" x2=\"5\" y1=\"19\" y2=\"21\"/></svg>", "map": "<svg class=\"ic\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z\"/> <path d=\"M15 5.764v15\"/> <path d=\"M9 3.236v15\"/></svg>", "script": "<svg class=\"ic\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z\"/></svg>", "tokens": "<svg class=\"ic\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"/> <circle cx=\"9\" cy=\"7\" r=\"4\"/> <path d=\"M22 21v-2a4 4 0 0 0-3-3.87\"/> <path d=\"M16 3.13a4 4 0 0 1 0 7.75\"/></svg>"};   // Lucide icons (ISC licence, see dnd/CREDITS.md)
+    $("modeBar").innerHTML = MODES.map(([m, label]) => `<button type="button" data-mode="${m}" title="${label}">${MODE_ICON[m]}<span class="lbl">${label}</span></button>`).join("");
     $("modeBar").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setMode(b.dataset.mode); });
     $("addTokenBtn").addEventListener("click", () => openTokenForm());
     $("tokenForm").addEventListener("click", e => { if (e.target === $("tokenForm")) closeModal("tokenForm"); });
@@ -4491,6 +4690,7 @@
     initItems();
     initCampFiles();
     initWorld();
+    initCheat();
     initBoard();
     initSheet();
     initNotes();
