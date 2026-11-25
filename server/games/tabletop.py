@@ -487,7 +487,7 @@ class Tabletop:
         if not isinstance(f, dict) or f.get("ace_tabletop") != 1 or not isinstance(f.get("campaign"), dict):
             return "That file isn't an ACE Tabletop campaign."
         camp, pics = f["campaign"], f.get("assets") if isinstance(f.get("assets"), dict) else {}
-        if not isinstance(camp.get("scenes"), dict) or not camp["scenes"] or not isinstance(camp.get("order"), list):
+        if not isinstance(camp.get("scenes"), dict) or not camp["scenes"]:
             return "That file has no scenes in it."
         old = copy.deepcopy({k: s[k] for k in (*SAVED_KEYS, "playas")})
         rename = {}
@@ -508,6 +508,7 @@ class Tabletop:
                     return {k: swap(x) for k, x in v.items()}
                 return v
             camp = swap(camp)
+            self._fill_in(camp)
             for k in EXPORT_KEYS:
                 if k == "name":
                     continue
@@ -523,6 +524,7 @@ class Tabletop:
                 n = sc["cols"] * sc["rows"]
                 if len(sc["tiles"]) != n or len(sc.get("seen") or "") != n:
                     raise ValueError("size")
+                self._auto_walls(sc)
                 self._scene_view(s, sc, True)
                 self._scene_view(s, sc, False)
             self._view(room, pid)
@@ -539,6 +541,43 @@ class Tabletop:
             return str(e) if isinstance(e, ValueError) and " " in str(e) else "Something in that file is broken, so nothing was changed."
         self._sys(s, f"{s['names'].get(pid, 'The DM')} loaded a campaign file.")
         return None
+
+    def _fill_in(self, camp):
+        """A hand-written file can leave most things out: give every scene, token, prop, trigger and item what it
+        needs, with ids from their keys. Walls are rebuilt from the tiles afterwards."""
+        def each(d):
+            return [(k, v) for k, v in list(d.items()) if isinstance(v, dict)] if isinstance(d, dict) else []
+        for k, sc in each(camp.get("scenes")):
+            cols, rows = int(sc.get("cols") or 24), int(sc.get("rows") or 16)
+            base = self._scene(sc.get("name") or "Scene", cols, rows)
+            sc.update({**base, **sc, "id": k, "cols": cols, "rows": rows})
+            n = cols * rows
+            if len(sc["tiles"]) < n:
+                sc["tiles"] = (sc["tiles"] + "." * n)[:n]
+            if len(sc.get("seen") or "") != n:
+                sc["seen"] = "0" * n
+            if len(sc.get("wl") or "") != n:
+                sc["wl"] = "1" * n
+            for tk, t in each(sc["tokens"]):
+                t.update({**{"id": tk, "name": "Token", "x": 0, "y": 0, "size": 1, "c": "#e5484d", "img": None, "hp": None,
+                             "mhp": None, "ac": None, "init": None, "conds": [], "hidden": False, "showhp": False,
+                             "owner": None, "char": None, "note": ""}, **t, "id": tk})
+                if t["hp"] is None and t["mhp"] is not None:
+                    t["hp"] = t["mhp"]
+            for pk, pr in each(sc["props"]):
+                pr.update({**{"r": 0}, **pr, "id": pk})
+            for lk, lb in each(sc["labels"]):
+                lb.update({**{"dm": False, "text": ""}, **lb, "id": lk})
+            for rk, tr in each(sc["trig"]):
+                tr.update({**{"name": "Trigger", "when": "enter", "do": "tell", "who": "them", "once": True, "used": False,
+                              "text": "", "to": None, "tok": None, "x": 0, "y": 0, "w": 1, "h": 1}, **tr, "id": rk})
+            sc["walls"] = {wk: {**w, "id": wk} for wk, w in each(sc["walls"]) if not w.get("auto") or w.get("door")}
+        for ik, it in each(camp.get("items")):
+            it.update({**{"name": "Something", "text": "", "kind": "item", "img": None, "given": False}, **it, "id": ik})
+        for mk, m in each((camp.get("world") or {}).get("marks")):
+            m.update({**{"name": "Somewhere", "x": 0.5, "y": 0.5, "sc": None, "shown": True}, **m, "id": mk})
+        if isinstance(camp.get("scenes"), dict) and not isinstance(camp.get("order"), list):
+            camp["order"] = list(camp["scenes"])
 
     def _fix(self, s):
         """Fill in anything an older save (or an imported file) is missing."""
