@@ -753,7 +753,7 @@
 
   // ---- The map maker's drawing: paper, ink walls, hatching round the rock ----------------------
   const PAPER = "#f2ede1", INKC = "#1c1a18";
-  const OPEN = "fogdslpDS", INDOOR = "foDS";
+  const OPEN = "fogdslpDS", INDOOR = "foslpDS";   // grass and dirt are outdoors: no walls round them
   const solidT = t => t === "." || t === "w";
   const TILE_INFO = [["f", "Stone", "#f7f4ec"], ["o", "Wood", "#d9b483"], ["g", "Grass", "#c9dea0"], ["d", "Dirt", "#dcc59a"],
     ["s", "Water", "#94c2e4"], ["l", "Lava", "#f08a3c"], ["p", "Pit", "#34302c"], ["w", "Wall", "#5c554d"]];
@@ -899,15 +899,31 @@
         g.moveTo(cx, cy); g.quadraticCurveTo(cx + 0.08, cy - 0.08, cx + 0.16, cy); g.quadraticCurveTo(cx + 0.24, cy + 0.08, cx + 0.32, cy);
       }
       g.stroke();
-    } else if (t === "l") {                      // glowing cracks
-      g.strokeStyle = "#ffd35a";
-      g.lineWidth = 0.05;
-      g.beginPath();
-      const cx = x + r(1), cy = y + r(2);
-      g.moveTo(cx - 0.3, cy); g.lineTo(cx, cy + 0.15 * (r(3) - 0.5)); g.lineTo(cx + 0.3, cy + 0.1);
-      g.stroke();
-      g.fillStyle = "rgba(150, 40, 20, 0.45)";
-      g.beginPath(); g.arc(x + r(4), y + r(5), 0.12, 0, 7); g.fill();
+    } else if (t === "l") {                      // dark crust floating on glowing rock
+      g.fillStyle = "#ff8a1e";
+      g.fillRect(x, y, 1.02, 1.02);
+      const hot = g.createRadialGradient(x + r(40), y + r(41), 0, x + r(40), y + r(41), 0.6);
+      hot.addColorStop(0, "rgba(255, 230, 110, 0.9)"); hot.addColorStop(1, "rgba(255, 230, 110, 0)");
+      g.fillStyle = hot;
+      g.fillRect(x, y, 1.02, 1.02);
+      if (r(30) > 0.2) {                          // most squares have a cooling crust plate on them
+        const cx = x + 0.5 + (r(31) - 0.5) * 0.3, cy = y + 0.5 + (r(32) - 0.5) * 0.3, size = 0.28 + r(33) * 0.16;
+        g.beginPath();
+        for (let k = 0; k < 7; k++) {
+          const a = k / 7 * Math.PI * 2 + r(34), d = size * (0.7 + r(k + 50) * 0.5);
+          g[k ? "lineTo" : "moveTo"](cx + Math.cos(a) * d, cy + Math.sin(a) * d);
+        }
+        g.closePath();
+        g.fillStyle = "#4a1a0c";
+        g.fill();
+        g.strokeStyle = "#ff5a1a";
+        g.lineWidth = 0.045;
+        g.stroke();
+      } else {                                    // or a bubble
+        g.strokeStyle = "rgba(255, 245, 180, 0.9)";
+        g.lineWidth = 0.035;
+        g.beginPath(); g.arc(x + 0.3 + r(35) * 0.4, y + 0.3 + r(36) * 0.4, 0.08, 0, 7); g.stroke();
+      }
     } else if (t === "p") {                      // a pit, darker in the middle
       g.fillStyle = "#16130f";
       g.fillRect(x + 0.12, y + 0.12, 0.76, 0.76);
@@ -2111,7 +2127,7 @@
     }
     box.append(p({
       room: "Drag out a room. Walls go round it by themselves, and rooms that touch join up. Right-drag to dig it back out.",
-      brush: "Paint corridors, pools or a river. Grass, dirt and water don't get walls, so use them outdoors. Right-drag rubs out.",
+      brush: "Paint corridors, pools or a river. Grass and dirt don't get walls, so use them outdoors. Right-drag rubs out.",
       erase: "Drag to rub squares back out to solid rock.",
       door: build.secret ? "Players see plain wall where a secret door is, until you click it with Door picked to reveal it."
         : "Click a square in a gap between walls to put a door there, and click it again to take it away. Click a secret door to reveal it.",

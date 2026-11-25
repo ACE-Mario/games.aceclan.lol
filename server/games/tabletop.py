@@ -61,11 +61,11 @@ MAX_LABELS = 200
 # Map maker squares: . nothing (solid rock on a drawn map; the picture or blank grid shows through), f stone floor,
 # o wooden floor, g grass, d dirt, s water, l lava, p pit, w solid wall, D door (it sits across a gap in the walls).
 # Indoor floors (and doors) get walls round them by themselves wherever they meet nothing or solid wall, so the DM
-# just draws rooms and corridors. Outdoor squares only get walls where they meet solid wall.
+# just draws rooms and corridors. Grass and dirt (outdoors) only get walls where they meet solid wall.
 # S is a secret door: players see plain wall there (and get no door) until the DM turns it into a D.
 TILES = ".fogdslpwDS"
 OPEN_TILES = "fogdslpDS"
-INDOOR_TILES = "foDS"
+INDOOR_TILES = "foslpDS"                      # everything but grass and dirt gets walled in
 SOLID_TILES = ".w"
 PROPS = ("table", "chair", "barrel", "crate", "chest", "bed", "shelf", "pillar", "statue", "stairs", "torch",
          "campfire", "altar", "well", "tree", "bush", "rock", "rubble", "rug", "web", "trap")
@@ -400,6 +400,8 @@ class Tabletop:
             sc.setdefault("tiles", "." * (sc["cols"] * sc["rows"]))
             sc.setdefault("props", {})
             sc.setdefault("labels", {})
+            if sc["tiles"].strip("."):
+                self._auto_walls(sc)                   # the rules for which squares get walls can change
         for ch in s["chars"].values():
             ch.setdefault("slots", [[0, 0] for _ in range(9)])
             ch.setdefault("hd", "")
