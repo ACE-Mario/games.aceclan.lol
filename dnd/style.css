@@ -59,6 +59,17 @@ body.is-dm .player-only { display: none !important; }
   left: calc((100% - var(--panel) - 20px) / 2); transform: translateX(-50%); top: max(10px, env(safe-area-inset-top, 0px)); padding: 6px 14px;
   font: 700 1rem/1.2 var(--display); letter-spacing: 1px; border-color: var(--gold); color: var(--gold); white-space: nowrap;
 }
+.tt-modebar { left: max(10px, env(safe-area-inset-left, 0px)); top: 62px; padding: 4px; display: flex; gap: 2px; max-width: calc(100vw - 20px); }
+.tt-modebar button {
+  border: 0; border-radius: 8px; background: none; color: var(--muted); padding: 7px 11px; cursor: pointer; white-space: nowrap;
+  font: 700 .8rem/1 var(--display); letter-spacing: 1px; text-transform: uppercase;
+}
+.tt-modebar button:hover { color: var(--text); }
+.tt-modebar button.on { background: var(--purple); color: #fff; }
+.tt-tools [hidden] { display: none !important; }
+body.is-dm .tt-tools { top: 112px; }
+body.is-dm .tt-opts { top: 112px; }
+body.is-dm .tt-turn { top: 112px; }
 .tt-tools {
   left: max(10px, env(safe-area-inset-left, 0px)); top: 70px; display: flex; flex-direction: column; gap: 5px; padding: 6px;
 }

@@ -72,6 +72,11 @@
   let socket = null, S = null, me = "", slug = null, viewSc = null, firstState = true;
   const cam = { x: -1, y: -1, z: 48 };
   let tool = "select", sel = null;
+  // The DM's main tabs: each shows its own tools. Players only ever have Play.
+  const MODES = [["play", "Play"], ["map", "Map making"]];
+  const MODE_TOOL = { play: "select", map: "build" };             // what a tab starts on
+  const TOOL_MODE = { fog: "map", walls: "map", build: "map" };   // select is in every tab, the rest are Play
+  let mode = "play";
   const picked = new Set();                 // selected tokens (sel is the one clicked last)
   let wallMode = "wall", wallPts = null;    // the wall being drawn (grid corners x, y, x, y ...)
   let drawShape = "free", ink = INK[0], inkW = 3;
@@ -366,6 +371,8 @@
     if (!s.dm) asPlayer = false;
     document.body.classList.toggle("is-dm", isDm());
     document.body.classList.toggle("real-dm", !!s.dm);
+    showMode();
+    if (!isDm() && TOOL_MODE[tool]) setTool("select");
     document.title = `${s.camp.name} · ACE Tabletop`;
     // Which scene to look at: players always see the active one; a DM follows it unless they're looking elsewhere.
     if (!isDm() || !viewSc || !s.scenes.some(x => x.id === viewSc) || viewSc === lastActive) viewSc = s.active;
@@ -686,12 +693,13 @@
     wallPts = null;
     if (on) {
       viewSc = S.active;
-      if (["fog", "walls", "build"].includes(tool)) setTool("select");
+      setMode("play");
       selectToken(null);
       setTab("room");
       fitView();
       note("This is what your players see. Click Back to DM view when you're done.");
     } else setTab("scenes");
+    showMode();
     $("asPlayerBtn").textContent = on ? "Back to DM view" : "View as player";
     $("asPlayerBtn").classList.toggle("primary", on);
     renderAll();
@@ -2046,8 +2054,21 @@
   addEventListener("keyup", e => { if (e.key === " ") spaceDown = false; });
 
   // ---- Tools ---------------------------------------------------------------------------------
+  function showMode() {
+    if (!isDm()) mode = "play";
+    document.querySelectorAll("#modeBar button").forEach(b => b.classList.toggle("on", b.dataset.mode === mode));
+    document.querySelectorAll(".tt-tools [data-modes]").forEach(b => { b.hidden = !b.dataset.modes.split(" ").includes(mode); });
+  }
+  function setMode(m) {
+    if (!isDm()) m = "play";
+    if (act) cancelAct();
+    mode = m;
+    setTool(MODE_TOOL[m] || "select");
+  }
   function setTool(t) {
     if (t !== "walls") wallPts = null;
+    if (t !== "select") mode = TOOL_MODE[t] || "play";
+    showMode();
     tool = t;
     viewport.dataset.tool = t;
     document.querySelectorAll(".tt-tools [data-tool]").forEach(b => b.classList.toggle("on", b.dataset.tool === t));
@@ -3236,6 +3257,8 @@
     document.body.classList.toggle("extras", EXTRAS);
     initStats();
     document.querySelectorAll(".tt-tools [data-tool]").forEach(b => b.addEventListener("click", () => setTool(b.dataset.tool)));
+    $("modeBar").innerHTML = MODES.map(([m, label]) => `<button type="button" data-mode="${m}">${label}</button>`).join("");
+    $("modeBar").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setMode(b.dataset.mode); });
     $("addTokenBtn").addEventListener("click", () => openTokenForm());
     $("tokenForm").addEventListener("click", e => { if (e.target === $("tokenForm")) closeModal("tokenForm"); });
     $("zoomIn").addEventListener("click", () => zoomAt(cam.z * 1.25));
