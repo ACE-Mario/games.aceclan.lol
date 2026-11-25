@@ -62,12 +62,14 @@ MAX_LABELS = 200
 # o wooden floor, g grass, d dirt, s water, l lava, p pit, w solid wall, D door (it sits across a gap in the walls).
 # Indoor floors (and doors) get walls round them by themselves wherever they meet nothing or solid wall, so the DM
 # just draws rooms and corridors. Outdoor squares only get walls where they meet solid wall.
-TILES = ".fogdslpwD"
-OPEN_TILES = "fogdslpD"
-INDOOR_TILES = "foD"
+# S is a secret door: players see plain wall there (and get no door) until the DM turns it into a D.
+TILES = ".fogdslpwDS"
+OPEN_TILES = "fogdslpDS"
+INDOOR_TILES = "foDS"
 SOLID_TILES = ".w"
 PROPS = ("table", "chair", "barrel", "crate", "chest", "bed", "shelf", "pillar", "statue", "stairs", "torch",
-         "campfire", "altar", "well", "tree", "bush", "rock", "rubble", "rug", "web")
+         "campfire", "altar", "well", "tree", "bush", "rock", "rubble", "rug", "web", "trap")
+DM_PROPS = ("trap",)                                # players never get these
 PC_SIGHT = 12                     # how far a player's token sees when it's made, in squares (60 ft)
 MAX_IMAGE_CHARS = 900_000         # one picture as a data: URL (socket.io takes about 1 MB a message)
 MAX_ASSET_BYTES = 120_000_000     # all of one campaign's pictures
@@ -283,7 +285,7 @@ def _campaigns():
     return _index
 
 
-SAVED_KEYS = ("name", "slug", "owner", "created", "dms", "dmcode", "names", "scenes", "order", "active",
+SAVED_KEYS = ("name", "slug", "owner", "created", "dms", "dmcode", "names", "scenes", "order", "active", "at",
               "chars", "notes", "mine", "log", "init", "settings", "assets", "logn")
 
 
@@ -295,7 +297,7 @@ class Tabletop:
     def new_state(self, options=None, old=None):
         name = line((options or {}).get("name"), MAX_NAME)
         s = {"name": name, "slug": slug_of(name), "owner": None, "created": int(time.time()), "dms": [],
-             "dmcode": new_id(6).upper(), "names": {}, "scenes": {}, "order": [], "active": None,
+             "dmcode": new_id(6).upper(), "names": {}, "scenes": {}, "order": [], "active": None, "at": {},
              "chars": {}, "notes": {}, "mine": {}, "log": [], "logn": 0,
              "init": {"list": [], "cur": None, "round": 0},
              "settings": {"per": 5, "unit": "ft"}, "assets": {},
@@ -390,6 +392,8 @@ class Tabletop:
             s["order"] = [sc["id"]]
         if s["active"] not in s["scenes"]:
             s["active"] = s["order"][0]
+        if not isinstance(s.get("at"), dict):
+            s["at"] = {}
         for sc in s["scenes"].values():
             sc.setdefault("walls", {})
             sc.setdefault("auto", False)
@@ -513,13 +517,14 @@ class Tabletop:
                     add([x, start, x, y])
                     start = None
         for i, t in enumerate(T):
-            if t != "D":
+            if t not in "DS":
                 continue
             x, y = i % cols, i // cols
             across = tile(x - 1, y) in SOLID_TILES or tile(x + 1, y) in SOLID_TILES
             p = [x, y + 0.5, x + 1, y + 0.5] if across else [x + 0.5, y, x + 0.5, y + 1]
             old = doors.get(f"{x},{y}") or {}
-            add(p, door=True, open=bool(old.get("open")), locked=bool(old.get("locked")), tile=f"{x},{y}")
+            add(p, door=True, open=bool(old.get("open")), locked=bool(old.get("locked")), tile=f"{x},{y}",
+                secret=t == "S")
 
     def _covered(self, sc, t):
         """Is this token fully under fog (so players can't see it)?"""
@@ -624,7 +629,8 @@ class Tabletop:
             size = num(d["size"], 0.5, 6, 1)
             if size is not None:
                 t["size"] = min(SIZES, key=lambda v: abs(v - size))
-        for key, lo, hi in (("hp", -999, 9999), ("mhp", 0, 9999), ("ac", 0, 99), ("init", -20, 30), ("sight", 0, 60)):
+        for key, lo, hi in (("hp", -999, 9999), ("mhp", 0, 9999), ("ac", 0, 99), ("init", -20, 30), ("sight", 0, 60),
+                            ("aura", 0, 60), ("elev", -999, 9999), ("speed", 0, 999)):
             if key in d:
                 v = d[key]
                 t[key] = None if v in (None, "") else num(v, lo, hi)
@@ -632,6 +638,18 @@ class Tabletop:
             t["conds"] = [c for c in CONDITIONS if c in {str(x) for x in d["conds"]}]
         if "note" in d:
             t["note"] = text(d["note"], 500)
+        if "ac2" in d:                                  # the aura's colour
+            t["ac2"] = colour(d["ac2"], "#ffd43b")
+        if dm and "stats" in d:                         # a monster's stat block (only the DM gets it)
+            st = d["stats"] if isinstance(d["stats"], dict) else None
+            if not st:
+                t["stats"] = None
+            else:
+                abil = st.get("abil") if isinstance(st.get("abil"), list) else []
+                abil = [num(v, 1, 30) for v in abil[:6]]
+                t["stats"] = {"abil": [10 if v is None else v for v in abil] + [10] * (6 - len(abil)),
+                              **{k: text(st.get(k), n) for k, n in (("speed", 80), ("skills", 300), ("saves", 200),
+                                 ("senses", 300), ("langs", 200), ("cr", 10), ("traits", 3000), ("actions", 3000))}}
         if dm:
             if "hidden" in d:
                 t["hidden"] = bool(d["hidden"])
@@ -730,11 +748,72 @@ class Tabletop:
             self._changed(s)
         return err
 
-    def _scene_of(self, s, data, dm):
+    def _where(self, s, pid):
+        """The scene a player is on: the one the DM showed everyone, unless they took the stairs elsewhere."""
+        at = s.get("at", {}).get(pid)
+        return at if at in s["scenes"] else s["active"]
+
+    def _scene_of(self, s, data, dm, pid=None):
         sc = s["scenes"].get(str(data.get("sc", "")))
-        if not sc or (not dm and sc["id"] != s["active"]):
+        if not sc or (not dm and sc["id"] != self._where(s, pid)):
             return None
         return sc
+
+    def _owner_of(self, s, t):
+        ch = s["chars"].get(t.get("char"))
+        return ch["owner"] if ch else t.get("owner")
+
+    def _free_spot(self, sc, t, near):
+        """A square near (x, y) where token t fits: on the map, not in rock or wall, not on another token."""
+        cols, rows, T = sc["cols"], sc["rows"], sc.get("tiles", "")
+        drawn = bool(T.strip("."))
+        n = max(1, int(t["size"]))
+        taken = set()
+        for o in sc["tokens"].values():
+            if o["id"] != t["id"]:
+                for yy in range(int(o["y"]), int(o["y"]) + max(1, int(o["size"]))):
+                    for xx in range(int(o["x"]), int(o["x"]) + max(1, int(o["size"]))):
+                        taken.add((xx, yy))
+        props = {(pr["x"], pr["y"]) for pr in sc.get("props", {}).values() if pr.get("to")}
+        nx, ny = near
+        for r in range(0, max(cols, rows)):
+            ring = [(nx + dx, ny + dy) for dy in range(-r, r + 1) for dx in range(-r, r + 1) if max(abs(dx), abs(dy)) == r]
+            for x, y in ring:
+                if x < 0 or y < 0 or x + n > cols or y + n > rows:
+                    continue
+                cells = [(xx, yy) for yy in range(y, y + n) for xx in range(x, x + n)]
+                if any(c in taken or c in props for c in cells):
+                    continue
+                if drawn and any(T[yy * cols + xx] not in "fogdD" for xx, yy in cells):
+                    continue
+                return x, y
+        return max(0, min(cols - n, nx)), max(0, min(rows - n, ny))
+
+    def _arrive(self, s, sc, t, target):
+        """Move token t from scene sc to scene target, next to the stairs (or door...) that lead back."""
+        back = next((pr for pr in target.get("props", {}).values() if pr.get("to") == sc["id"]), None)
+        near = (back["x"], back["y"]) if back else (target["cols"] // 2, target["rows"] // 2)
+        del sc["tokens"][t["id"]]
+        t["x"], t["y"] = self._free_spot(target, t, near)
+        target["tokens"][t["id"]] = t
+        for e in s["init"]["list"]:
+            if e.get("tok") == t["id"]:
+                e["sc"] = target["id"]
+        self._reveal(target, t["id"])
+
+    def _take_stairs(self, s, sc, t, pid, dm):
+        """A player's token moved onto a link players may use: it goes to the linked scene, and so do they."""
+        if dm:
+            return
+        x0, y0, n = int(t["x"] + 0.001), int(t["y"] + 0.001), max(1, int(t["size"]))
+        for pr in sc.get("props", {}).values():
+            target = s["scenes"].get(pr.get("to") or "")
+            if pr.get("open") and target and target is not sc and x0 <= pr["x"] < x0 + n and y0 <= pr["y"] < y0 + n:
+                self._arrive(s, sc, t, target)
+                for who in {pid, self._owner_of(s, t)}:
+                    if who and not self.is_dm(s, who):
+                        s["at"][who] = target["id"]
+                return
 
     def _act(self, room, s, pid, me, dm, action, data):
         need_dm = "Only the DM can do that."
@@ -872,6 +951,7 @@ class Tabletop:
                 return None
             if action == "scene_show":
                 s["active"] = sc["id"]
+                s["at"] = {}                            # everyone, wherever they wandered off to
                 self._sys(s, f"The party moves to {sc['name']}.")
                 return None
             if action == "scene_move":
@@ -912,7 +992,7 @@ class Tabletop:
 
         # -- Tokens --
         if action == "tok_add":
-            sc = self._scene_of(s, data, dm)
+            sc = self._scene_of(s, data, dm, pid)
             if not sc:
                 return "That scene isn't there any more."
             if len(sc["tokens"]) >= MAX_TOKENS:
@@ -944,7 +1024,7 @@ class Tabletop:
                 self._reveal(sc, t["id"])
             return None
         if action == "tok_group":                     # several selected tokens at once
-            sc = self._scene_of(s, data, dm)
+            sc = self._scene_of(s, data, dm, pid)
             if not sc:
                 return "That scene isn't there any more."
             op = data.get("op")
@@ -955,6 +1035,7 @@ class Tabletop:
                     if t and self._controls(s, pid, t):
                         self._token_fields(s, t, {"x": m.get("x"), "y": m.get("y")}, dm)
                         self._reveal(sc, t["id"])
+                        self._take_stairs(s, sc, t, pid, dm)
                 return None
             ids = data.get("ids") if isinstance(data.get("ids"), list) else []
             toks = [sc["tokens"][i] for i in map(str, ids[:MAX_TOKENS]) if i in sc["tokens"]]
@@ -984,7 +1065,7 @@ class Tabletop:
                 return None
             return "Unknown action."
         if action in ("tok_edit", "tok_move", "tok_del", "tok_img", "tok_front"):
-            sc = self._scene_of(s, data, dm)
+            sc = self._scene_of(s, data, dm, pid)
             t = sc["tokens"].get(str(data.get("id", ""))) if sc else None
             if not t:
                 return "That token isn't there any more."
@@ -993,6 +1074,7 @@ class Tabletop:
             if action == "tok_move":
                 self._token_fields(s, t, {"x": data.get("x"), "y": data.get("y")}, dm)
                 self._reveal(sc, t["id"])
+                self._take_stairs(s, sc, t, pid, dm)
                 return None
             if action == "tok_edit":
                 d = data.get("set") if isinstance(data.get("set"), dict) else {}
@@ -1026,7 +1108,7 @@ class Tabletop:
             return None
 
         # -- Map maker --
-        if action in ("tiles", "map_set", "prop_add", "prop_del", "label_add", "label_edit", "label_del"):
+        if action in ("tiles", "map_set", "prop_add", "prop_del", "prop_link", "link_go", "label_add", "label_edit", "label_del"):
             if not dm:
                 return need_dm
             sc = s["scenes"].get(str(data.get("sc", "")))
@@ -1088,6 +1170,24 @@ class Tabletop:
             if action == "prop_del":
                 sc["props"].pop(str(data.get("id", "")), None)
                 return None
+            if action in ("prop_link", "link_go"):
+                pr = sc["props"].get(str(data.get("id", "")))
+                if not pr:
+                    return "That isn't there any more."
+                if action == "prop_link":              # where it leads, and whether players can walk onto it
+                    to = str(data.get("to") or "")
+                    pr["to"] = to if to in s["scenes"] and to != sc["id"] else None
+                    pr["open"] = bool(data.get("open")) and bool(pr["to"])
+                    return None
+                target = s["scenes"].get(pr.get("to") or "")
+                if not target:
+                    return "That doesn't lead anywhere yet."
+                for t in [t for t in sc["tokens"].values() if self._pc(t)]:
+                    self._arrive(s, sc, t, target)
+                s["active"] = target["id"]
+                s["at"] = {}
+                self._sys(s, f"The party moves to {target['name']}.")
+                return None
             if action == "label_add":
                 txt = line(data.get("text"), 40)
                 x, y = num(data.get("x"), 0, MAX_GRID, 2), num(data.get("y"), 0, MAX_GRID, 2)
@@ -1112,9 +1212,9 @@ class Tabletop:
 
         # -- Walls and doors --
         if action == "door":
-            sc = self._scene_of(s, data, dm)
+            sc = self._scene_of(s, data, dm, pid)
             w = sc["walls"].get(str(data.get("id", ""))) if sc else None
-            if not w or not w.get("door"):
+            if not w or not w.get("door") or (w.get("secret") and not dm):
                 return "That door isn't there any more."
             if not dm and not self._door_seen(sc, w):
                 return "You can't see that door."
@@ -1161,7 +1261,7 @@ class Tabletop:
 
         # -- Drawings on the map --
         if action == "line_add":
-            sc = self._scene_of(s, data, dm)
+            sc = self._scene_of(s, data, dm, pid)
             d = data.get("line") if isinstance(data.get("line"), dict) else {}
             p = d.get("p")
             if not sc or not isinstance(p, list) or len(p) < 4 or len(p) % 2 or len(p) > MAX_LINE_PTS:
@@ -1177,7 +1277,7 @@ class Tabletop:
                                 "w": num(d.get("w"), 1, 20) or 3, "p": pts, "shape": shape}
             return None
         if action == "line_del":
-            sc = self._scene_of(s, data, dm)
+            sc = self._scene_of(s, data, dm, pid)
             ln = sc["lines"].get(str(data.get("id", ""))) if sc else None
             if not ln:
                 return None
@@ -1186,7 +1286,7 @@ class Tabletop:
             del sc["lines"][ln["id"]]
             return None
         if action == "lines_clear":
-            sc = self._scene_of(s, data, dm)
+            sc = self._scene_of(s, data, dm, pid)
             if not sc:
                 return None
             if data.get("all"):
@@ -1263,7 +1363,7 @@ class Tabletop:
         if action.startswith("init_"):
             init = s["init"]
             if action == "init_add":
-                sc = self._scene_of(s, data, dm)
+                sc = self._scene_of(s, data, dm, pid)
                 ids = data.get("ids") if isinstance(data.get("ids"), list) else []
                 have = {e.get("tok") for e in init["list"]}
                 added = 0
@@ -1412,7 +1512,7 @@ class Tabletop:
         if not sc:
             return None
         dm = self.is_dm(s, pid)
-        if not dm and sc["id"] != s["active"]:
+        if not dm and sc["id"] != self._where(s, pid):
             return None
         if k == "ping":
             x, y = num(data.get("x"), -50, MAX_GRID + 50, 2), num(data.get("y"), -50, MAX_GRID + 50, 2)
@@ -1449,6 +1549,8 @@ class Tabletop:
                 continue
             hp, mhp, ac = self._hp_of(s, t)
             v = {**t, "hp": hp, "mhp": mhp, "ac": ac}
+            if not dm:
+                v.pop("stats", None)
             if not dm and not self._pc(t) and not t.get("showhp"):
                 # players see how hurt a monster looks, not its numbers
                 v["hp"] = v["mhp"] = v["ac"] = v["init"] = None
@@ -1463,17 +1565,28 @@ class Tabletop:
 
         def clear(x, y):
             return dm or not sc["fog"] or seen[int(y) * cols + int(x)] == "1"
+        if not dm and "S" in tiles:                     # secret doors look like wall
+            tiles = tiles.replace("S", ".")
         if not dm and sc["fog"] and tiles.strip("."):
             tiles = "".join(t if seen[i] == "1" else "?" for i, t in enumerate(tiles))
         out["tiles"] = tiles
-        out["props"] = [pr for pr in sc.get("props", {}).values() if clear(pr["x"], pr["y"])]
+        if dm:
+            out["props"] = list(sc.get("props", {}).values())
+        else:                                          # players don't get traps, or where stairs go unless they may use them
+            out["props"] = []
+            for pr in sc.get("props", {}).values():
+                if pr["k"] in DM_PROPS or not clear(pr["x"], pr["y"]):
+                    continue
+                go = s["scenes"].get(pr.get("to") or "") if pr.get("open") else None
+                out["props"].append({k: pr[k] for k in ("id", "k", "x", "y", "r")} | ({"go": go["name"]} if go else {}))
         out["labels"] = [lb for lb in sc.get("labels", {}).values()
                          if (dm or not lb["dm"]) and clear(min(lb["x"], cols - 1), min(lb["y"], sc["rows"] - 1))]
         if dm:
             out["walls"] = list(sc["walls"].values())
         else:
             out["walls"] = [{"id": w["id"], "p": w["p"], "door": True, "open": w.get("open", False)}
-                            for w in sc["walls"].values() if w.get("door") and self._door_seen(sc, w)]
+                             for w in sc["walls"].values()
+                             if w.get("door") and not w.get("secret") and self._door_seen(sc, w)]
         return out
 
     def view(self, room, pid):
@@ -1485,7 +1598,7 @@ class Tabletop:
         if dm:
             scenes = [self._scene_view(s, s["scenes"][i], True) for i in s["order"]]
         else:
-            scenes = [self._scene_view(s, s["scenes"][s["active"]], False)]
+            scenes = [self._scene_view(s, s["scenes"][self._where(s, pid)], False)]
         log = [e for e in s["log"] if not e.get("to") or dm or e.get("by") == pid][-150:]
         init = s["init"]
 
@@ -1505,7 +1618,8 @@ class Tabletop:
             "dm": dm, "owner": s["owner"], "isOwner": pid == s["owner"], "dms": [s["owner"], *s["dms"]],
             "dmcode": s["dmcode"] if dm else None,
             "names": names,
-            "scenes": scenes, "active": s["active"],
+            "scenes": scenes, "active": s["active"] if dm else self._where(s, pid),
+            "at": {q: self._where(s, q) for q in s["names"] if not self.is_dm(s, q)} if dm else {},
             "chars": list(s["chars"].values()),
             "notes": [n for n in s["notes"].values() if dm or n["shared"]],
             "mine": s["mine"].get(pid, ""),

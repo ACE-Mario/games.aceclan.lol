@@ -27,6 +27,46 @@
     ["Wight", 45, 14, 1, 1], ["Ghost", 45, 11, 1, 1], ["Knight", 52, 18, 0, 1], ["Ogre", 59, 11, -1, 2],
     ["Owlbear", 59, 13, 1, 2], ["Bandit captain", 65, 15, 3, 1], ["Troll", 84, 15, 1, 2], ["Young dragon", 133, 18, 0, 2],
   ];
+
+  // Stat blocks for the ready-made monsters: speed | STR DEX CON INT WIS CHA | skills | saves | senses |
+  // languages | challenge | traits (";" between) | actions (";" between, "Name +hit dice type").
+  const STAT_DATA = {
+    "Commoner": "30 ft|10 10 10 10 10 10|||passive Perception 10|any one language|0||Club +2 1d4 bludgeoning",
+    "Kobold": "30 ft|7 15 9 8 7 8|||darkvision 60 ft, passive Perception 8|Common, Draconic|1/8|Sunlight Sensitivity: disadvantage on attacks and sight-based Perception in sunlight.;Pack Tactics: advantage on an attack if an ally is next to the target.|Dagger +4 1d4+2 piercing;Sling +4 1d4+2 bludgeoning (range 30/120)",
+    "Goblin": "30 ft|8 14 10 10 8 8|Stealth +6||darkvision 60 ft, passive Perception 9|Common, Goblin|1/4|Nimble Escape: can Disengage or Hide as a bonus action.|Scimitar +4 1d6+2 slashing;Shortbow +4 1d6+2 piercing (range 80/320)",
+    "Giant rat": "30 ft|7 15 11 2 10 4|||darkvision 60 ft, passive Perception 10||1/8|Keen Smell: advantage on smell-based Perception.;Pack Tactics: advantage on an attack if an ally is next to the target.|Bite +4 1d4+2 piercing",
+    "Cultist": "30 ft|11 12 10 10 11 10|Deception +2, Religion +2||passive Perception 10|any one language|1/8|Dark Devotion: advantage on saves against being charmed or frightened.|Scimitar +3 1d6+1 slashing",
+    "Bandit": "30 ft|11 12 12 10 10 10|||passive Perception 10|any one language|1/8||Scimitar +3 1d6+1 slashing;Light crossbow +3 1d8+1 piercing (range 80/320)",
+    "Guard": "30 ft|13 12 12 10 11 10|Perception +2||passive Perception 12|any one language|1/8||Spear +3 1d6+1 piercing",
+    "Wolf": "40 ft|12 15 12 3 12 6|Perception +3, Stealth +4||passive Perception 13||1/4|Keen Hearing and Smell: advantage on Perception that relies on hearing or smell.;Pack Tactics: advantage on an attack if an ally is next to the target.|Bite +4 2d4+2 piercing (DC 11 Strength save or knocked prone)",
+    "Hobgoblin": "30 ft|13 12 12 10 10 9|||darkvision 60 ft, passive Perception 10|Common, Goblin|1/2|Martial Advantage: once a turn, 2d6 extra damage if an ally is next to the target.|Longsword +3 1d8+1 slashing;Longbow +3 1d8+1 piercing (range 150/600)",
+    "Skeleton": "30 ft|10 14 15 6 8 5|||darkvision 60 ft, passive Perception 9|understands the languages it knew in life|1/4|Vulnerable to bludgeoning. Immune to poison, exhaustion and being poisoned.|Shortsword +4 1d6+2 piercing;Shortbow +4 1d6+2 piercing (range 80/320)",
+    "Orc": "30 ft|16 12 16 7 11 10|Intimidation +2||darkvision 60 ft, passive Perception 10|Common, Orc|1/2|Aggressive: as a bonus action, moves up to its speed toward an enemy it can see.|Greataxe +5 1d12+3 slashing;Javelin +5 1d6+3 piercing (range 30/120)",
+    "Zombie": "20 ft|13 6 16 3 6 5||Wis +0|darkvision 60 ft, passive Perception 8|understands the languages it knew in life|1/4|Undead Fortitude: dropped to 0 HP by anything but radiant damage or a crit, it makes a Con save (DC 5 + the damage) to drop to 1 HP instead. Immune to poison.|Slam +3 1d6+1 bludgeoning",
+    "Ghoul": "30 ft|13 15 10 7 10 6|||darkvision 60 ft, passive Perception 10|Common|1|Immune to poison, being charmed, exhaustion and being poisoned.|Bite +2 2d6+2 piercing;Claws +4 2d4+2 slashing (DC 10 Constitution save or paralysed for 1 minute, save again each turn; elves are immune)",
+    "Gnoll": "30 ft|14 12 11 6 10 7|||darkvision 60 ft, passive Perception 10|Gnoll|1/2|Rampage: when it drops a creature to 0 HP, it can move half its speed and bite as a bonus action.|Bite +4 1d4+2 piercing;Spear +4 1d6+2 piercing;Longbow +3 1d8+1 piercing (range 150/600)",
+    "Giant spider": "30 ft, climb 30 ft|14 16 12 2 11 4|Stealth +7||blindsight 10 ft, darkvision 60 ft, passive Perception 10||1|Spider Climb: climbs walls and ceilings.;Web Sense and Web Walker: knows where anything touching its web is, and moves through webs freely.|Bite +5 1d8+3 piercing (plus 2d8 poison, DC 11 Constitution save for half);Web +5 0d1 restrained (recharge 5-6, range 30/60, escape DC 12)",
+    "Priest": "30 ft|10 10 12 13 16 13|Medicine +7, Persuasion +3, Religion +4||passive Perception 13|any two languages|2|Divine Eminence: as a bonus action, a melee hit deals 3d6 extra radiant damage (uses a spell slot).;Spellcasting: Wisdom, save DC 13, +5 to hit with spells.|Mace +2 1d6 bludgeoning",
+    "Bugbear": "30 ft|15 14 13 8 11 9|Stealth +6, Survival +2||darkvision 60 ft, passive Perception 10|Common, Goblin|1|Brute: melee weapons deal one extra die (included).;Surprise Attack: 2d6 extra damage against a surprised creature in the first round.|Morningstar +4 2d8+2 piercing;Javelin +4 2d6+2 piercing",
+    "Brown bear": "40 ft, climb 30 ft|19 10 16 2 13 7|Perception +3||passive Perception 13||1|Keen Smell: advantage on smell-based Perception.;Multiattack: one bite and one claws attack.|Bite +6 1d8+4 piercing;Claws +6 2d6+4 slashing",
+    "Dire wolf": "50 ft|17 15 15 3 12 7|Perception +3, Stealth +4||passive Perception 13||1|Keen Hearing and Smell.;Pack Tactics: advantage on an attack if an ally is next to the target.|Bite +5 2d6+3 piercing (DC 13 Strength save or knocked prone)",
+    "Mage": "30 ft|9 14 11 17 12 11|Arcana +6, History +6|Int +6, Wis +4|passive Perception 11|any four languages|6|Spellcasting: Intelligence, save DC 14, +6 to hit with spells (fireball, counterspell, misty step, shield...).|Dagger +5 1d4+2 piercing;Fire bolt +6 2d10 fire (range 120)",
+    "Wight": "30 ft|15 14 16 10 13 15|Perception +3, Stealth +4||darkvision 60 ft, passive Perception 13|the languages it knew in life|3|Sunlight Sensitivity. Resists necrotic; immune to poison.;Multiattack: two longsword attacks, or two longbow attacks; it can use Life Drain in place of one longsword attack.|Longsword +4 1d8+2 slashing;Life Drain +4 1d6+2 necrotic (DC 13 Constitution save or max HP drops by the damage);Longbow +4 1d8+2 piercing (range 150/600)",
+    "Ghost": "0 ft, fly 40 ft (hover)|7 13 10 10 12 17|||darkvision 60 ft, passive Perception 11|the languages it knew in life|4|Incorporeal Movement: moves through creatures and objects.;Etherealness and Horrifying Visage (DC 13 Wisdom save or frightened).|Withering Touch +5 4d6+3 necrotic",
+    "Knight": "30 ft|16 11 14 11 11 15||Con +4, Wis +2|passive Perception 10|any one language|3|Brave: advantage on saves against being frightened.;Multiattack: two melee attacks.;Parry: +2 AC against one melee hit (reaction).|Greatsword +5 2d6+3 slashing;Heavy crossbow +2 1d10 piercing (range 100/400)",
+    "Ogre": "40 ft|19 8 16 5 7 7|||darkvision 60 ft, passive Perception 8|Common, Giant|2||Greatclub +6 2d8+4 bludgeoning;Javelin +6 2d6+4 piercing (range 30/120)",
+    "Owlbear": "40 ft|20 12 17 3 12 7|Perception +3||darkvision 60 ft, passive Perception 13||3|Keen Sight and Smell.;Multiattack: one beak and one claws attack.|Beak +7 1d10+5 piercing;Claws +7 2d8+5 slashing",
+    "Bandit captain": "30 ft|15 16 14 14 11 14|Athletics +4, Deception +4|Str +4, Dex +5, Wis +2|passive Perception 10|any two languages|2|Multiattack: two scimitar attacks and one dagger attack.;Parry: +2 AC against one melee hit (reaction).|Scimitar +5 1d6+3 slashing;Dagger +5 1d4+3 piercing",
+    "Troll": "30 ft|18 13 20 7 9 7|Perception +2||darkvision 60 ft, passive Perception 12|Giant|5|Regeneration: regains 10 HP at the start of its turn unless it took acid or fire damage.;Multiattack: one bite and two claw attacks.|Bite +7 1d6+4 piercing;Claw +7 2d6+4 slashing",
+    "Young dragon": "40 ft, climb 40 ft, fly 80 ft|23 10 21 14 11 19|Perception +8, Stealth +4|Dex +4, Con +9, Wis +4, Cha +8|blindsight 30 ft, darkvision 120 ft, passive Perception 18|Common, Draconic|10|Multiattack: one bite and two claw attacks.;Breath Weapon (recharge 5-6): 30 ft cone, DC 17 Dexterity save, 16d6 damage, half on a success.|Bite +10 2d10+6 piercing;Claw +10 2d6+6 slashing;Breath weapon +0 16d6 damage (DC 17 Dexterity save for half)",
+  };
+  function statsOf(name) {
+    const d = STAT_DATA[name];
+    if (!d) return null;
+    const [speed, ab, skills, saves, senses, langs, cr, traits, actions] = d.split("|");
+    return { speed, abil: ab.split(" ").map(Number), skills, saves, senses, langs, cr,
+      traits: traits.split(";").filter(Boolean).join("\n"), actions: actions.split(";").filter(Boolean).join("\n") };
+  }
   const LIM = { image: 900000, grid: 120, linePts: 4000 };
 
   let socket = null, S = null, me = "", slug = null, viewSc = null, firstState = true;
@@ -44,7 +84,7 @@
   const fogLocal = new Map();               // cell index -> "0"/"1", painted but not confirmed yet
   const tilesLocal = new Map();             // cell index -> map maker square, painted but not confirmed yet
   let tilesLocalSc = null;
-  const build = { mode: "room", tile: "f", brush: 1, prop: "barrel", rot: 0, dmLabel: false, size: "", kind: "dungeon" };
+  const build = { mode: "room", tile: "f", brush: 1, prop: "barrel", rot: 0, dmLabel: false, size: "", kind: "dungeon", secret: false };
   let act = null;                           // what the pointer is doing right now
   let noteTimer = 0, spaceDown = false;
 
@@ -294,8 +334,29 @@
 
   // ---- Room updates --------------------------------------------------------------------------
   let lastActive = null, lastLog = 0, myTurnSeen = null;
+  function trapCheck(old, s) {
+    if (!old || !s.dm) return;
+    const was = new Map();
+    for (const sc of old.scenes) for (const t of sc.tokens) was.set(t.id, `${sc.id}:${Math.floor(t.x)},${Math.floor(t.y)}`);
+    for (const sc of s.scenes) {
+      const traps = (sc.props || []).filter(pr => pr.k === "trap");
+      if (!traps.length) continue;
+      for (const t of sc.tokens) {
+        if (!(t.owner || t.char) || was.get(t.id) === `${sc.id}:${Math.floor(t.x)},${Math.floor(t.y)}`) continue;
+        const n = Math.max(1, Math.floor(t.size));
+        const hit = traps.find(pr => pr.x >= Math.floor(t.x) && pr.x < Math.floor(t.x) + n && pr.y >= Math.floor(t.y) && pr.y < Math.floor(t.y) + n);
+        if (hit) {
+          note(`⚠ ${t.name} stepped on a trap${sc.id === viewSc ? "" : ` in ${sc.name}`}!`);
+          pings.push({ x: hit.x + 0.5, y: hit.y + 0.5, t: Date.now(), c: "#ff6b6b", sc: sc.id });
+          FX.sound("buzz");
+          redraw();
+        }
+      }
+    }
+  }
   function onState(s) {
     const old = S;
+    if (!asPlayer) trapCheck(old, s);
     S = s;
     me = s.you;
     if (s.camp) slug = s.camp.slug;
@@ -335,6 +396,7 @@
     renderNotes();
     renderScenes();
     renderRoom();
+    renderStats();
     renderCard();
     refreshSheet();
     redraw();
@@ -426,6 +488,23 @@
       ctx.drawImage(tileLayer(sc, T, !!img), 0, 0, sc.cols, sc.rows);
       for (const pr of sc.props || []) paintProp(ctx, pr);
     }
+    if (cam.z > 12) for (const pr of sc.props || []) {          // where stairs lead
+      const to = isDm() ? pr.to && (S.scenes.find(x => x.id === pr.to) || {}).name : pr.go;
+      if (to) tag(`→ ${to}`, pr.x + 0.5, pr.y + 1 + px(8), isDm() && !pr.open ? "#adb5bd" : "#ffd43b", px, 10);
+    }
+    // auras and reach
+    for (const t of sc.tokens) if (t.aura) {
+      const pos = tokenPos(t), r = t.size / 2 + t.aura / per();
+      ctx.beginPath();
+      ctx.arc(pos.x + t.size / 2, pos.y + t.size / 2, r, 0, Math.PI * 2);
+      ctx.fillStyle = (t.ac2 || t.c) + "1f";
+      ctx.fill();
+      ctx.strokeStyle = (t.ac2 || t.c) + "aa";
+      ctx.lineWidth = px(2);
+      ctx.setLineDash([px(6), px(4)]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
     if (sc.grid && cam.z >= 7 && !(drawn && !img)) {
       ctx.beginPath();
       for (let x = 0; x <= sc.cols; x++) { ctx.moveTo(x, 0); ctx.lineTo(x, sc.rows); }
@@ -454,6 +533,10 @@
     // tokens
     const cur = EXTRAS && S.init.cur && S.init.list.find(e => e.id === S.init.cur);
     for (const t of sc.tokens) paintToken(t, px, cur && cur.tok === t.id);
+    for (const t of sc.tokens) if (t.elev) {
+      const pos = tokenPos(t);
+      tag(`${t.elev > 0 ? "▲" : "▼"} ${Math.abs(t.elev)} ${unit()}`, pos.x + t.size * 0.85, pos.y + px(2), t.elev > 0 ? "#74c0fc" : "#e8b86d", px, 10);
+    }
 
     // a token being dragged: the path and how far
     if (act && act.kind === "token" && act.moved) {
@@ -461,7 +544,7 @@
       if (t) {
         const r = t.size / 2;
         const a = { x: act.ox + r, y: act.oy + r }, b = { x: act.x + r, y: act.y + r };
-        paintRuler([a.x, a.y, b.x, b.y], "#ffffff", px, squares({ x: act.ox, y: act.oy }, act));
+        paintRuler([a.x, a.y, b.x, b.y], "#ffffff", px, squares({ x: act.ox, y: act.oy }, act), null, t.speed);
       }
     }
     // rulers
@@ -565,12 +648,13 @@
     const clear = (x, y) => !fog || at(x, y) === "1";
     const pc = t => !!(t.owner || t.char);
     const tokens = sc.tokens.filter(t => !t.hidden && (pc(t) || !fog || !covered(sc, t, t.size))).map(t => {
+      if (t.stats) t = { ...t, stats: null };
       if (pc(t) || t.showhp) return t;
       const v = { ...t, hp: null, mhp: null, ac: null, init: null, note: "" };   // players see how hurt it looks
       if (t.hp != null && t.mhp) v.look = t.hp <= 0 ? "down" : t.hp <= t.mhp / 2 ? "bloodied" : t.hp < t.mhp ? "hurt" : "fine";
       return v;
     });
-    let tiles = sc.tiles || "";
+    let tiles = (sc.tiles || "").replace(/S/g, ".");
     if (fog && /[^.]/.test(tiles)) tiles = Array.from(tiles, (t, i) => (seen[i] === "1" ? t : "?")).join("");
     const doorSeen = w => {
       if (!fog) return true;
@@ -582,9 +666,12 @@
     };
     const out = {
       ...sc, tokens, tiles,
-      props: (sc.props || []).filter(pr => clear(pr.x, pr.y)),
+      props: (sc.props || []).filter(pr => clear(pr.x, pr.y) && pr.k !== "trap").map(pr => {
+        const go = pr.open && S.scenes.find(x => x.id === pr.to);
+        return { id: pr.id, k: pr.k, x: pr.x, y: pr.y, r: pr.r, ...(go ? { go: go.name } : {}) };
+      }),
       labels: (sc.labels || []).filter(lb => !lb.dm && clear(lb.x, lb.y)),
-      walls: (sc.walls || []).filter(w => w.door && doorSeen(w)).map(w => ({ id: w.id, p: w.p, door: true, open: !!w.open })),
+      walls: (sc.walls || []).filter(w => w.door && !w.secret && doorSeen(w)).map(w => ({ id: w.id, p: w.p, door: true, open: !!w.open })),
     };
     pvMemo = { src: sc, seen: sc.seen, out };
     return out;
@@ -620,7 +707,8 @@
     ctx.rotate(Math.atan2(y2 - y1, x2 - x1));
     ctx.lineWidth = lw;
     ctx.lineJoin = "round";
-    const edge = w.locked && dm ? "#e03131" : "#1c1a18";
+    const edge = w.locked && dm ? "#e03131" : w.secret && dm ? "#7048e8" : "#1c1a18";
+    if (w.secret && dm) ctx.setLineDash([0.1, 0.07]);
     if (!w.open) {
       ctx.beginPath();
       ctx.rect(0.04, -th / 2, L - 0.08, th);
@@ -628,6 +716,14 @@
       ctx.fill();
       ctx.strokeStyle = edge;
       ctx.stroke();
+      ctx.setLineDash([]);
+      if (w.secret && dm && L > 0.5) {             // an S, so the DM knows players see wall here
+        ctx.fillStyle = "#7048e8";
+        ctx.font = `700 ${th * 0.9}px system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("S", L / 2, th * 0.05);
+      }
       if (w.locked && dm) {                       // a little padlock for the DM
         ctx.beginPath();
         ctx.arc(L / 2, 0, th * 0.28, 0, Math.PI * 2);
@@ -643,6 +739,7 @@
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.rotate(Math.PI / 2);
+      if (w.secret && dm) ctx.setLineDash([0.1, 0.07]);
       ctx.beginPath();
       ctx.rect(0, -th * 0.3, L * 0.9, th * 0.6);
       ctx.fillStyle = "#e9cf9f";
@@ -650,19 +747,20 @@
       ctx.strokeStyle = edge;
       ctx.stroke();
     }
+    ctx.setLineDash([]);
     ctx.restore();
   }
 
   // ---- The map maker's drawing: paper, ink walls, hatching round the rock ----------------------
   const PAPER = "#f2ede1", INKC = "#1c1a18";
-  const OPEN = "fogdslpD", INDOOR = "foD";
+  const OPEN = "fogdslpDS", INDOOR = "foDS";
   const solidT = t => t === "." || t === "w";
   const TILE_INFO = [["f", "Stone", "#f7f4ec"], ["o", "Wood", "#d9b483"], ["g", "Grass", "#c9dea0"], ["d", "Dirt", "#dcc59a"],
     ["s", "Water", "#94c2e4"], ["l", "Lava", "#f08a3c"], ["p", "Pit", "#34302c"], ["w", "Wall", "#5c554d"]];
   const PROP_INFO = [["table", "Table"], ["chair", "Chair"], ["bed", "Bed"], ["shelf", "Shelf"], ["rug", "Rug"], ["chest", "Chest"],
     ["barrel", "Barrel"], ["crate", "Crate"], ["stairs", "Stairs"], ["pillar", "Pillar"], ["statue", "Statue"], ["altar", "Altar"],
     ["torch", "Torch"], ["campfire", "Fire"], ["well", "Well"], ["tree", "Tree"], ["bush", "Bush"], ["rock", "Rock"],
-    ["rubble", "Rubble"], ["web", "Web"]];
+    ["rubble", "Rubble"], ["web", "Web"], ["trap", "Trap (DM)"]];
   const tileColour = t => (TILE_INFO.find(x => x[0] === t) || TILE_INFO[0])[2];
   let tileCache = { key: "", canvas: null };
   function rnd(x, y, k = 0) {
@@ -731,7 +829,7 @@
     // the squares themselves
     for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
       let t = at(x, y);
-      if (t === "D") t = [at(x - 1, y), at(x + 1, y), at(x, y - 1), at(x, y + 1)].includes("o") ? "o" : "f";
+      if (t === "D" || t === "S") t = [at(x - 1, y), at(x + 1, y), at(x, y - 1), at(x, y + 1)].includes("o") ? "o" : "f";
       if (t === "." || t === "?") continue;
       g.fillStyle = tileColour(t);
       g.fillRect(x, y, 1.02, 1.02);
@@ -881,6 +979,12 @@
         poly([0.05, 0.05, 0.25, -0.05, 0.33, 0.18, 0.12, 0.28], "#a9a398");
         poly([-0.2, 0.15, -0.05, 0.12, -0.08, 0.3], "#c4beb3");
         break;
+      case "trap":                               // only the DM ever gets these
+        g.strokeStyle = "#e03131"; g.lineWidth = 0.05;
+        g.setLineDash([0.09, 0.06]); g.strokeRect(-0.42, -0.42, 0.84, 0.84); g.setLineDash([]);
+        g.fillStyle = "rgba(224, 49, 49, 0.15)"; g.fillRect(-0.42, -0.42, 0.84, 0.84);
+        for (const [x, y] of [[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]]) poly([x - 0.09, y + 0.08, x, y - 0.1, x + 0.09, y + 0.08], "#c9c4bb");
+        break;
       case "web":
         g.strokeStyle = "rgba(70, 70, 70, 0.75)"; g.lineWidth = 0.02;
         for (let k = 0; k <= 4; k++) { const a = k * Math.PI / 8; ln(-0.5, -0.5, -0.5 + Math.cos(a) * 0.95, -0.5 + Math.sin(a) * 0.95); }
@@ -1003,7 +1107,7 @@
     ctx.fillText(text, x, y + px(0.5));
   }
 
-  function paintRuler(p, c, px, n, who) {
+  function paintRuler(p, c, px, n, who, speed) {
     ctx.strokeStyle = c;
     ctx.lineWidth = px(3);
     ctx.setLineDash([px(8), px(5)]);
@@ -1022,7 +1126,8 @@
     ctx.arc(e.x, e.y, px(5), 0, Math.PI * 2);
     ctx.fillStyle = c;
     ctx.fill();
-    tag((who ? who + ": " : "") + distText(total), e.x, e.y - px(20), c, px, 13);
+    const over = speed && total * per() > speed;
+    tag((who ? who + ": " : "") + distText(total) + (speed ? ` / ${speed} ${unit()}` : ""), e.x, e.y - px(20), over ? "#ff6b6b" : c, px, 13);
   }
 
   const COND_COLOUR = { dead: "#111", unconscious: "#6b7280", prone: "#b45309", poisoned: "#2f9e44", concentrating: "#3e63dd",
@@ -1252,7 +1357,7 @@
       what = (PROP_INFO.find(x => x[0] === pr.k) || [0, pr.k])[1];
     } else {
       const t = tilesOf(sc)[c.y * sc.cols + c.x];
-      if (t === "D") { build.mode = "door"; what = "Door"; }
+      if (t === "D" || t === "S") { build.mode = "door"; build.secret = t === "S"; what = t === "S" ? "Secret door" : "Door"; }
       else if (t === "." || t === "?") { build.mode = "erase"; what = "Erase"; }
       else {
         build.tile = t;
@@ -1275,8 +1380,17 @@
     if (!inScene(sc, c.x, c.y)) return;
     if (build.mode === "door") {
       const T = tilesOf(sc), t = T[c.y * sc.cols + c.x];
-      if (t === "D") sendTiles([[c.x, c.y, doorFloor(sc, T, c)]]);
-      else if (!rub) sendTiles([[c.x, c.y, "D"]]);
+      if (rub) { if (t === "D" || t === "S") sendTiles([[c.x, c.y, doorFloor(sc, T, c)]]); return; }
+      if (t === "S" && !build.secret) { sendTiles([[c.x, c.y, "D"]]); note("Revealed: players can see that door now."); }
+      else if (t === "D" && build.secret) sendTiles([[c.x, c.y, "S"]]);
+      else if (t === "D" || t === "S") sendTiles([[c.x, c.y, doorFloor(sc, T, c)]]);
+      else sendTiles([[c.x, c.y, build.secret ? "S" : "D"]]);
+      return;
+    }
+    if (build.mode === "link") {
+      const pr = propAt(c);
+      if (pr) openLinkForm(pr);
+      else note("Click stairs (or any prop) to choose where it leads.");
       return;
     }
     if (build.mode === "prop") {
@@ -1469,8 +1583,8 @@
       const meets = (lr && (inRoom.has((y - 1) * cols + x) || inRoom.has((y + 1) * cols + x))) ||
         (ud && (inRoom.has(y * cols + x - 1) || inRoom.has(y * cols + x + 1)));
       let doorNear = false;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (get(x + dx, y + dy) === "D") doorNear = true;
-      if (meets && !doorNear && R() < 0.6) set(x, y, "D");
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ("DS".includes(get(x + dx, y + dy))) doorNear = true;
+      if (meets && !doorNear && R() < 0.6) set(x, y, R() < 0.12 ? "S" : "D");
     }
     // a pool or a pit in some big rooms
     for (const r of rooms) {
@@ -1501,6 +1615,27 @@
     }
     for (const i of corr) if (R() < 0.04) put(R() < 0.5 ? "rubble" : "web", i % cols, Math.floor(i / cols), ri(0, 3));
     return { tiles: T.join(""), props };
+  }
+
+  function openLinkForm(pr) {
+    const box = $("linkForm"), sc = scene();
+    const others = S.scenes.filter(x => x.id !== sc.id);
+    box.innerHTML = `<form class="win narrow" autocomplete="off">
+      <div class="row between"><h2 style="margin:0">Where does it lead?</h2><button type="button" class="x" data-close aria-label="Close">✕</button></div>
+      ${others.length ? `<label class="field">Goes to<select name="to"><option value="">Nowhere</option>${others.map(x => `<option value="${x.id}"${pr.to === x.id ? " selected" : ""}>${esc(x.name)}</option>`).join("")}</select></label>
+      <label class="check"><input type="checkbox" name="open"${pr.open ? " checked" : ""}> Players can walk onto it to go there by themselves</label>
+      <p class="muted small">Then players can split up across scenes. You click it with the select tool to take the whole party. Tokens arrive next to whatever leads back.</p>`
+      : `<p class="muted">Make another scene first (Scenes tab), then come back and link it.</p>`}
+      <div class="row"><button class="btn primary" type="submit">Save</button></div>
+    </form>`;
+    box.hidden = false;
+    const form = box.querySelector("form");
+    form.addEventListener("click", e => { if (e.target.closest("[data-close]")) closeModal("linkForm"); });
+    form.addEventListener("submit", e => {
+      e.preventDefault();
+      if (form.elements.to) action("prop_link", { sc: sc.id, id: pr.id, to: form.elements.to.value, open: form.elements.open.checked });
+      closeModal("linkForm");
+    });
   }
 
   async function importMap(sc) {
@@ -1643,6 +1778,14 @@
       }
       return;
     }
+    const link = (scene().props || []).find(pr => pr.x === Math.floor(p.x) && pr.y === Math.floor(p.y) && (isDm() ? pr.to : pr.go));
+    if (link && !e.shiftKey) {
+      if (isDm()) {
+        const to = S.scenes.find(x => x.id === link.to);
+        if (to && confirm(`Take the party to "${to.name}"? Everyone's tokens on this map go with them.`)) action("link_go", { sc: viewSc, id: link.id });
+      } else note(`Drag your token onto it to go to ${link.go}.`);
+      return;
+    }
     if (e.shiftKey) { act = { kind: "box", a: p, b: p }; return; }
     if (picked.size) selectToken(null);
     act = { kind: "pan", sx, sy, cx: cam.x, cy: cam.y, click: true };
@@ -1772,6 +1915,8 @@
       if (!$("sheet").hidden) return closeModal("sheet");
       if (!$("tokenForm").hidden) return closeModal("tokenForm");
       if (!$("handout").hidden) return closeModal("handout");
+      if (!$("statBlock").hidden) return closeModal("statBlock");
+      if (!$("linkForm").hidden) return closeModal("linkForm");
       if (act) return cancelAct();
       if (wallPts) { wallPts = null; return redraw(); }
       selectToken(null);
@@ -1916,7 +2061,7 @@
     rb.disabled = !redoStack.length;
     ur.append(ub, rb);
     box.append(ur);
-    box.append(seg([["room", "Room"], ["brush", "Brush"], ["erase", "Erase"], ["door", "Door"], ["prop", "Props"], ["label", "Label"]],
+    box.append(seg([["room", "Room"], ["brush", "Brush"], ["erase", "Erase"], ["door", "Door"], ["prop", "Props"], ["link", "Stairs"], ["label", "Label"]],
       build.mode, v => { build.mode = v; }));
     if (build.mode === "room" || build.mode === "brush") {
       const r = row();
@@ -1956,6 +2101,7 @@
       r.append(btn("Turn (T)", "btn small-btn", () => { build.rot = (build.rot + 1) % 4; redraw(); }));
       box.append(r);
     }
+    if (build.mode === "door") box.append(seg([[false, "Door"], [true, "Secret door"]], build.secret, v => { build.secret = v; }));
     if (build.mode === "label") {
       const l = document.createElement("label");
       l.className = "check small";
@@ -1967,7 +2113,9 @@
       room: "Drag out a room. Walls go round it by themselves, and rooms that touch join up. Right-drag to dig it back out.",
       brush: "Paint corridors, pools or a river. Grass, dirt and water don't get walls, so use them outdoors. Right-drag rubs out.",
       erase: "Drag to rub squares back out to solid rock.",
-      door: "Click a square in a gap between walls to put a door there, and click it again to take it away.",
+      door: build.secret ? "Players see plain wall where a secret door is, until you click it with Door picked to reveal it."
+        : "Click a square in a gap between walls to put a door there, and click it again to take it away. Click a secret door to reveal it.",
+      link: "Click stairs (or any prop) to choose which scene it leads to. Click it with the select tool to take the party there.",
       prop: "Click a square to put it there. Click a prop to take it away. T turns it.",
       label: "Click to add a label. Click a label to change it, or right-click to take it away.",
     }[build.mode] + " Alt+middle-click picks what's on a square."));
@@ -2035,6 +2183,7 @@
     let h = `<div class="row between card-head">${can ? `<input class="name" data-k="name" value="${esc(t.name)}" maxlength="40" aria-label="Token name">` : `<h3>${esc(t.name)}</h3>`}
       ${t.ac != null ? `<span class="badge" title="Armour class">AC ${t.ac}</span>` : ""}<button type="button" class="x" data-close aria-label="Close">✕</button></div>`;
     if (ch && EXTRAS) h += `<button type="button" class="link-btn" data-sheet>Open ${esc(ch.name)}'s sheet</button>`;
+    if (dm) h += `<button type="button" class="btn small-btn more-btn" data-more>${t.stats ? "More info: stats, skills, attacks" : "More info"}</button>`;
     if (hpKnown) {
       const f = t.mhp ? Math.max(0, Math.min(1, t.hp / t.mhp)) : 0;
       h += `<div class="hpbar"><i style="width:${f * 100}%"></i><b>${t.hp ?? "?"} / ${t.mhp ?? "?"} HP</b></div>`;
@@ -2050,6 +2199,9 @@
           <div class="row"><label class="small muted">Size <select data-k="size">${SIZES.map(([v, l]) => `<option value="${v}"${v === t.size ? " selected" : ""}>${l}</option>`).join("")}</select></label>
             ${ch ? "" : `<label class="small muted">Init <input type="number" class="num" data-k="init" value="${t.init ?? ""}"></label>`}
             <label class="small muted" title="How far it sees, in squares, when the fog clears as the party explores">Sight <input type="number" class="num" data-k="sight" min="0" max="60" value="${t.sight ?? (t.owner || t.char ? 12 : 0)}"></label></div>
+          <div class="row"><label class="small muted" title="How far it can move in a turn">Speed <input type="number" class="num" data-k="speed" min="0" value="${t.speed ?? ""}"></label>
+            <label class="small muted" title="Flying (more than 0) or burrowing (less than 0), in ${esc(unit())}">Height <input type="number" class="num" data-k="elev" value="${t.elev ?? ""}"></label>
+            <label class="small muted" title="A ring round it, in ${esc(unit())}: its reach, an aura, the light of a torch">Aura <input type="number" class="num" data-k="aura" min="0" value="${t.aura ?? ""}"></label></div>
           <div class="row">${TOKEN_COLOURS.map(c => `<button type="button" class="sw${c === t.c ? " on" : ""}" style="--c:${c}" data-colour="${c}" aria-label="Colour"></button>`).join("")}</div>
           <button type="button" class="btn small-btn" data-pic>${t.img ? "Change picture" : "Add a picture"}</button>
         </details>`;
@@ -2120,6 +2272,7 @@
       if (b.dataset.ghide != null) { for (const id of ids) action("tok_edit", { sc: viewSc, id, set: { hidden: !!b.dataset.ghide } }); return; }
       if (!t) return;
       if (b.dataset.sheet != null) return openSheet(t.char);
+      if (b.dataset.more != null) return openStats(t.id);
       if (b.dataset.cond) {
         const conds = t.conds.includes(b.dataset.cond) ? t.conds.filter(c => c !== b.dataset.cond) : [...t.conds, b.dataset.cond];
         editToken(t, { conds });
@@ -2138,13 +2291,148 @@
       const t = picked.size === 1 && tokenById(sel), k = e.target.dataset.k;
       if (!t || !k) return;
       let v = e.target.type === "checkbox" ? e.target.checked : e.target.value;
-      if (["hp", "mhp", "ac", "init", "sight"].includes(k)) v = v === "" ? null : Number(v);
+      if (["hp", "mhp", "ac", "init", "sight", "speed", "elev", "aura"].includes(k)) v = v === "" ? null : Number(v);
       if (k === "size") v = Number(v);
       editToken(t, { [k]: v });
       if (k !== "name" && k !== "note") renderCard(true);
     });
     card.addEventListener("keydown", e => {
       if (e.key === "Enter" && e.target.id === "hpDelta") { e.preventDefault(); card.querySelector('[data-hp="-1"]').click(); }
+    });
+  }
+
+  // ---- Stat blocks (DM only): click anything to roll it -----------------------------------------
+  let statTok = null, statEdit = false, statMode = "", statRolls = [];
+  const ABBR = ["STR", "DEX", "CON", "INT", "WIS", "CHA"], ABNAME = ["Strength", "Dexterity", "Constitution", "Intelligence", "Wisdom", "Charisma"];
+  function rollExpr(expr) {
+    let total = 0, parts = [];
+    for (const m of expr.replace(/\s+/g, "").matchAll(/([+-]?)(?:(\d*)d(\d+)|(\d+))/g)) {
+      const sgn = m[1] === "-" ? -1 : 1;
+      if (m[3]) {
+        const n = Math.min(100, Number(m[2] || 1)), d = Number(m[3]), rolls = [];
+        for (let i = 0; i < n; i++) rolls.push(d ? 1 + Math.floor(Math.random() * d) : 0);
+        total += sgn * rolls.reduce((a, b) => a + b, 0);
+        parts.push(`${sgn < 0 ? "−" : parts.length ? "+" : ""}[${rolls.join(", ")}]`);
+      } else if (m[4]) { total += sgn * Number(m[4]); parts.push(`${sgn < 0 ? "−" : "+"}${m[4]}`); }
+    }
+    return { total, detail: parts.join(" ") };
+  }
+  function d20(label, bonus) {
+    const a = 1 + Math.floor(Math.random() * 20), b = 1 + Math.floor(Math.random() * 20);
+    const die = statMode === "adv" ? Math.max(a, b) : statMode === "dis" ? Math.min(a, b) : a;
+    const both = statMode ? ` (${a}, ${b} ${statMode === "adv" ? "advantage" : "disadvantage"})` : "";
+    statRolls.unshift({ label, total: die + bonus, detail: `${die}${both} ${sign(bonus)}`, crit: die === 20 ? "crit" : die === 1 ? "fail" : "" });
+    statRolls = statRolls.slice(0, 6);
+    renderStats();
+  }
+  function dmgRoll(label, expr) {
+    const r = rollExpr(expr);
+    statRolls.unshift({ label, total: r.total, detail: `${expr}: ${r.detail}`, crit: "" });
+    statRolls = statRolls.slice(0, 6);
+    renderStats();
+  }
+  function openStats(id) {
+    statTok = id;
+    statEdit = !(tokenById(id) || {}).stats;
+    statRolls = [];
+    $("statBlock").hidden = false;
+    renderStats();
+  }
+  function renderStats() {
+    const box = $("statBlock");
+    if (box.hidden || !statTok) return;
+    const t = tokenById(statTok);
+    if (!t || !isDm()) return closeModal("statBlock");
+    const st = t.stats;
+    const head = `<div class="row between"><h2 style="margin:0">${esc(t.name)}</h2><button type="button" class="x" data-close aria-label="Close">✕</button></div>`;
+    if (statEdit || !st) {
+      const s0 = st || { speed: t.speed ? t.speed + " " + unit() : "30 ft", abil: [10, 10, 10, 10, 10, 10], skills: "", saves: "", senses: "", langs: "", cr: "", traits: "", actions: "" };
+      box.innerHTML = `<form class="win stat" autocomplete="off">${head}
+        <label class="field">Start from a ready-made monster<select name="ready"><option value="">Pick one to fill it in…</option>${MONSTERS.map(m => `<option value="${esc(m[0])}">${esc(m[0])}</option>`).join("")}</select></label>
+        <div class="stat-abil">${ABBR.map((a, i) => `<label>${a}<input type="number" name="a${i}" min="1" max="30" value="${s0.abil[i]}"></label>`).join("")}</div>
+        <div class="form-grid">
+          <label class="field">Speed<input name="speed" value="${esc(s0.speed)}" placeholder="30 ft, fly 60 ft"></label>
+          <label class="field">Challenge<input name="cr" value="${esc(s0.cr)}" placeholder="1/2"></label>
+          <label class="field full">Skills<input name="skills" value="${esc(s0.skills)}" placeholder="Intimidation +2, Stealth +4"></label>
+          <label class="field full">Saving throws<input name="saves" value="${esc(s0.saves)}" placeholder="Dex +5, Wis +2 (the rest use the ability)"></label>
+          <label class="field full">Senses<input name="senses" value="${esc(s0.senses)}" placeholder="darkvision 60 ft, passive Perception 10"></label>
+          <label class="field full">Languages<input name="langs" value="${esc(s0.langs)}"></label>
+          <label class="field full">Traits (one a line)<textarea name="traits" rows="3" placeholder="Pack Tactics: advantage when an ally is next to the target.">${esc(s0.traits)}</textarea></label>
+          <label class="field full">Actions (one a line: name, to hit, damage)<textarea name="actions" rows="3" placeholder="Greataxe +5 1d12+3 slashing">${esc(s0.actions)}</textarea></label>
+        </div>
+        <div class="row"><button class="btn primary" type="submit">Save</button>${st ? `<button type="button" class="btn" data-cancel>Cancel</button>` : ""}</div>
+      </form>`;
+      return;
+    }
+    const mods = st.abil.map(mod);
+    const listed = (txt, what) => (txt || "").split(",").map(x => x.trim()).filter(Boolean).map(x => {
+      const m = x.match(/^(.+?)\s*([+-]\d+)$/);
+      return m ? `<button type="button" class="chip roll" data-d20="${m[2]}" data-label="${esc(m[1])} ${what}">${esc(m[1])} ${esc(m[2])}</button>` : `<span class="chip">${esc(x)}</span>`;
+    }).join("");
+    const saveTxt = ABBR.map((a, i) => {
+      const m = (st.saves || "").match(new RegExp(a.slice(0, 1) + a.slice(1).toLowerCase() + "\\s*([+-]\\d+)"));
+      const b = m ? Number(m[1]) : mods[i];
+      return `<button type="button" class="chip roll${m ? " on" : ""}" data-d20="${b}" data-label="${ABNAME[i]} save">${a} ${sign(b)}</button>`;
+    }).join("");
+    const actions = (st.actions || "").split("\n").filter(Boolean).map(l => {
+      const m = l.match(/^(.*?)\s+([+-]\d+)\s+(\d+d\d+(?:\s*[+-]\s*\d+)?)\s*(.*)$/);
+      if (!m) return `<li>${esc(l)}</li>`;
+      return `<li><b>${esc(m[1])}</b> <button type="button" class="chip roll" data-d20="${m[2]}" data-label="${esc(m[1])} attack">${esc(m[2])} to hit</button>
+        <button type="button" class="chip roll" data-dmg="${esc(m[3].replace(/\s+/g, ""))}" data-label="${esc(m[1])} damage">${esc(m[3])}</button> <span class="muted">${esc(m[4])}</span></li>`;
+    }).join("");
+    const traits = (st.traits || "").split("\n").filter(Boolean).map(l => {
+      const i = l.indexOf(":");
+      return `<p>${i > 0 && i < 40 ? `<b>${esc(l.slice(0, i))}.</b>${esc(l.slice(i + 1))}` : esc(l)}</p>`;
+    }).join("");
+    box.innerHTML = `<div class="win stat">${head}
+      <p class="muted small">${t.ac != null ? `AC ${t.ac} · ` : ""}${t.mhp != null ? `HP ${t.hp ?? "?"} / ${t.mhp} · ` : ""}Speed ${esc(st.speed || "?")}${st.cr ? ` · Challenge ${esc(st.cr)}` : ""}</p>
+      <div class="row">${seg([["", "Normal"], ["adv", "Advantage"], ["dis", "Disadvantage"]], statMode, v => { statMode = v; renderStats(); }).outerHTML}</div>
+      ${statRolls.length ? `<ul class="stat-rolls">${statRolls.map((r, i) => `<li class="${i ? "" : "new "}${r.crit}"><b>${r.total}</b> ${esc(r.label)} <span class="muted small">${esc(r.detail)}</span></li>`).join("")}</ul>` : `<p class="muted small">Click any number to roll it. Only you see these rolls.</p>`}
+      <div class="stat-abil">${ABBR.map((a, i) => `<button type="button" class="roll" data-d20="${mods[i]}" data-label="${ABNAME[i]} check">${a}<b>${st.abil[i]}</b><span>${sign(mods[i])}</span></button>`).join("")}</div>
+      <h4>Saving throws</h4><div class="conds">${saveTxt}</div>
+      ${st.skills ? `<h4>Skills</h4><div class="conds">${listed(st.skills, "check")}</div>` : ""}
+      ${st.senses ? `<p class="small"><b>Senses</b> ${esc(st.senses)}</p>` : ""}
+      ${st.langs ? `<p class="small"><b>Languages</b> ${esc(st.langs)}</p>` : ""}
+      ${traits ? `<div class="stat-traits small">${traits}</div>` : ""}
+      ${actions ? `<h4>Actions</h4><ul class="stat-actions small">${actions}</ul>` : ""}
+      <div class="row"><button type="button" class="btn small-btn" data-edit>Edit</button><button type="button" class="btn small-btn" data-roll-init>Roll initiative</button></div>
+    </div>`;
+    // the seg's buttons were copied as HTML, so wire them up again
+    box.querySelectorAll(".seg button").forEach((b, i) => b.addEventListener("click", () => { statMode = ["", "adv", "dis"][i]; renderStats(); }));
+  }
+  function initStats() {
+    const box = $("statBlock");
+    box.addEventListener("click", e => {
+      if (e.target === box) return closeModal("statBlock");
+      const b = e.target.closest("button");
+      if (!b) return;
+      const t = tokenById(statTok);
+      if (b.dataset.close != null) return closeModal("statBlock");
+      if (b.dataset.edit != null) { statEdit = true; return renderStats(); }
+      if (b.dataset.cancel != null) { statEdit = false; return renderStats(); }
+      if (b.dataset.rollInit != null && t) return d20("Initiative", t.init ?? mod(t.stats.abil[1]));
+      if (b.dataset.d20 != null) return d20(b.dataset.label, Number(b.dataset.d20));
+      if (b.dataset.dmg) return dmgRoll(b.dataset.label, b.dataset.dmg);
+    });
+    box.addEventListener("change", e => {
+      if (e.target.name !== "ready" || !e.target.value) return;
+      const st = statsOf(e.target.value), F = e.target.form.elements;
+      if (!st) return;
+      st.abil.forEach((v, i) => { F["a" + i].value = v; });
+      for (const k of ["speed", "cr", "skills", "saves", "senses", "langs", "traits", "actions"]) F[k].value = st[k];
+    });
+    box.addEventListener("submit", e => {
+      e.preventDefault();
+      const t = tokenById(statTok), F = e.target.elements;
+      if (!t) return;
+      const stats = { abil: ABBR.map((_, i) => Number(F["a" + i].value) || 10) };
+      for (const k of ["speed", "cr", "skills", "saves", "senses", "langs", "traits", "actions"]) stats[k] = F[k].value.trim();
+      const set = { stats };
+      if (t.speed == null && parseInt(stats.speed, 10)) set.speed = parseInt(stats.speed, 10);
+      editToken(t, set);
+      t.stats = stats;
+      statEdit = false;
+      renderStats();
     });
   }
 
@@ -2225,6 +2513,12 @@
       };
       if (ch) tok.char = ch.id;
       if (dm && F.hidden.checked) tok.hidden = true;
+      const ready = F.monster && MONSTERS[F.monster.value];
+      if (ready && F.name.value.trim().startsWith(ready[0])) {
+        tok.stats = statsOf(ready[0]);
+        if (tok.stats) tok.speed = parseInt(tok.stats.speed, 10) || null;
+      }
+      if (copy) for (const k of ["stats", "speed", "aura", "elev", "ac2", "sight"]) if (copy[k] != null && tok[k] == null) tok[k] = copy[k];
       if (dm && F.owner && F.owner.value) {
         tok.owner = F.owner.value;
         if (!F.name.value.trim() && !ch) tok.name = nameOf(F.owner.value);
@@ -2240,6 +2534,7 @@
     m.hidden = true;
     m.innerHTML = "";
     if (id === "sheet") sheetId = null;
+    if (id === "statBlock") statTok = null;
   }
 
   // ---- Chat and dice -------------------------------------------------------------------------
@@ -2685,7 +2980,11 @@
     if (!isDm()) return;
     const ul = $("sceneList");
     ul.innerHTML = S.scenes.map((sc, i) => `<li data-id="${sc.id}" class="${sc.id === viewSc ? "viewing" : ""}">
-      <span class="nm">${esc(sc.name)}</span>${sc.id === S.active ? `<span class="badge dm">Players here</span>` : ""}
+      <span class="nm">${esc(sc.name)}</span>${(() => {
+        const here = Object.entries(S.at || {}).filter(([, id]) => id === sc.id).map(([q]) => nameOf(q));
+        if (sc.id === S.active && here.length === Object.keys(S.at || {}).length) return `<span class="badge dm">Players here</span>`;
+        return here.length ? `<span class="badge dm" title="${esc(here.join(", "))}">${esc(here.length > 2 ? here.length + " players" : here.join(", "))}</span>` : "";
+      })()}
       <button type="button" class="mini" data-up${i === 0 ? " disabled" : ""} aria-label="Move up">↑</button>
       <button type="button" class="mini" data-down${i === S.scenes.length - 1 ? " disabled" : ""} aria-label="Move down">↓</button></li>`).join("");
     refreshSceneEdit();
@@ -2826,6 +3125,7 @@
   // ---- Start ---------------------------------------------------------------------------------
   function init() {
     document.body.classList.toggle("extras", EXTRAS);
+    initStats();
     document.querySelectorAll(".tt-tools [data-tool]").forEach(b => b.addEventListener("click", () => setTool(b.dataset.tool)));
     $("addTokenBtn").addEventListener("click", () => openTokenForm());
     $("tokenForm").addEventListener("click", e => { if (e.target === $("tokenForm")) closeModal("tokenForm"); });
