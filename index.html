@@ -26,12 +26,14 @@
   .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
   .tags span { font-size: .75rem; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; }
   .game.soon { border-style: dashed; background: transparent; }
+  .games.checking { visibility: hidden; }
   .icon { width: 110px; height: 66px; border-radius: 4px; }
   .mini { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; width: 110px; }
   .mini i { aspect-ratio: 1.5; border-radius: 2px; background: var(--card2); }
   .mini i.r { background: var(--red); } .mini i.p { background: var(--purple); } .mini i.b { background: #000; outline: 1px solid var(--red); }
   @media (prefers-reduced-motion: reduce) { a.game { transition: none; } a.game:hover { transform: none; } }
 </style>
+<noscript><style>.games.checking { visibility: visible; }</style></noscript>
 </head>
 <body>
 <header class="sitebar">
@@ -49,7 +51,7 @@
     <p>Party games for the clan. Make a room, drop the invite link in Discord, and everyone plays from their own phone or PC. When the game server is off, games still work on one shared screen.</p>
   </section>
 
-  <section class="games" aria-label="Games">
+  <section class="games checking" aria-label="Games">
     <!-- Add each new game as a folder next to agents/ and a card here. -->
     <a class="game" href="acedle/">
       <svg class="icon" viewBox="0 0 110 66" aria-hidden="true">
@@ -234,6 +236,24 @@
     </div>
   </section>
 </main>
+<script>
+// Games hidden from Jerry's dashboard (jerry.aceclan.lol, Games tab) are listed in hidden.json by folder name.
+(function () {
+  var games = document.querySelector(".games");
+  var show = function () { games.classList.remove("checking"); };
+  var wait = setTimeout(show, 1500);
+  fetch("hidden.json?t=" + Date.now(), { cache: "no-store" })
+    .then(function (r) { return r.ok ? r.json() : {}; })
+    .then(function (d) {
+      var hidden = (d && d.hidden) || [];
+      games.querySelectorAll("a.game").forEach(function (a) {
+        if (hidden.indexOf(a.getAttribute("href").replace(/\/+$/, "")) >= 0) a.remove();
+      });
+    })
+    .catch(function () {})
+    .then(function () { clearTimeout(wait); show(); });
+})();
+</script>
 
 <footer class="site-foot wrap">ACE Clan · <a href="https://aceclan.lol">aceclan.lol</a></footer>
 </body>
