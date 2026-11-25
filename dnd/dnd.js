@@ -2144,8 +2144,10 @@
     rb.disabled = !redoStack.length;
     ur.append(ub, rb);
     box.append(ur);
-    box.append(seg([["room", "Room"], ["brush", "Brush"], ["erase", "Erase"], ["door", "Door"], ["prop", "Props"], ["link", "Stairs"], ["label", "Label"]],
-      build.mode, v => { build.mode = v; }));
+    const modes = seg([["room", "Room"], ["brush", "Brush"], ["erase", "Erase"], ["door", "Door"], ["prop", "Props"], ["link", "Stairs"], ["label", "Label"]],
+      build.mode, v => { build.mode = v; });
+    modes.classList.add("tt-modes");                    // two rows, so none get cut off
+    box.append(modes);
     if (build.mode === "room" || build.mode === "brush") {
       const r = row();
       r.classList.add("tt-swatches");

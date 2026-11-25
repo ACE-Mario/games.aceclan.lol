@@ -69,6 +69,9 @@ body.is-dm .player-only { display: none !important; }
 .tt-opts .row { gap: 5px; }
 .tt-opts.build { max-width: 330px; max-height: calc(100% - 90px); overflow-y: auto; }
 .tt-opts.build > .seg button { padding: 6px 8px; }
+.seg.tt-modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); }
+.seg.tt-modes button + button { border-left: 0; }
+.seg.tt-modes button:last-child { grid-column: span 2; }
 .sw { width: 24px; height: 24px; border-radius: 6px; border: 2px solid var(--line); background: var(--c); cursor: pointer; padding: 0; }
 .sw.on { outline: 3px solid var(--accent); outline-offset: 1px; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
