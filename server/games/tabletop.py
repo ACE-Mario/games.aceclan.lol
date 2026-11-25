@@ -15,6 +15,9 @@ What a campaign holds:
     dice        rolled here on the server, so nobody can fake one: "2d6+3", "1d20 adv", "4d6kh3".
                 A roll or a message can go to the DMs only.
     initiative  the turn order, with rounds.
+    map maker   the DM can also paint the map itself on the grid: floors, walls, water and so on (one letter a
+                square in "tiles", see TILES), props (tables, barrels, trees...) and labels (some for DMs only).
+                Painted walls and doors become walls for sight by themselves (_auto_walls).
     walls       lines the DM draws along the map's walls, and doors (open or shut). With "Reveal as the party
                 explores" on, the fog clears by itself around the players' tokens as they move, as far as each
                 token can see (its sight, in squares) and not through walls or shut doors.
@@ -51,7 +54,20 @@ MAX_LINE_PTS = 4000               # numbers in one drawn line
 MAX_CHARS = 60                    # character sheets in one campaign
 MAX_NOTES = 120
 MAX_GRID = 120                    # squares across or down
-MAX_WALLS = 1000                  # wall and door pieces on one scene
+MAX_WALLS = 1000                  # wall and door pieces the DM draws on one scene
+MAX_AUTO_WALLS = 6000             # pieces made from painted walls (long runs are joined into one)
+MAX_PROPS = 1500
+MAX_LABELS = 200
+# Map maker squares: . nothing (solid rock on a drawn map; the picture or blank grid shows through), f stone floor,
+# o wooden floor, g grass, d dirt, s water, l lava, p pit, w solid wall, D door (it sits across a gap in the walls).
+# Indoor floors (and doors) get walls round them by themselves wherever they meet nothing or solid wall, so the DM
+# just draws rooms and corridors. Outdoor squares only get walls where they meet solid wall.
+TILES = ".fogdslpwD"
+OPEN_TILES = "fogdslpD"
+INDOOR_TILES = "foD"
+SOLID_TILES = ".w"
+PROPS = ("table", "chair", "barrel", "crate", "chest", "bed", "shelf", "pillar", "statue", "stairs", "torch",
+         "campfire", "altar", "well", "tree", "bush", "rock", "rubble", "rug", "web")
 PC_SIGHT = 12                     # how far a player's token sees when it's made, in squares (60 ft)
 MAX_IMAGE_CHARS = 900_000         # one picture as a data: URL (socket.io takes about 1 MB a message)
 MAX_ASSET_BYTES = 120_000_000     # all of one campaign's pictures
@@ -294,7 +310,7 @@ class Tabletop:
     def _scene(self, name, cols, rows):
         return {"id": new_id(), "name": name, "img": None, "cols": cols, "rows": rows, "ox": 0.0, "oy": 0.0,
                 "grid": True, "gc": "#000000", "fog": False, "auto": False, "seen": "0" * (cols * rows),
-                "tokens": {}, "lines": {}, "walls": {}}
+                "tokens": {}, "lines": {}, "walls": {}, "tiles": "." * (cols * rows), "props": {}, "labels": {}}
 
     def default_seat(self, room):
         return {}
@@ -377,6 +393,9 @@ class Tabletop:
         for sc in s["scenes"].values():
             sc.setdefault("walls", {})
             sc.setdefault("auto", False)
+            sc.setdefault("tiles", "." * (sc["cols"] * sc["rows"]))
+            sc.setdefault("props", {})
+            sc.setdefault("labels", {})
         for ch in s["chars"].values():
             ch.setdefault("slots", [[0, 0] for _ in range(9)])
             ch.setdefault("hd", "")
@@ -438,12 +457,69 @@ class Tabletop:
 
     # ---- Scenes and fog ----------------------------------------------------------------------
     def _resize(self, sc, cols, rows):
-        old = sc["seen"]
-        seen = ["0"] * (cols * rows)
+        old, oldt = sc["seen"], sc.get("tiles") or "." * (sc["cols"] * sc["rows"])
+        seen, tiles = ["0"] * (cols * rows), ["."] * (cols * rows)
         for y in range(min(rows, sc["rows"])):
             for x in range(min(cols, sc["cols"])):
                 seen[y * cols + x] = old[y * sc["cols"] + x]
-        sc["cols"], sc["rows"], sc["seen"] = cols, rows, "".join(seen)
+                tiles[y * cols + x] = oldt[y * sc["cols"] + x]
+        sc["cols"], sc["rows"], sc["seen"], sc["tiles"] = cols, rows, "".join(seen), "".join(tiles)
+        sc["props"] = {k: v for k, v in sc.get("props", {}).items() if v["x"] < cols and v["y"] < rows}
+        self._auto_walls(sc)
+
+    def _auto_walls(self, sc):
+        """Turn painted walls and doors into walls for sight. Every edge between a wall square and a square you can
+        stand on is a wall; edges in a straight line are joined. A door goes across its square, along the wall it's
+        in, and keeps whether it was open or locked."""
+        doors = {w.get("tile"): w for w in sc["walls"].values() if w.get("auto") and w.get("door")}
+        sc["walls"] = {k: w for k, w in sc["walls"].items() if not w.get("auto")}
+        T, cols, rows = sc.get("tiles", ""), sc["cols"], sc["rows"]
+        if not T.strip("."):
+            return
+
+        def tile(x, y):
+            return T[y * cols + x] if 0 <= x < cols and 0 <= y < rows else "."
+
+        def edge(a, b):
+            return ((a in INDOOR_TILES and b in SOLID_TILES) or (b in INDOOR_TILES and a in SOLID_TILES)
+                    or (a == "w" and b in OPEN_TILES) or (b == "w" and a in OPEN_TILES))
+
+        made = 0
+
+        def add(p, **extra):
+            nonlocal made
+            if made >= MAX_AUTO_WALLS:
+                return
+            made += 1
+            wid = new_id()
+            sc["walls"][wid] = {"id": wid, "p": p, "door": False, "open": False, "auto": True, **extra}
+
+        for y in range(rows + 1):                       # edges along the top of row y
+            start = None
+            for x in range(cols + 1):
+                on = x < cols and edge(tile(x, y - 1), tile(x, y))
+                if on and start is None:
+                    start = x
+                elif not on and start is not None:
+                    add([start, y, x, y])
+                    start = None
+        for x in range(cols + 1):                       # edges along the left of column x
+            start = None
+            for y in range(rows + 1):
+                on = y < rows and edge(tile(x - 1, y), tile(x, y))
+                if on and start is None:
+                    start = y
+                elif not on and start is not None:
+                    add([x, start, x, y])
+                    start = None
+        for i, t in enumerate(T):
+            if t != "D":
+                continue
+            x, y = i % cols, i // cols
+            across = tile(x - 1, y) in SOLID_TILES or tile(x + 1, y) in SOLID_TILES
+            p = [x, y + 0.5, x + 1, y + 0.5] if across else [x + 0.5, y, x + 0.5, y + 1]
+            old = doors.get(f"{x},{y}") or {}
+            add(p, door=True, open=bool(old.get("open")), locked=bool(old.get("locked")), tile=f"{x},{y}")
 
     def _covered(self, sc, t):
         """Is this token fully under fog (so players can't see it)?"""
@@ -497,6 +573,15 @@ class Tabletop:
                     pts = ((x + 0.5, y + 0.5),) + tuple((x + a, y + b) for a, b in INSIDE)
                     if any(not any(crosses(cx, cy, px, py, w) for w in near) for px, py in pts):
                         seen[i] = "1"
+        T = sc.get("tiles", "")
+        if T.strip("."):                       # on a drawn map, the rock just outside what they see shows too
+            for i, t in enumerate(T):
+                if seen[i] == "1" and t in INDOOR_TILES:
+                    x, y = i % cols, i // cols
+                    for yy in range(max(0, y - 1), min(rows, y + 2)):
+                        for xx in range(max(0, x - 1), min(cols, x + 2)):
+                            if T[yy * cols + xx] in SOLID_TILES:
+                                seen[yy * cols + xx] = "1"
         sc["seen"] = "".join(seen)
 
     def _door_seen(self, sc, w):
@@ -804,6 +889,8 @@ class Tabletop:
                 copy["tokens"] = {(n := new_id()): {**t, "id": n} for t in copy["tokens"].values()}
                 copy["lines"] = {(n := new_id()): {**ln, "id": n} for ln in copy["lines"].values()}
                 copy["walls"] = {(n := new_id()): {**w, "id": n} for w in copy.get("walls", {}).values()}
+                copy["props"] = {(n := new_id()): {**pr, "id": n} for pr in copy.get("props", {}).values()}
+                copy["labels"] = {(n := new_id()): {**lb, "id": n} for lb in copy.get("labels", {}).values()}
                 s["scenes"][copy["id"]] = copy
                 s["order"].insert(s["order"].index(sc["id"]) + 1, copy["id"])
                 return None
@@ -938,6 +1025,91 @@ class Tabletop:
             self._tidy_assets(s)
             return None
 
+        # -- Map maker --
+        if action in ("tiles", "map_set", "prop_add", "prop_del", "label_add", "label_edit", "label_del"):
+            if not dm:
+                return need_dm
+            sc = s["scenes"].get(str(data.get("sc", "")))
+            if not sc:
+                return "That scene isn't there any more."
+            cols, rows = sc["cols"], sc["rows"]
+            if action == "tiles":                     # [[x, y, tile], ...]
+                edits = data.get("edits")
+                if not isinstance(edits, list) or len(edits) > cols * rows:
+                    return "Couldn't read that."
+                tiles = list(sc["tiles"])
+                for e in edits:
+                    if not isinstance(e, list) or len(e) != 3 or len(str(e[2])) != 1 or str(e[2]) not in TILES:
+                        continue
+                    x, y = num(e[0], -1, MAX_GRID), num(e[1], -1, MAX_GRID)
+                    if x is not None and y is not None and 0 <= x < cols and 0 <= y < rows:
+                        tiles[y * cols + x] = str(e[2])
+                sc["tiles"] = "".join(tiles)
+                self._auto_walls(sc)
+                self._reveal(sc)
+                return None
+            if action == "map_set":                   # a whole new map (a random one, or Clear)
+                if data.get("cols") is not None and data.get("rows") is not None:
+                    nc, nr = num(data.get("cols"), 1, MAX_GRID), num(data.get("rows"), 1, MAX_GRID)
+                    if nc is None or nr is None:
+                        return "Couldn't read that map."
+                    if (nc, nr) != (cols, rows):
+                        self._resize(sc, nc, nr)
+                        cols, rows = nc, nr
+                tiles = str(data.get("tiles", ""))
+                if len(tiles) != cols * rows or any(c not in TILES for c in set(tiles)):
+                    return "Couldn't read that map."
+                sc["tiles"] = tiles
+                sc["props"] = {}
+                for pr in (data.get("props") or [])[:MAX_PROPS]:
+                    if isinstance(pr, dict) and pr.get("k") in PROPS:
+                        x, y = num(pr.get("x"), 0, cols - 1), num(pr.get("y"), 0, rows - 1)
+                        if x is not None and y is not None:
+                            pid_ = new_id()
+                            sc["props"][pid_] = {"id": pid_, "k": pr["k"], "x": x, "y": y,
+                                                 "r": num(pr.get("r"), 0, 3) or 0}
+                if data.get("labels") is not None:
+                    sc["labels"] = {}
+                if sc["fog"]:                           # a new map starts with the fog back
+                    sc["seen"] = "0" * (cols * rows)
+                self._auto_walls(sc)
+                self._reveal(sc)
+                return None
+            if action == "prop_add":
+                k = data.get("k")
+                x, y = num(data.get("x"), -1, MAX_GRID), num(data.get("y"), -1, MAX_GRID)
+                if k not in PROPS or x is None or y is None or not (0 <= x < cols and 0 <= y < rows):
+                    return "Couldn't put that there."
+                if len(sc["props"]) >= MAX_PROPS:
+                    return "This map has as many props as it can hold."
+                pid_ = new_id()
+                sc["props"][pid_] = {"id": pid_, "k": k, "x": x, "y": y, "r": num(data.get("r"), 0, 3) or 0}
+                return None
+            if action == "prop_del":
+                sc["props"].pop(str(data.get("id", "")), None)
+                return None
+            if action == "label_add":
+                txt = line(data.get("text"), 40)
+                x, y = num(data.get("x"), 0, MAX_GRID, 2), num(data.get("y"), 0, MAX_GRID, 2)
+                if not txt or x is None or y is None:
+                    return "Type the label first."
+                if len(sc["labels"]) >= MAX_LABELS:
+                    return "This map has as many labels as it can hold."
+                lid = new_id()
+                sc["labels"][lid] = {"id": lid, "text": txt, "x": x, "y": y, "dm": bool(data.get("dm"))}
+                return None
+            lb = sc["labels"].get(str(data.get("id", "")))
+            if not lb:
+                return None
+            if action == "label_del":
+                del sc["labels"][lb["id"]]
+                return None
+            if "text" in data:
+                lb["text"] = line(data.get("text"), 40) or lb["text"]
+            if "dm" in data:
+                lb["dm"] = bool(data.get("dm"))
+            return None
+
         # -- Walls and doors --
         if action == "door":
             sc = self._scene_of(s, data, dm)
@@ -958,12 +1130,12 @@ class Tabletop:
             if not sc:
                 return "That scene isn't there any more."
             if action == "walls_clear":
-                sc["walls"].clear()
+                sc["walls"] = {k: w for k, w in sc["walls"].items() if w.get("auto")}
                 self._reveal(sc)
                 return None
             if action in ("wall_del", "door_lock"):
                 w = sc["walls"].get(str(data.get("id", "")))
-                if w and action == "wall_del":
+                if w and action == "wall_del" and not w.get("auto"):
                     del sc["walls"][w["id"]]
                     self._reveal(sc)
                 elif w and w.get("door"):
@@ -978,7 +1150,7 @@ class Tabletop:
             door = bool(data.get("door"))
             for i in range(0, len(pts) - 2, 2):
                 seg = pts[i:i + 4]
-                if seg[:2] == seg[2:] or len(sc["walls"]) >= MAX_WALLS:
+                if seg[:2] == seg[2:] or sum(not x.get("auto") for x in sc["walls"].values()) >= MAX_WALLS:
                     continue
                 wid = new_id()
                 sc["walls"][wid] = {"id": wid, "p": seg, "door": door, "open": False}
@@ -1287,6 +1459,16 @@ class Tabletop:
         out["tokens"] = toks
         out["lines"] = list(sc["lines"].values())
         out["auto"] = sc.get("auto", False)
+        tiles, seen, cols = sc.get("tiles", ""), sc["seen"], sc["cols"]
+
+        def clear(x, y):
+            return dm or not sc["fog"] or seen[int(y) * cols + int(x)] == "1"
+        if not dm and sc["fog"] and tiles.strip("."):
+            tiles = "".join(t if seen[i] == "1" else "?" for i, t in enumerate(tiles))
+        out["tiles"] = tiles
+        out["props"] = [pr for pr in sc.get("props", {}).values() if clear(pr["x"], pr["y"])]
+        out["labels"] = [lb for lb in sc.get("labels", {}).values()
+                         if (dm or not lb["dm"]) and clear(min(lb["x"], cols - 1), min(lb["y"], sc["rows"] - 1))]
         if dm:
             out["walls"] = list(sc["walls"].values())
         else:

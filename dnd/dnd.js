@@ -42,6 +42,9 @@
   const drags = new Map();                  // token id -> { x, y, t } (other people dragging)
   const pings = [];                         // { x, y, t, c }
   const fogLocal = new Map();               // cell index -> "0"/"1", painted but not confirmed yet
+  const tilesLocal = new Map();             // cell index -> map maker square, painted but not confirmed yet
+  let tilesLocalSc = null;
+  const build = { mode: "room", tile: "f", brush: 1, prop: "barrel", rot: 0, dmLabel: false, size: "", kind: "dungeon" };
   let act = null;                           // what the pointer is doing right now
   let noteTimer = 0, spaceDown = false;
 
@@ -303,6 +306,7 @@
     const moved = lastActive !== null && lastActive !== s.active;
     lastActive = s.active;
     fogLocal.clear();
+    tilesLocal.clear();
     drags.clear();
     for (const id of [...picked]) if (!tokenById(id)) picked.delete(id);
     if (sel && !picked.has(sel)) sel = [...picked].pop() || null;
@@ -412,7 +416,13 @@
       const iw = sc.cols, ih = sc.cols * img.naturalHeight / img.naturalWidth;
       ctx.drawImage(img, sc.ox, sc.oy, iw, ih);
     }
-    if (sc.grid && cam.z >= 7) {
+    const T = tilesOf(sc), drawn = /[^.?]/.test(T);
+    if (drawn) {
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(tileLayer(sc, T, !!img), 0, 0, sc.cols, sc.rows);
+      for (const pr of sc.props || []) paintProp(ctx, pr);
+    }
+    if (sc.grid && cam.z >= 7 && !(drawn && !img)) {
       ctx.beginPath();
       for (let x = 0; x <= sc.cols; x++) { ctx.moveTo(x, 0); ctx.lineTo(x, sc.rows); }
       for (let y = 0; y <= sc.rows; y++) { ctx.moveTo(0, y); ctx.lineTo(sc.cols, y); }
@@ -422,7 +432,7 @@
       ctx.stroke();
       ctx.globalAlpha = 1;
     }
-    if (!img) {
+    if (!img && !drawn) {
       ctx.strokeStyle = "#3a3f4d";
       ctx.lineWidth = px(2);
       ctx.strokeRect(0, 0, sc.cols, sc.rows);
@@ -435,6 +445,7 @@
     // fog of war, then walls and doors on top
     if (sc.fog) paintFog(sc, px);
     paintWalls(sc, px);
+    for (const lb of sc.labels || []) paintLabel(lb, px);
 
     // tokens
     const cur = EXTRAS && S.init.cur && S.init.list.find(e => e.id === S.init.cur);
@@ -494,6 +505,7 @@
       ctx.strokeRect(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
       ctx.setLineDash([]);
     }
+    if (tool === "build" && isDm()) paintBuildPreview(sc, px);
     if (tool === "fog" && hover && !act) {
       const c = cellAt(hover), n = fogBox ? 1 : fogBrush, o = Math.floor(n / 2);
       ctx.strokeStyle = fogShow ? "#69db7c" : "#ff6b6b";
@@ -527,28 +539,330 @@
     ctx.lineCap = "round";
     for (const w of sc.walls || []) {
       const [x1, y1, x2, y2] = w.p;
-      if (!w.door && !dm) continue;
+      if (!w.door && (!dm || (w.auto && !strong))) continue;
+      if (w.door) { paintDoor(w, dm, px); continue; }
       ctx.beginPath();
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
-      if (w.door) {
-        ctx.strokeStyle = w.open ? "rgba(105, 219, 124, 0.95)" : w.locked && dm ? "#ff6b6b" : "#f59f00";
-        ctx.lineWidth = px(w.open ? 4 : 8);
-        if (w.open) ctx.setLineDash([px(5), px(5)]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        if (!w.open && cam.z > 18) {               // a little handle in the middle
-          ctx.beginPath();
-          ctx.arc((x1 + x2) / 2, (y1 + y2) / 2, px(3), 0, Math.PI * 2);
-          ctx.fillStyle = "#3d2a05";
-          ctx.fill();
-        }
-      } else {
+      {
         ctx.strokeStyle = strong ? "rgba(196, 181, 253, 0.95)" : "rgba(167, 139, 250, 0.45)";
         ctx.lineWidth = px(strong ? 4 : 3);
         ctx.stroke();
       }
     }
+  }
+
+  function paintDoor(w, dm, px) {
+    const [x1, y1, x2, y2] = w.p, L = Math.hypot(x2 - x1, y2 - y1);
+    if (!L) return;
+    const th = Math.min(0.28, L * 0.3), lw = Math.max(px(1.5), 0.045);
+    ctx.save();
+    ctx.translate(x1, y1);
+    ctx.rotate(Math.atan2(y2 - y1, x2 - x1));
+    ctx.lineWidth = lw;
+    ctx.lineJoin = "round";
+    const edge = w.locked && dm ? "#e03131" : "#1c1a18";
+    if (!w.open) {
+      ctx.beginPath();
+      ctx.rect(0.04, -th / 2, L - 0.08, th);
+      ctx.fillStyle = "#e9cf9f";
+      ctx.fill();
+      ctx.strokeStyle = edge;
+      ctx.stroke();
+      if (w.locked && dm) {                       // a little padlock for the DM
+        ctx.beginPath();
+        ctx.arc(L / 2, 0, th * 0.28, 0, Math.PI * 2);
+        ctx.fillStyle = "#e03131";
+        ctx.fill();
+      }
+    } else {
+      // swung open on its hinge, with the path it swings along
+      ctx.beginPath();
+      ctx.arc(0, 0, L * 0.9, 0, Math.PI / 2);
+      ctx.strokeStyle = "rgba(28, 26, 24, 0.35)";
+      ctx.setLineDash([0.08, 0.08]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.rotate(Math.PI / 2);
+      ctx.beginPath();
+      ctx.rect(0, -th * 0.3, L * 0.9, th * 0.6);
+      ctx.fillStyle = "#e9cf9f";
+      ctx.fill();
+      ctx.strokeStyle = edge;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ---- The map maker's drawing: paper, ink walls, hatching round the rock ----------------------
+  const PAPER = "#f2ede1", INKC = "#1c1a18";
+  const OPEN = "fogdslpD", INDOOR = "foD";
+  const solidT = t => t === "." || t === "w";
+  const TILE_INFO = [["f", "Stone", "#f7f4ec"], ["o", "Wood", "#d9b483"], ["g", "Grass", "#c9dea0"], ["d", "Dirt", "#dcc59a"],
+    ["s", "Water", "#94c2e4"], ["l", "Lava", "#f08a3c"], ["p", "Pit", "#34302c"], ["w", "Wall", "#5c554d"]];
+  const PROP_INFO = [["table", "Table"], ["chair", "Chair"], ["bed", "Bed"], ["shelf", "Shelf"], ["rug", "Rug"], ["chest", "Chest"],
+    ["barrel", "Barrel"], ["crate", "Crate"], ["stairs", "Stairs"], ["pillar", "Pillar"], ["statue", "Statue"], ["altar", "Altar"],
+    ["torch", "Torch"], ["campfire", "Fire"], ["well", "Well"], ["tree", "Tree"], ["bush", "Bush"], ["rock", "Rock"],
+    ["rubble", "Rubble"], ["web", "Web"]];
+  const tileColour = t => (TILE_INFO.find(x => x[0] === t) || TILE_INFO[0])[2];
+  let tileCache = { key: "", canvas: null };
+  function rnd(x, y, k = 0) {
+    let h = (Math.imul(x + 1, 374761393) + Math.imul(y + 1, 668265263) + Math.imul(k + 1, 1442695041)) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  }
+  function tilesOf(sc) {
+    let T = sc.tiles || "";
+    if (T.length !== sc.cols * sc.rows) T = ".".repeat(sc.cols * sc.rows);
+    const live = act && act.kind === "paint" ? act.cells : null;
+    const mine = tilesLocalSc === sc.id && tilesLocal.size;
+    if (!mine && !(live && live.size)) return T;
+    const a = T.split("");
+    if (mine) for (const [i, t] of tilesLocal) a[i] = t;
+    if (live) for (const [i, t] of live) a[i] = t;
+    return a.join("");
+  }
+  function wallEdge(a, b) {
+    if (a === "?" || b === "?") return false;
+    return (INDOOR.includes(a) && solidT(b)) || (INDOOR.includes(b) && solidT(a)) ||
+      (a === "w" && OPEN.includes(b)) || (b === "w" && OPEN.includes(a));
+  }
+  function tileLayer(sc, T, hasImg) {
+    const key = `${sc.id}|${sc.cols}|${hasImg ? 1 : 0}|${sc.grid ? 1 : 0}|${T}`;
+    if (tileCache.key === key) return tileCache.canvas;
+    const cols = sc.cols, rows = sc.rows;
+    const R = Math.max(8, Math.min(64, Math.floor(4096 / Math.max(cols, rows)), Math.floor(Math.sqrt(14e6 / (cols * rows)))));
+    const cv = tileCache.canvas || document.createElement("canvas");
+    cv.width = cols * R;
+    cv.height = rows * R;
+    const g = cv.getContext("2d");
+    g.setTransform(R, 0, 0, R, 0, 0);
+    const at = (x, y) => (x < 0 || y < 0 || x >= cols || y >= rows ? "." : T[y * cols + x]);
+    const isOpen = t => OPEN.includes(t);
+    if (!hasImg) { g.fillStyle = PAPER; g.fillRect(0, 0, cols, rows); }
+
+    // hatching on the rock round the rooms (it fades out two squares away)
+    g.lineCap = "round";
+    g.strokeStyle = "#3b3631";
+    g.lineWidth = 0.032;
+    g.beginPath();
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+      if (at(x, y) !== ".") continue;
+      let d = 9;
+      for (let dy = -2; dy <= 2 && d > 1; dy++) for (let dx = -2; dx <= 2; dx++) {
+        if (isOpen(at(x + dx, y + dy))) d = Math.min(d, Math.max(Math.abs(dx), Math.abs(dy)));
+      }
+      if (d > 2 || (d === 2 && rnd(x, y, 9) < 0.45)) continue;
+      for (let k = 0; k < (d === 1 ? 3 : 2); k++) {
+        const a = rnd(x, y, k) * Math.PI, cx = x + rnd(x, y, k + 3), cy = y + rnd(x, y, k + 6);
+        const ux = Math.cos(a), uy = Math.sin(a), len = 0.32 + rnd(x, y, k + 11) * 0.18;
+        for (let j = -1.5; j <= 1.5; j++) {
+          const ox = cx - uy * j * 0.12, oy = cy + ux * j * 0.12;
+          g.moveTo(ox - ux * len, oy - uy * len);
+          g.lineTo(ox + ux * len, oy + uy * len);
+        }
+      }
+    }
+    g.stroke();
+
+    // a soft shadow down and right of everything you can stand on
+    g.fillStyle = "rgba(40, 30, 20, 0.22)";
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) if (isOpen(at(x, y))) g.fillRect(x + 0.12, y + 0.14, 1, 1);
+
+    // the squares themselves
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+      let t = at(x, y);
+      if (t === "D") t = [at(x - 1, y), at(x + 1, y), at(x, y - 1), at(x, y + 1)].includes("o") ? "o" : "f";
+      if (t === "." || t === "?") continue;
+      g.fillStyle = tileColour(t);
+      g.fillRect(x, y, 1.02, 1.02);
+      tileDetail(g, t, x, y);
+    }
+
+    // the grid, on the floor only
+    if (sc.grid) {
+      g.strokeStyle = "rgba(60, 50, 40, 0.2)";
+      g.lineWidth = 1 / R;
+      g.beginPath();
+      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) if (isOpen(at(x, y))) g.rect(x, y, 1, 1);
+      g.stroke();
+    }
+
+    // thick ink walls wherever a room meets rock
+    g.beginPath();
+    for (let y = 0; y <= rows; y++) for (let x = 0; x < cols; x++) {
+      if (wallEdge(at(x, y - 1), at(x, y))) { g.moveTo(x, y); g.lineTo(x + 1, y); }
+    }
+    for (let x = 0; x <= cols; x++) for (let y = 0; y < rows; y++) {
+      if (wallEdge(at(x - 1, y), at(x, y))) { g.moveTo(x, y); g.lineTo(x, y + 1); }
+    }
+    g.strokeStyle = INKC;
+    g.lineWidth = 0.16;
+    g.lineCap = "round";
+    g.lineJoin = "round";
+    g.stroke();
+    tileCache = { key, canvas: cv };
+    return cv;
+  }
+  function tileDetail(g, t, x, y) {
+    const r = k => rnd(x, y, k);
+    g.lineWidth = 0.03;
+    g.lineCap = "round";
+    if (t === "f") {                             // the odd flagstone or crack
+      if (r(1) < 0.3) {
+        g.strokeStyle = "rgba(60, 50, 40, 0.22)";
+        const cx = x + 0.25 + r(2) * 0.5, cy = y + 0.25 + r(3) * 0.5, s = 0.1 + r(4) * 0.12;
+        g.beginPath();
+        g.moveTo(cx - s, cy - s * 0.6); g.lineTo(cx + s * 0.7, cy - s); g.lineTo(cx + s, cy + s * 0.5); g.lineTo(cx - s * 0.4, cy + s);
+        g.closePath();
+        g.stroke();
+      }
+    } else if (t === "o") {                      // floorboards
+      g.strokeStyle = "rgba(90, 60, 30, 0.38)";
+      g.beginPath();
+      for (const yy of [0.33, 0.66]) { g.moveTo(x, y + yy); g.lineTo(x + 1, y + yy); }
+      for (let k = 0; k < 3; k++) if (r(k + 20) < 0.4) { const sx = x + 0.1 + r(k) * 0.8, sy = y + k * 0.33; g.moveTo(sx, sy); g.lineTo(sx, sy + 0.33); }
+      g.stroke();
+    } else if (t === "g") {                      // tufts of grass
+      g.strokeStyle = "rgba(85, 120, 50, 0.7)";
+      g.beginPath();
+      for (let k = 0; k < 3; k++) {
+        const cx = x + 0.15 + r(k) * 0.7, cy = y + 0.2 + r(k + 5) * 0.65;
+        g.moveTo(cx - 0.07, cy - 0.1); g.lineTo(cx, cy); g.lineTo(cx + 0.07, cy - 0.11);
+      }
+      g.stroke();
+    } else if (t === "d") {                      // pebbles
+      g.fillStyle = "rgba(120, 90, 50, 0.35)";
+      for (let k = 0; k < 4; k++) { g.beginPath(); g.arc(x + 0.1 + r(k) * 0.8, y + 0.1 + r(k + 4) * 0.8, 0.03 + r(k + 8) * 0.03, 0, 7); g.fill(); }
+    } else if (t === "s") {                      // little waves
+      g.strokeStyle = "rgba(255, 255, 255, 0.7)";
+      g.beginPath();
+      for (let k = 0; k < 2; k++) {
+        const cx = x + 0.2 + r(k) * 0.5, cy = y + 0.25 + k * 0.45;
+        g.moveTo(cx, cy); g.quadraticCurveTo(cx + 0.08, cy - 0.08, cx + 0.16, cy); g.quadraticCurveTo(cx + 0.24, cy + 0.08, cx + 0.32, cy);
+      }
+      g.stroke();
+    } else if (t === "l") {                      // glowing cracks
+      g.strokeStyle = "#ffd35a";
+      g.lineWidth = 0.05;
+      g.beginPath();
+      const cx = x + r(1), cy = y + r(2);
+      g.moveTo(cx - 0.3, cy); g.lineTo(cx, cy + 0.15 * (r(3) - 0.5)); g.lineTo(cx + 0.3, cy + 0.1);
+      g.stroke();
+      g.fillStyle = "rgba(150, 40, 20, 0.45)";
+      g.beginPath(); g.arc(x + r(4), y + r(5), 0.12, 0, 7); g.fill();
+    } else if (t === "p") {                      // a pit, darker in the middle
+      g.fillStyle = "#16130f";
+      g.fillRect(x + 0.12, y + 0.12, 0.76, 0.76);
+    } else if (t === "w") {                      // stonework
+      g.strokeStyle = "rgba(255, 255, 255, 0.12)";
+      g.beginPath();
+      g.moveTo(x, y + 0.5); g.lineTo(x + 1, y + 0.5);
+      const o = (y % 2) * 0.5;
+      g.moveTo(x + 0.25 + o * 0.5, y); g.lineTo(x + 0.25 + o * 0.5, y + 0.5);
+      g.moveTo(x + 0.75 - o * 0.5, y + 0.5); g.lineTo(x + 0.75 - o * 0.5, y + 1);
+      g.stroke();
+    }
+  }
+
+  // props are drawn in ink too, a square each
+  function paintProp(g, pr, alpha) {
+    g.save();
+    g.translate(pr.x + 0.5, pr.y + 0.5);
+    g.rotate((pr.r || 0) * Math.PI / 2);
+    if (alpha) g.globalAlpha = alpha;
+    g.lineWidth = 0.045;
+    g.strokeStyle = INKC;
+    g.lineJoin = "round";
+    g.lineCap = "round";
+    const fs = fill => { g.fillStyle = fill; g.fill(); g.stroke(); };
+    const box = (x, y, w, h, fill) => { g.beginPath(); g.rect(x, y, w, h); fs(fill); };
+    const disc = (r, fill, x = 0, y = 0) => { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); fs(fill); };
+    const ln = (...q) => { g.beginPath(); g.moveTo(q[0], q[1]); for (let i = 2; i < q.length; i += 2) g.lineTo(q[i], q[i + 1]); g.stroke(); };
+    const poly = (q, fill) => { g.beginPath(); g.moveTo(q[0], q[1]); for (let i = 2; i < q.length; i += 2) g.lineTo(q[i], q[i + 1]); g.closePath(); fs(fill); };
+    const glow = (r, c) => {
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, r);
+      gr.addColorStop(0, c); gr.addColorStop(1, "rgba(255, 170, 60, 0)");
+      g.fillStyle = gr; g.fillRect(-r, -r, r * 2, r * 2);
+    };
+    switch (pr.k) {
+      case "table": box(-0.42, -0.3, 0.84, 0.6, "#c8a272"); g.lineWidth = 0.02; ln(-0.42, 0, 0.42, 0); break;
+      case "chair": box(-0.18, -0.12, 0.36, 0.32, "#c8a272"); box(-0.2, -0.24, 0.4, 0.1, "#9c7647"); break;
+      case "barrel": disc(0.32, "#b9824a"); disc(0.2, "#c99560"); break;
+      case "crate": box(-0.33, -0.33, 0.66, 0.66, "#c9a06a"); ln(-0.33, -0.33, 0.33, 0.33); ln(0.33, -0.33, -0.33, 0.33); break;
+      case "chest": box(-0.34, -0.22, 0.68, 0.44, "#a8692f"); ln(-0.34, -0.06, 0.34, -0.06); disc(0.06, "#f2c94c", 0, 0.02); break;
+      case "bed": box(-0.32, -0.45, 0.64, 0.9, "#f4f1ea"); box(-0.25, -0.4, 0.5, 0.18, "#ffffff"); box(-0.32, -0.12, 0.64, 0.57, "#7f9ccf"); break;
+      case "shelf": box(-0.45, -0.17, 0.9, 0.34, "#9b6b3d"); ln(-0.15, -0.17, -0.15, 0.17); ln(0.15, -0.17, 0.15, 0.17); break;
+      case "rug": box(-0.45, -0.45, 0.9, 0.9, "#b5523b"); g.strokeStyle = "#f0c36d"; g.lineWidth = 0.035; g.strokeRect(-0.34, -0.34, 0.68, 0.68); break;
+      case "pillar": disc(0.38, "#d6d1c8"); disc(0.25, "#ece8e0"); break;
+      case "statue": box(-0.36, -0.36, 0.72, 0.72, "#d6d1c8"); disc(0.13, "#f3f0ea", 0, -0.12); ln(0, 0.02, 0, 0.24); ln(-0.15, 0.1, 0.15, 0.1); break;
+      case "altar": box(-0.42, -0.28, 0.84, 0.56, "#cfc7b8"); ln(0, -0.18, 0, 0.18); ln(-0.11, -0.07, 0.11, -0.07); break;
+      case "stairs":
+        box(-0.45, -0.45, 0.9, 0.9, "#ece8e0");
+        g.lineWidth = 0.03;
+        for (let i = 1; i < 6; i++) { const y = -0.45 + i * 0.15; ln(-0.45 + i * 0.04, y, 0.45 - i * 0.04, y); }
+        break;
+      case "torch": glow(0.75, "rgba(255, 170, 60, 0.5)"); disc(0.09, "#ffb347"); break;
+      case "campfire":
+        glow(0.9, "rgba(255, 150, 50, 0.45)");
+        for (let k = 0; k < 7; k++) disc(0.075, "#9a948a", Math.cos(k * 0.9) * 0.3, Math.sin(k * 0.9) * 0.3);
+        disc(0.17, "#ff8a3d"); g.lineWidth = 0; disc(0.08, "#ffd35a");
+        break;
+      case "well": disc(0.42, "#a59f94"); disc(0.27, "#3f6e8f"); break;
+      case "tree":
+        g.fillStyle = "rgba(30, 40, 20, 0.25)"; g.beginPath(); g.arc(0.08, 0.1, 0.5, 0, 7); g.fill();
+        disc(0.5, "#6f9a4a");
+        g.lineWidth = 0.025;
+        for (let k = 0; k < 5; k++) { g.beginPath(); g.arc(Math.cos(k * 1.3) * 0.22, Math.sin(k * 1.3) * 0.22, 0.12, 0, 7); g.fillStyle = "#86b25c"; g.fill(); g.stroke(); }
+        break;
+      case "bush": disc(0.3, "#7fa955"); g.lineWidth = 0.025; disc(0.14, "#98c46a", 0.05, -0.05); break;
+      case "rock": poly([-0.32, -0.08, -0.1, -0.33, 0.24, -0.24, 0.35, 0.1, 0.06, 0.32, -0.28, 0.22], "#b9b3a8"); break;
+      case "rubble":
+        poly([-0.35, -0.2, -0.18, -0.32, -0.08, -0.15, -0.25, -0.05], "#b9b3a8");
+        poly([0.05, 0.05, 0.25, -0.05, 0.33, 0.18, 0.12, 0.28], "#a9a398");
+        poly([-0.2, 0.15, -0.05, 0.12, -0.08, 0.3], "#c4beb3");
+        break;
+      case "web":
+        g.strokeStyle = "rgba(70, 70, 70, 0.75)"; g.lineWidth = 0.02;
+        for (let k = 0; k <= 4; k++) { const a = k * Math.PI / 8; ln(-0.5, -0.5, -0.5 + Math.cos(a) * 0.95, -0.5 + Math.sin(a) * 0.95); }
+        for (const r of [0.3, 0.55, 0.8]) { g.beginPath(); g.arc(-0.5, -0.5, r, 0, Math.PI / 2); g.stroke(); }
+        break;
+    }
+    g.restore();
+  }
+  function paintLabel(lb, px) {
+    const size = Math.max(0.5, px(14));
+    ctx.font = `italic 700 ${size}px Georgia, "Times New Roman", serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = size * 0.25;
+    ctx.strokeStyle = "rgba(242, 237, 225, 0.92)";
+    ctx.strokeText(lb.text, lb.x, lb.y);
+    ctx.fillStyle = lb.dm ? "#7048e8" : INKC;
+    ctx.fillText(lb.text, lb.x, lb.y);
+  }
+  function paintBuildPreview(sc, px) {
+    if (act && act.kind === "room") {
+      const [x0, y0, x1, y1] = boxCells(act.a, act.b);
+      ctx.fillStyle = act.code === "." ? "rgba(255, 107, 107, 0.18)" : "rgba(255, 255, 255, 0.35)";
+      ctx.fillRect(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+      ctx.strokeStyle = act.code === "." ? "#ff6b6b" : INKC;
+      ctx.lineWidth = px(2);
+      ctx.setLineDash([px(6), px(4)]);
+      ctx.strokeRect(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+      ctx.setLineDash([]);
+      tag(`${x1 - x0 + 1} × ${y1 - y0 + 1}`, (x0 + x1 + 1) / 2, y0 - px(14), "#fff", px);
+      return;
+    }
+    if (!hover || act) return;
+    const c = cellAt(hover);
+    if (build.mode === "prop") return paintProp(ctx, { k: build.prop, x: c.x, y: c.y, r: build.rot }, 0.55);
+    if (build.mode === "label") return;
+    const n = build.mode === "brush" || build.mode === "erase" ? build.brush : 1, o = Math.floor(n / 2);
+    ctx.strokeStyle = build.mode === "erase" ? "#ff6b6b" : "#7048e8";
+    ctx.lineWidth = px(2);
+    ctx.strokeRect(c.x - o, c.y - o, n, n);
   }
 
   function paintFog(sc, px) {
@@ -780,12 +1094,278 @@
     const sc = scene();
     let best = null, bd = near;
     for (const w of sc.walls || []) {
-      if (doorsOnly && !w.door) continue;
+      if ((doorsOnly && !w.door) || (w.auto && !w.door)) continue;
       const d = segDist(p, ...w.p);
       if (d < bd) { bd = d; best = w; }
     }
     return best;
   }
+  const inScene = (sc, x, y) => x >= 0 && y >= 0 && x < sc.cols && y < sc.rows;
+  function sendTiles(edits) {
+    const sc = scene();
+    if (!sc || !edits.length) return;
+    if (tilesLocalSc !== sc.id) { tilesLocal.clear(); tilesLocalSc = sc.id; }
+    for (const [x, y, t] of edits) tilesLocal.set(y * sc.cols + x, t);
+    action("tiles", { sc: sc.id, edits });
+    redraw();
+  }
+  function paintTileAt(p) {
+    const sc = scene(), c = cellAt(p), o = Math.floor(build.brush / 2);
+    for (let y = c.y - o; y < c.y - o + build.brush; y++) for (let x = c.x - o; x < c.x - o + build.brush; x++) {
+      if (inScene(sc, x, y)) act.cells.set(y * sc.cols + x, act.code);
+    }
+    redraw();
+  }
+  const propAt = c => (scene().props || []).find(pr => pr.x === c.x && pr.y === c.y);
+  function labelAt(p) {
+    let best = null, bd = 0.8;
+    for (const lb of scene().labels || []) {
+      const d = Math.hypot((lb.x - p.x) / Math.max(1, lb.text.length * 0.16), lb.y - p.y);
+      if (d < bd) { bd = d; best = lb; }
+    }
+    return best;
+  }
+  function doorFloor(sc, T, c) {
+    const near = [[-1, 0], [1, 0], [0, -1], [0, 1]].map(([dx, dy]) => inScene(sc, c.x + dx, c.y + dy) ? T[(c.y + dy) * sc.cols + c.x + dx] : ".");
+    return near.includes("o") ? "o" : "f";
+  }
+  function buildDown(e, p) {
+    const sc = scene(), c = cellAt(p), rub = e.button === 2;
+    if (build.mode === "room") { act = { kind: "room", a: p, b: p, code: rub ? "." : build.tile }; redraw(); return; }
+    if (build.mode === "brush" || build.mode === "erase") {
+      act = { kind: "paint", code: rub || build.mode === "erase" ? "." : build.tile, cells: new Map() };
+      paintTileAt(p);
+      return;
+    }
+    if (!inScene(sc, c.x, c.y)) return;
+    if (build.mode === "door") {
+      const T = tilesOf(sc), t = T[c.y * sc.cols + c.x];
+      if (t === "D") sendTiles([[c.x, c.y, doorFloor(sc, T, c)]]);
+      else if (!rub) sendTiles([[c.x, c.y, "D"]]);
+      return;
+    }
+    if (build.mode === "prop") {
+      const pr = propAt(c);
+      if (pr) action("prop_del", { sc: sc.id, id: pr.id });
+      else if (!rub) action("prop_add", { sc: sc.id, k: build.prop, x: c.x, y: c.y, r: build.rot });
+      return;
+    }
+    if (build.mode === "label") {
+      const lb = labelAt(p);
+      if (lb) {
+        if (rub) return action("label_del", { sc: sc.id, id: lb.id });
+        const t = prompt("Change the label (leave it empty to take it away):", lb.text);
+        if (t === null) return;
+        if (!t.trim()) action("label_del", { sc: sc.id, id: lb.id });
+        else action("label_edit", { sc: sc.id, id: lb.id, text: t });
+        return;
+      }
+      if (rub) return;
+      const t = prompt(build.dmLabel ? "A label only you can see:" : "A label everyone can see:");
+      if (t && t.trim()) action("label_add", { sc: sc.id, x: +p.x.toFixed(2), y: +p.y.toFixed(2), text: t, dm: build.dmLabel });
+    }
+  }
+  function buildUp(a) {
+    const sc = scene();
+    if (a.kind === "paint") sendTiles([...a.cells].map(([i, t]) => [i % sc.cols, Math.floor(i / sc.cols), t]));
+    else if (a.kind === "room") {
+      const [x0, y0, x1, y1] = boxCells(a.a, a.b), edits = [];
+      for (let y = Math.max(0, y0); y <= Math.min(sc.rows - 1, y1); y++) for (let x = Math.max(0, x0); x <= Math.min(sc.cols - 1, x1); x++) edits.push([x, y, a.code]);
+      sendTiles(edits);
+    }
+  }
+
+  // ---- Random maps: a dungeon, a forest or a house ----------------------------------------------
+  function makeMap(kind, cols, rows) {
+    const T = Array(cols * rows).fill(kind === "dungeon" ? "." : "g"), props = [], taken = new Set();
+    const R = Math.random, ri = (a, b) => a + Math.floor(R() * (b - a + 1));
+    const ok = (x, y) => x >= 0 && y >= 0 && x < cols && y < rows;
+    const get = (x, y) => (ok(x, y) ? T[y * cols + x] : ".");
+    const set = (x, y, t) => { if (ok(x, y)) T[y * cols + x] = t; };
+    const put = (k, x, y, r = 0) => {
+      if (!ok(x, y) || taken.has(y * cols + x)) return false;
+      taken.add(y * cols + x);
+      props.push({ k, x, y, r });
+      return true;
+    };
+    const near = (x, y, f) => [[-1, 0], [1, 0], [0, -1], [0, 1]].some(([dx, dy]) => f(get(x + dx, y + dy)));
+    const overlaps = (list, x, y, w, h, gap) => list.some(r => x < r.x + r.w + gap && x + w + gap > r.x && y < r.y + r.h + gap && y + h + gap > r.y);
+
+    if (kind === "forest") {
+      // a winding dirt path, a pond, a clearing with a campfire, then trees everywhere else
+      let y = ri(Math.floor(rows / 3), Math.floor(rows * 2 / 3));
+      for (let x = 0; x < cols; x++) {
+        set(x, y, "d"); set(x, y + 1, "d");
+        if (R() < 0.35) y = Math.max(1, Math.min(rows - 3, y + (R() < 0.5 ? -1 : 1)));
+        set(x, y, "d"); set(x, y + 1, "d");
+      }
+      const pond = { x: ri(2, Math.max(2, cols - 9)), y: R() < 0.5 ? ri(1, 3) : Math.max(1, rows - 7), w: ri(4, 7), h: ri(3, 5) };
+      const pcx = pond.x + pond.w / 2, pcy = pond.y + pond.h / 2;
+      for (let yy = pond.y; yy < pond.y + pond.h; yy++) for (let xx = pond.x; xx < pond.x + pond.w; xx++) {
+        const d = ((xx + 0.5 - pcx) / (pond.w / 2)) ** 2 + ((yy + 0.5 - pcy) / (pond.h / 2)) ** 2;
+        if (d < 1 - R() * 0.25 && get(xx, yy) === "g") set(xx, yy, "s");
+      }
+      const cx = ri(Math.floor(cols / 3), Math.floor(cols * 2 / 3)), cy = ri(3, rows - 4);
+      const clear = (x, y) => Math.hypot(x - cx, y - cy) < 3.2;
+      put("campfire", cx, cy);
+      for (let yy = 0; yy < rows; yy++) for (let xx = 0; xx < cols; xx++) {
+        if (get(xx, yy) !== "g" || clear(xx, yy) || near(xx, yy, t => t === "d")) continue;
+        const r = R();
+        if (r < 0.2) put("tree", xx, yy, ri(0, 3));
+        else if (r < 0.26) put("bush", xx, yy);
+        else if (r < 0.29) put("rock", xx, yy, ri(0, 3));
+      }
+      for (let k = 0; k < 3; k++) put("rock", cx + ri(-2, 2), cy + (R() < 0.5 ? -2 : 2), ri(0, 3));
+      return { tiles: T.join(""), props };
+    }
+
+    if (kind === "house") {
+      // a stone-walled house with wooden floors, split into rooms, in a garden with a path to the door
+      const w = Math.min(cols - 4, ri(12, 18)), h = Math.min(rows - 5, ri(9, 13));
+      const hx = Math.floor((cols - w) / 2), hy = Math.max(1, Math.floor((rows - h) / 2) - 1);
+      for (let y = hy; y < hy + h; y++) for (let x = hx; x < hx + w; x++) {
+        set(x, y, x === hx || y === hy || x === hx + w - 1 || y === hy + h - 1 ? "w" : "o");
+      }
+      // split the inside into rooms with walls one square thick, each with a door
+      const rooms = [], split = (x, y, rw, rh, depth) => {
+        const across = rw >= rh;
+        if (depth > 2 || (across ? rw : rh) < 7) { rooms.push({ x, y, w: rw, h: rh }); return; }
+        const at = (across ? x : y) + ri(3, (across ? rw : rh) - 4);
+        if (across) {
+          for (let yy = y; yy < y + rh; yy++) set(at, yy, "w");
+          set(at, ri(y + 1, y + rh - 2), "D");
+          split(x, y, at - x, rh, depth + 1); split(at + 1, y, x + rw - at - 1, rh, depth + 1);
+        } else {
+          for (let xx = x; xx < x + rw; xx++) set(xx, at, "w");
+          set(ri(x + 1, x + rw - 2), at, "D");
+          split(x, y, rw, at - y, depth + 1); split(x, at + 1, rw, y + rh - at - 1, depth + 1);
+        }
+      };
+      split(hx + 1, hy + 1, w - 2, h - 2, 0);
+      const fx = ri(hx + 2, hx + w - 3), fy = hy + h - 1;               // the front door and the garden path
+      set(fx, fy, "D");
+      for (let y = fy + 1; y < rows; y++) set(fx, y, "d");
+      // furniture by room: the first is the hall, the biggest the main room
+      rooms.sort((a, b) => b.w * b.h - a.w * a.h);
+      const free = (x, y) => get(x, y) === "o" && !taken.has(y * cols + x) && !near(x, y, t => t === "D");
+      const kinds = ["main", "bed", "kitchen", "store", "bed", "study"];
+      rooms.forEach((r, i) => {
+        const k = kinds[i % kinds.length], X = r.x, Y = r.y, mx = X + Math.floor(r.w / 2), my = Y + Math.floor(r.h / 2);
+        const try_ = (p, x, y, rot) => free(x, y) && put(p, x, y, rot);
+        if (k === "main") {
+          if (r.w >= 4 && r.h >= 4) { try_("rug", mx, my); try_("rug", mx - 1, my); try_("rug", mx, my - 1); try_("rug", mx - 1, my - 1); }
+          try_("shelf", X + 1, Y, 0); try_("campfire", X + r.w - 1, Y);
+          try_("chair", mx + 1, my + 1, 2);
+        } else if (k === "bed") {
+          try_("bed", X, Y); if (r.w > 2) try_("bed", X + 2, Y); try_("chest", X, Y + r.h - 1);
+        } else if (k === "kitchen") {
+          try_("table", mx, my); try_("chair", mx - 1, my, 3); try_("chair", mx + 1, my, 1); try_("chair", mx, my + 1, 2);
+          try_("barrel", X, Y); try_("barrel", X + 1, Y); try_("shelf", X + r.w - 1, Y, 1);
+        } else if (k === "store") {
+          try_("crate", X, Y); try_("crate", X + 1, Y); try_("barrel", X, Y + 1); try_("barrel", X + r.w - 1, Y + r.h - 1); try_("web", X, Y);
+        } else {
+          try_("table", mx, my); try_("chair", mx, my + 1, 2); try_("shelf", X, Y, 0); try_("shelf", X + 1, Y, 0);
+        }
+      });
+      // the garden
+      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+        if (get(x, y) !== "g" || near(x, y, t => t === "w" || t === "d" || t === "D") || Math.abs(x - fx) < 2) continue;
+        const r = R();
+        if (r < 0.09) put("tree", x, y, ri(0, 3));
+        else if (r < 0.14) put("bush", x, y);
+      }
+      put("well", Math.max(0, hx - 3), Math.min(rows - 2, hy + h + 1));
+      return { tiles: T.join(""), props };
+    }
+
+    // a dungeon: rooms, then corridors joining each to the nearest one already joined, then doors
+    const rooms = [], want = Math.max(3, Math.min(14, Math.round(cols * rows / 110)));
+    for (let tries = 0; tries < 500 && rooms.length < want; tries++) {
+      const w = ri(3, Math.min(9, cols - 4)), h = ri(3, Math.min(7, rows - 4));
+      const x = ri(1, cols - w - 1), y = ri(1, rows - h - 1);
+      if (overlaps(rooms, x, y, w, h, 2)) continue;
+      rooms.push({ x, y, w, h, cx: x + (w >> 1), cy: y + (h >> 1) });
+    }
+    const inRoom = new Set();
+    for (const r of rooms) {
+      r.t = R() < 0.22 ? "o" : "f";
+      for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) { set(x, y, r.t); inRoom.add(y * cols + x); }
+    }
+    const corr = new Set();
+    const dig = (a, b) => {
+      const path = [], hFirst = R() < 0.5;
+      const run = (x1, y1, x2, y2) => {
+        for (let x = x1; x !== x2 + Math.sign(x2 - x1 || 1); x += Math.sign(x2 - x1 || 1)) path.push([x, y1]);
+        for (let y = y1; y !== y2 + Math.sign(y2 - y1 || 1); y += Math.sign(y2 - y1 || 1)) path.push([x2, y]);
+      };
+      if (hFirst) run(a.cx, a.cy, b.cx, b.cy);
+      else { for (let y = a.cy; y !== b.cy + Math.sign(b.cy - a.cy || 1); y += Math.sign(b.cy - a.cy || 1)) path.push([a.cx, y]); run(a.cx, b.cy, b.cx, b.cy); }
+      for (const [x, y] of path) if (get(x, y) === ".") { set(x, y, "f"); corr.add(y * cols + x); }
+    };
+    const joined = rooms.slice(0, 1);
+    for (const r of rooms.slice(1)) {
+      const o = joined.reduce((best, q) => Math.hypot(q.cx - r.cx, q.cy - r.cy) < Math.hypot(best.cx - r.cx, best.cy - r.cy) ? q : best);
+      dig(r, o);
+      joined.push(r);
+    }
+    if (rooms.length > 4) for (let k = 0; k < 2; k++) dig(rooms[ri(0, rooms.length - 1)], rooms[ri(0, rooms.length - 1)]);
+    // doors where a narrow corridor meets a room
+    for (const i of corr) {
+      const x = i % cols, y = Math.floor(i / cols);
+      if (get(x, y) !== "f") continue;
+      const lr = solidT(get(x - 1, y)) && solidT(get(x + 1, y)), ud = solidT(get(x, y - 1)) && solidT(get(x, y + 1));
+      const meets = (lr && (inRoom.has((y - 1) * cols + x) || inRoom.has((y + 1) * cols + x))) ||
+        (ud && (inRoom.has(y * cols + x - 1) || inRoom.has(y * cols + x + 1)));
+      let doorNear = false;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (get(x + dx, y + dy) === "D") doorNear = true;
+      if (meets && !doorNear && R() < 0.6) set(x, y, "D");
+    }
+    // a pool or a pit in some big rooms
+    for (const r of rooms) {
+      if (r.w >= 6 && r.h >= 5 && R() < 0.3) {
+        const t = R() < 0.7 ? "s" : "p";
+        for (let y = r.y + 2; y < r.y + r.h - 2; y++) for (let x = r.x + 2; x < r.x + r.w - 2; x++) set(x, y, t);
+      }
+    }
+    // furniture: stairs in the first room, treasure in the one furthest from it, the rest dressed at random
+    const free = (x, y) => INDOOR.includes(get(x, y)) && get(x, y) !== "D" && !taken.has(y * cols + x) && inRoom.has(y * cols + x)
+      && !near(x, y, t => t === "D") && !near(x, y, t => t === "s" || t === "p") &&
+      ![[-1, 0], [1, 0], [0, -1], [0, 1]].some(([dx, dy]) => corr.has((y + dy) * cols + x + dx));
+    const corners = r => [[r.x, r.y], [r.x + r.w - 1, r.y], [r.x, r.y + r.h - 1], [r.x + r.w - 1, r.y + r.h - 1]];
+    if (rooms.length) {
+      const first = rooms[0];
+      const far = rooms.reduce((b, q) => Math.hypot(q.cx - first.cx, q.cy - first.cy) > Math.hypot(b.cx - first.cx, b.cy - first.cy) ? q : b);
+      for (const [x, y] of corners(first)) if (free(x, y)) { put("stairs", x, y, ri(0, 3)); break; }
+      if (free(far.cx, far.cy)) put(R() < 0.5 ? "chest" : "altar", far.cx, far.cy); else for (const [x, y] of corners(far)) if (free(x, y)) { put("chest", x, y); break; }
+      for (const r of rooms) {
+        if (r === first || r === far) continue;
+        const theme = ri(0, 4);
+        if (theme === 0) for (const [x, y] of corners(r)) { if (free(x, y) && R() < 0.7) put(R() < 0.5 ? "barrel" : "crate", x, y); }
+        else if (theme === 1 && r.w >= 5 && r.h >= 5) for (const [x, y] of [[r.x + 1, r.y + 1], [r.x + r.w - 2, r.y + 1], [r.x + 1, r.y + r.h - 2], [r.x + r.w - 2, r.y + r.h - 2]]) { if (free(x, y)) put("pillar", x, y); }
+        else if (theme === 2 && free(r.cx, r.cy)) { put("table", r.cx, r.cy); if (free(r.cx - 1, r.cy)) put("chair", r.cx - 1, r.cy, 3); if (free(r.cx + 1, r.cy)) put("chair", r.cx + 1, r.cy, 1); }
+        else if (theme === 3) { if (free(r.cx, r.cy)) put("statue", r.cx, r.cy); for (const [x, y] of corners(r).slice(0, 2)) if (free(x, y)) put("torch", x, y); }
+        else { for (const [x, y] of corners(r)) if (free(x, y) && R() < 0.5) put(R() < 0.6 ? "rubble" : "web", x, y, ri(0, 3)); }
+      }
+    }
+    for (const i of corr) if (R() < 0.04) put(R() < 0.5 ? "rubble" : "web", i % cols, Math.floor(i / cols), ri(0, 3));
+    return { tiles: T.join(""), props };
+  }
+
+  async function importMap(sc) {
+    const f = await pickFile();
+    if (!f) return;
+    note("Getting the map ready…");
+    try {
+      const r = await shrink(f, 3200, false);
+      // a first guess at the grid: most battle maps are 70 or 100 pixels a square
+      const ppsq = [70, 100, 140, 50, 128, 256, 200].find(n => r.w % n === 0 && r.h % n === 0 && r.w / n <= LIM.grid) || 70;
+      const cols = Math.max(1, Math.min(LIM.grid, Math.round(r.w / ppsq)));
+      const rows = Math.max(1, Math.min(LIM.grid, Math.round(cols * r.h / r.w)));
+      action("scene_img", { sc: sc.id, src: r.url, cols, rows });
+      note(`Map added as ${cols} × ${rows} squares. Change Squares across (Scenes tab) if the grid doesn't match.`);
+    } catch { note("That picture couldn't be used. Try a PNG or JPG."); }
+  }
+
   function finishWall() {
     if (wallPts && wallPts.length >= 4) action("wall_add", { sc: viewSc, p: wallPts, door: wallMode === "door" });
     wallPts = null;
@@ -860,6 +1440,7 @@
     if (pointers.size > 2) return;
     const p = worldPt(e), { sx, sy } = screenPt(e);
     if (tool === "walls" && isDm() && e.button === 2) { finishWall(); return; }
+    if (tool === "build" && isDm() && !spaceDown && !e.altKey && (e.button === 0 || e.button === 2)) { buildDown(e, p); return; }
     if (e.button === 1 || e.button === 2 || spaceDown) { act = { kind: "pan", sx, sy, cx: cam.x, cy: cam.y }; viewport.classList.add("panning"); e.preventDefault(); return; }
     if (e.button !== 0) return;
     if (e.altKey || tool === "ping") { ping(p); return; }
@@ -931,7 +1512,7 @@
     hover = p;
     if (!act) {
       if (tool === "select") { const t = tokenAt(p); viewport.classList.toggle("on-token", !!(t && controls(t))); }
-      if (tool === "fog" || tool === "walls") redraw();
+      if (tool === "fog" || tool === "walls" || tool === "build") redraw();
       if (tool === "select") viewport.classList.toggle("on-door", !!wallAt(p, true, 0.22));
       return;
     }
@@ -965,7 +1546,8 @@
       redraw();
     } else if (act.kind === "erase") eraseAt(p);
     else if (act.kind === "fog") paintFogAt(p);
-    else if (act.kind === "fogbox" || act.kind === "box") { act.b = p; redraw(); }
+    else if (act.kind === "paint") paintTileAt(p);
+    else if (act.kind === "fogbox" || act.kind === "box" || act.kind === "room") { act.b = p; redraw(); }
   });
   function endPointer(e) {
     pointers.delete(e.pointerId);
@@ -1000,7 +1582,8 @@
         scene().lines.push({ ...a.line, id: "tmp", by: me });
         action("line_add", { sc: viewSc, line: a.line });
       }
-    } else if (a.kind === "fog") sendFog(a.cells);
+    } else if (a.kind === "paint" || a.kind === "room") buildUp(a);
+    else if (a.kind === "fog") sendFog(a.cells);
     else if (a.kind === "fogbox") {
       const sc = scene(), [x0, y0, x1, y1] = boxCells(a.a, a.b), cells = new Set();
       for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { cells.add(y * sc.cols + x); fogLocal.set(y * sc.cols + x, fogShow ? "1" : "0"); }
@@ -1016,7 +1599,7 @@
   }
   viewport.addEventListener("pointerup", endPointer);
   viewport.addEventListener("pointercancel", e => { pointers.delete(e.pointerId); pinch = null; cancelAct(); });
-  viewport.addEventListener("pointerleave", () => { hover = null; if (tool === "fog") redraw(); });
+  viewport.addEventListener("pointerleave", () => { hover = null; if (tool === "fog" || tool === "build") redraw(); });
   viewport.addEventListener("contextmenu", e => e.preventDefault());
   viewport.addEventListener("dblclick", e => {
     const t = tokenAt(worldPt(e));
@@ -1044,9 +1627,10 @@
     if (e.key === "Enter" && wallPts && !typing()) { finishWall(); return; }
     if (typing() || !$("sheet").hidden || !$("tokenForm").hidden || !$("handout").hidden) return;
     if (e.key === " ") { spaceDown = true; e.preventDefault(); return; }
-    const keys = { v: "select", r: "ruler", d: "draw", e: "erase", g: "ping", f: "fog", w: "walls" };
+    const keys = { v: "select", r: "ruler", d: "draw", e: "erase", g: "ping", f: "fog", w: "walls", b: "build" };
     const k = e.key.toLowerCase();
-    if (keys[k] && !e.ctrlKey && !e.metaKey && ((k !== "f" && k !== "w") || isDm())) { setTool(keys[k]); return; }
+    if (keys[k] && !e.ctrlKey && !e.metaKey && (!"fwb".includes(k) || isDm())) { setTool(keys[k]); return; }
+    if (k === "t" && tool === "build" && build.mode === "prop") { build.rot = (build.rot + 1) % 4; renderToolOpts(); return redraw(); }
     if (k === "a" && (e.ctrlKey || e.metaKey)) {             // select every token you can move
       e.preventDefault();
       picked.clear();
@@ -1100,7 +1684,8 @@
   function renderToolOpts() {
     const box = $("toolOpts");
     box.innerHTML = "";
-    box.hidden = !["draw", "fog", "ruler", "erase", "ping", "walls"].includes(tool);
+    box.hidden = !["draw", "fog", "ruler", "erase", "ping", "walls", "build"].includes(tool);
+    box.classList.toggle("build", tool === "build");
     const p = html => { const el = document.createElement("p"); el.className = "muted small"; el.style.margin = 0; el.innerHTML = html; return el; };
     if (tool === "draw") {
       box.append(seg([["free", "Pen"], ["line", "Line"], ["rect", "Square"], ["circle", "Circle"], ["cone", "Cone"]], drawShape, v => { drawShape = v; }));
@@ -1146,12 +1731,111 @@
       clear.textContent = "Remove every wall";
       clear.addEventListener("click", () => { if (confirm("Remove every wall and door on this scene?")) action("walls_clear", { sc: viewSc }); });
       box.append(clear);
-    } else if (tool === "ruler") box.append(p(`Drag to measure. Everyone sees your ruler. Each square is ${per()} ${esc(unit())}.`));
+    } else if (tool === "build") renderBuildOpts(box, p);
+    else if (tool === "ruler") box.append(p(`Drag to measure. Everyone sees your ruler. Each square is ${per()} ${esc(unit())}.`));
     else if (tool === "erase") box.append(p(isDm() ? "Drag over drawings to rub them out." : "Drag over your drawings to rub them out."));
     else if (tool === "ping") box.append(p("Click to make everyone look at a spot. Alt+click pings with any tool."));
   }
 
   // ---- Selected token(s) ----------------------------------------------------------------------
+  function renderBuildOpts(box, p) {
+    const sc = scene();
+    if (!sc) return;
+    const btn = (label, cls, fn) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = cls;
+      b.innerHTML = label;
+      b.addEventListener("click", fn);
+      return b;
+    };
+    const row = () => { const r = document.createElement("div"); r.className = "row"; return r; };
+    box.append(seg([["room", "Room"], ["brush", "Brush"], ["erase", "Erase"], ["door", "Door"], ["prop", "Props"], ["label", "Label"]],
+      build.mode, v => { build.mode = v; }));
+    if (build.mode === "room" || build.mode === "brush") {
+      const r = row();
+      r.classList.add("tt-swatches");
+      for (const [t, name, c] of TILE_INFO) {
+        const b = btn(`<i style="background:${c}"></i>${name}`, "tt-swatch" + (build.tile === t ? " on" : ""), () => { build.tile = t; renderToolOpts(); });
+        r.append(b);
+      }
+      box.append(r);
+    }
+    if (build.mode === "brush" || build.mode === "erase") {
+      const r = row();
+      r.append(Object.assign(document.createElement("span"), { className: "muted small", textContent: "Size" }),
+        seg([[1, "1"], [2, "2"], [3, "3"], [5, "5"]], build.brush, v => { build.brush = v; }));
+      box.append(r);
+    }
+    if (build.mode === "prop") {
+      const grid = document.createElement("div");
+      grid.className = "tt-props";
+      for (const [k, name] of PROP_INFO) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.title = name;
+        b.className = build.prop === k ? "on" : "";
+        const cv = document.createElement("canvas");
+        cv.width = cv.height = 64;
+        const g = cv.getContext("2d");
+        g.fillStyle = PAPER; g.fillRect(0, 0, 64, 64);
+        g.setTransform(64, 0, 0, 64, 0, 0);
+        paintProp(g, { k, x: 0, y: 0, r: 0 });
+        b.append(cv, Object.assign(document.createElement("span"), { textContent: name }));
+        b.addEventListener("click", () => { build.prop = k; renderToolOpts(); });
+        grid.append(b);
+      }
+      box.append(grid);
+      const r = row();
+      r.append(btn("Turn (T)", "btn small-btn", () => { build.rot = (build.rot + 1) % 4; redraw(); }));
+      box.append(r);
+    }
+    if (build.mode === "label") {
+      const l = document.createElement("label");
+      l.className = "check small";
+      l.innerHTML = `<input type="checkbox" ${build.dmLabel ? "checked" : ""}> Only I can see it`;
+      l.querySelector("input").addEventListener("change", e => { build.dmLabel = e.target.checked; });
+      box.append(l);
+    }
+    box.append(p({
+      room: "Drag out a room. Walls go round it by themselves, and rooms that touch join up. Right-drag to dig it back out.",
+      brush: "Paint corridors, pools or a river. Grass, dirt and water don't get walls, so use them outdoors. Right-drag rubs out.",
+      erase: "Drag to rub squares back out to solid rock.",
+      door: "Click a square in a gap between walls to put a door there, and click it again to take it away.",
+      prop: "Click a square to put it there. Click a prop to take it away.",
+      label: "Click to add a label. Click a label to change it, or right-click to take it away.",
+    }[build.mode]));
+    // random maps and pictures
+    const r = row();
+    const kind = document.createElement("select");
+    kind.innerHTML = [["dungeon", "Dungeon"], ["forest", "Forest"], ["house", "House"]]
+      .map(([v, n]) => `<option value="${v}" ${build.kind === v ? "selected" : ""}>${n}</option>`).join("");
+    kind.addEventListener("change", () => { build.kind = kind.value; });
+    const size = document.createElement("select");
+    size.innerHTML = [["", `This size (${sc.cols} × ${sc.rows})`], ["24x16", "Small (24 × 16)"], ["36x24", "Medium (36 × 24)"], ["50x34", "Large (50 × 34)"]]
+      .map(([v, n]) => `<option value="${v}" ${build.size === v ? "selected" : ""}>${n}</option>`).join("");
+    size.addEventListener("change", () => { build.size = size.value; });
+    r.append(kind, size, btn("Make a random map", "btn small-btn", () => {
+      const [cols, rows] = build.size ? build.size.split("x").map(Number) : [sc.cols, sc.rows];
+      if (cols < 12 || rows < 10) return note("Make the scene at least 12 × 10 squares first.");
+      if ((/[^.]/.test(sc.tiles || "") || (sc.props || []).length) && !confirm("Swap the map you've drawn for a new one?")) return;
+      const m = makeMap(build.kind, cols, rows);
+      action("map_set", { sc: sc.id, tiles: m.tiles, props: m.props, labels: true, cols, rows });
+    }));
+    box.append(r);
+    const r2 = row();
+    r2.append(btn("Import a map picture", "btn small-btn", () => importMap(sc)));
+    if (sc.img) r2.append(btn("Take the picture off", "btn small-btn", () => action("scene_img", { sc: sc.id, src: "" })));
+    r2.append(btn("Clear what I've drawn", "btn danger small-btn", () => {
+      if (confirm("Clear the floors, props and labels you've drawn on this scene?")) action("map_set", { sc: sc.id, tiles: ".".repeat(sc.cols * sc.rows), props: [], labels: true });
+    }));
+    box.append(r2);
+    if (!sc.fog || !sc.auto) {
+      box.append(p("Turn on fog to have the walls you draw hide the rest of the map until the party explores it."),
+        btn("Turn on fog and exploring", "btn small-btn", () => action("scene_edit", { sc: sc.id, fog: true, auto: true })));
+    }
+  }
+
   function selectToken(id, add) {
     if (!id) picked.clear();
     else if (add) { if (picked.has(id)) picked.delete(id); else picked.add(id); }
@@ -1881,20 +2565,7 @@
       else if (b.dataset.copy != null) action("scene_copy", { sc: sc.id });
       else if (b.dataset.nomap != null) action("scene_img", { sc: sc.id, src: "" });
       else if (b.dataset.del != null) { if (confirm(`Delete the scene "${sc.name}", with its tokens and drawings?`)) action("scene_del", { sc: sc.id }); }
-      else if (b.dataset.map != null) {
-        const f = await pickFile();
-        if (!f) return;
-        note("Getting the map ready…");
-        try {
-          const r = await shrink(f, 3200, false);
-          // a first guess at the grid: most battle maps are 70 or 100 pixels a square
-          const ppsq = [70, 100, 140, 50, 128, 256, 200].find(n => r.w % n === 0 && r.h % n === 0 && r.w / n <= LIM.grid) || 70;
-          let cols = Math.max(1, Math.min(LIM.grid, Math.round(r.w / ppsq)));
-          const rows = Math.max(1, Math.min(LIM.grid, Math.round(cols * r.h / r.w)));
-          action("scene_img", { sc: sc.id, src: r.url, cols, rows });
-          note(`Map added as ${cols} × ${rows} squares. Change Squares across if the grid doesn't match.`);
-        } catch { note("That picture couldn't be used. Try a PNG or JPG."); }
-      }
+      else if (b.dataset.map != null) importMap(sc);
     });
     $("scenePick").addEventListener("change", e => { viewSc = e.target.value; wallPts = null; selectToken(null); fitView(); renderAll(); });
     $("showScene").addEventListener("click", () => action("scene_show", { sc: viewSc }));
