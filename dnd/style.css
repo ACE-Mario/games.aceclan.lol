@@ -29,6 +29,8 @@ body.on-table .sitebar, body.on-table .site-foot { display: none; }
 .tt-viewport.panning { cursor: grabbing; }
 
 body:not(.is-dm) .dm-only { display: none !important; }
+body:not(.real-dm) .real-dm-only { display: none !important; }
+body.as-player #viewport { box-shadow: inset 0 0 0 3px #f59f00; }
 body:not(.extras) .extra { display: none !important; }
 body:not(.extras) .tt-panel-btn { display: block; }
 body.is-dm .player-only { display: none !important; }

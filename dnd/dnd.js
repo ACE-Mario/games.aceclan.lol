@@ -51,8 +51,10 @@
   const viewport = $("viewport"), canvas = $("map"), ctx = canvas.getContext("2d");
 
   // ---- Little helpers ------------------------------------------------------------------------
-  const isDm = () => !!(S && S.dm);
-  const scene = () => S && (S.scenes.find(s => s.id === viewSc) || S.scenes[0]);
+  let asPlayer = false;                     // a DM looking at the map the way players see it
+  const isDm = () => !!(S && S.dm) && !asPlayer;
+  const rawScene = () => S && (S.scenes.find(s => s.id === viewSc) || S.scenes[0]);
+  const scene = () => { const sc = rawScene(); return sc && asPlayer ? playerScene(sc) : sc; };
   const assetUrl = name => `${AceLive.SERVER}/api/dnd/asset/${slug}/${name}`;
   const nameOf = pid => (S && S.names[pid]) || "Someone";
   const colourOf = pid => FX.color(S ? Math.max(0, Object.keys(S.names).indexOf(pid)) : 0);
@@ -299,10 +301,12 @@
     if (s.camp) slug = s.camp.slug;
     if (s.deleted) { leave && leave("That campaign was deleted."); return; }
     Object.assign(LIM, s.limits || {});
-    document.body.classList.toggle("is-dm", !!s.dm);
+    if (!s.dm) asPlayer = false;
+    document.body.classList.toggle("is-dm", isDm());
+    document.body.classList.toggle("real-dm", !!s.dm);
     document.title = `${s.camp.name} · ACE Tabletop`;
     // Which scene to look at: players always see the active one; a DM follows it unless they're looking elsewhere.
-    if (!s.dm || !viewSc || !s.scenes.some(x => x.id === viewSc) || viewSc === lastActive) viewSc = s.active;
+    if (!isDm() || !viewSc || !s.scenes.some(x => x.id === viewSc) || viewSc === lastActive) viewSc = s.active;
     const moved = lastActive !== null && lastActive !== s.active;
     lastActive = s.active;
     fogLocal.clear();
@@ -550,6 +554,61 @@
         ctx.stroke();
       }
     }
+  }
+
+  // ---- View as player: the DM sees exactly what the players get ---------------------------------
+  let pvMemo = { src: null, seen: null, out: null };
+  function playerScene(sc) {
+    if (pvMemo.src === sc && pvMemo.seen === sc.seen) return pvMemo.out;
+    const fog = sc.fog, cols = sc.cols, rows = sc.rows, seen = sc.seen || "";
+    const at = (x, y) => seen[Math.min(rows - 1, Math.max(0, Math.floor(y))) * cols + Math.min(cols - 1, Math.max(0, Math.floor(x)))];
+    const clear = (x, y) => !fog || at(x, y) === "1";
+    const pc = t => !!(t.owner || t.char);
+    const tokens = sc.tokens.filter(t => !t.hidden && (pc(t) || !fog || !covered(sc, t, t.size))).map(t => {
+      if (pc(t) || t.showhp) return t;
+      const v = { ...t, hp: null, mhp: null, ac: null, init: null, note: "" };   // players see how hurt it looks
+      if (t.hp != null && t.mhp) v.look = t.hp <= 0 ? "down" : t.hp <= t.mhp / 2 ? "bloodied" : t.hp < t.mhp ? "hurt" : "fine";
+      return v;
+    });
+    let tiles = sc.tiles || "";
+    if (fog && /[^.]/.test(tiles)) tiles = Array.from(tiles, (t, i) => (seen[i] === "1" ? t : "?")).join("");
+    const doorSeen = w => {
+      if (!fog) return true;
+      const mx = (w.p[0] + w.p[2]) / 2, my = (w.p[1] + w.p[3]) / 2;
+      return [[-0.5, 0], [0.5, 0], [0, -0.5], [0, 0.5]].some(([dx, dy]) => {
+        const x = Math.floor(mx + dx), y = Math.floor(my + dy);
+        return x >= 0 && y >= 0 && x < cols && y < rows && seen[y * cols + x] === "1";
+      });
+    };
+    const out = {
+      ...sc, tokens, tiles,
+      props: (sc.props || []).filter(pr => clear(pr.x, pr.y)),
+      labels: (sc.labels || []).filter(lb => !lb.dm && clear(lb.x, lb.y)),
+      walls: (sc.walls || []).filter(w => w.door && doorSeen(w)).map(w => ({ id: w.id, p: w.p, door: true, open: !!w.open })),
+    };
+    pvMemo = { src: sc, seen: sc.seen, out };
+    return out;
+  }
+  function setAsPlayer(on) {
+    if (on && !(S && S.dm)) return;
+    asPlayer = on;
+    document.body.classList.toggle("is-dm", isDm());
+    document.body.classList.toggle("as-player", on);
+    if (act) cancelAct();
+    wallPts = null;
+    if (on) {
+      viewSc = S.active;
+      if (["fog", "walls", "build"].includes(tool)) setTool("select");
+      selectToken(null);
+      setTab("room");
+      fitView();
+      note("This is what your players see. Click Back to DM view when you're done.");
+    } else setTab("scenes");
+    $("asPlayerBtn").textContent = on ? "Back to DM view" : "View as player";
+    $("asPlayerBtn").classList.toggle("primary", on);
+    renderAll();
+    renderToolOpts();
+    redraw();
   }
 
   function paintDoor(w, dm, px) {
@@ -2069,6 +2128,7 @@
     const box = $("tokenForm"), dm = isDm();
     newTokPic = null;
     const mine = S.chars.filter(c => dm || c.owner === me);
+    const players = Object.entries(S.names).filter(([q]) => !S.dms.includes(q));
     box.innerHTML = `<form class="win narrow" autocomplete="off">
       <div class="row between"><h2 style="margin:0">Add a token</h2><button type="button" class="x" data-close aria-label="Close">✕</button></div>
       ${mine.length && EXTRAS ? `<label class="field">From a character<select name="char"><option value="">None, a new token</option>${mine.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select></label>` : ""}
@@ -2079,7 +2139,9 @@
         <label class="field">AC<input name="ac" type="number" min="0"></label>
         <label class="field">Initiative bonus<input name="init" type="number"></label>
         <label class="field">Size<select name="size"><option value="0.5">Tiny</option><option value="1" selected>Medium (1 square)</option><option value="2">Large (2)</option><option value="3">Huge (3)</option><option value="4">Gargantuan (4)</option></select></label>
-        ${dm ? `<label class="field">How many<input name="count" type="number" min="1" max="20" value="1"></label>
+        ${dm ? `<label class="field full">For player<select name="owner"><option value="">No one, it's the DM's</option>${players.map(([q, n]) => `<option value="${q}">${esc(n)}</option>`).join("")}</select>
+          <span class="muted small">${players.length ? "Only that player (and you) can move it, and the fog clears round it." : "Players show up here once they've opened the campaign link."}</span></label>
+        <label class="field">How many<input name="count" type="number" min="1" max="20" value="1"></label>
         <label class="check full"><input name="hidden" type="checkbox"> Hidden from players for now</label>` : ""}
       </div>
       <div class="row">${TOKEN_COLOURS.map((c, i) => `<button type="button" class="sw${i === (dm ? 0 : 5) ? " on" : ""}" style="--c:${c}" data-colour="${c}" aria-label="Colour"></button>`).join("")}</div>
@@ -2123,6 +2185,10 @@
       };
       if (ch) tok.char = ch.id;
       if (dm && F.hidden.checked) tok.hidden = true;
+      if (dm && F.owner && F.owner.value) {
+        tok.owner = F.owner.value;
+        if (!F.name.value.trim() && !ch) tok.name = nameOf(F.owner.value);
+      }
       if (newTokPic) tok.src = newTokPic;
       action("tok_add", { sc: sc.id, tok, count: dm ? Number(F.count.value) || 1 : 1 });
       closeModal("tokenForm");
@@ -2652,6 +2718,7 @@
     });
     $("scenePick").addEventListener("change", e => { viewSc = e.target.value; wallPts = null; selectToken(null); fitView(); renderAll(); });
     $("showScene").addEventListener("click", () => action("scene_show", { sc: viewSc }));
+    $("asPlayerBtn").addEventListener("click", () => setAsPlayer(!asPlayer));
   }
 
   // ---- Room ----------------------------------------------------------------------------------
