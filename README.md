@@ -1,4 +1,4 @@
-# games.aceclan.lol
+﻿# games.aceclan.lol
 
 ACE Clan's party games. This is a separate site from the main clan site (aceclan.lol) and the
 Hypixel tools (hypixel.aceclan.lol). Plain HTML, CSS and JavaScript with no build step, hosted on GitHub Pages,
@@ -58,9 +58,12 @@ those come back).
 - `dnd/`: ACE Tabletop, an online table for roleplaying campaigns (games.aceclan.lol/dnd). Whoever starts a campaign
   is its DM; they can make others DMs, and the DM code (Room tab) makes you DM on another device. Scenes are maps on a
   square grid (a picture, or a blank grid), with tokens, drawings and spell areas, a ruler and pings, and fog of war
-  the DM paints in or out. Players move their own tokens; the DM moves everything. There are also dice (rolled by the
-  server, optionally to the DM only), a turn order with rounds, character sheets you can roll from, DM notes and
-  shared handouts, and private notes for each person. Campaigns are named and kept like ACE Board's boards
+  the DM paints in or out, or lets it clear by itself as the party explores (each party token's sight, stopped by the walls
+  and doors the DM traces; anyone can open a door unless the DM locked it). Players move their own tokens; the DM
+  moves everything. Shift+click or Shift+drag selects several tokens to move, damage or give conditions together, and
+  the DM has ready-made monsters. There are also dice (rolled by the server, optionally to the DM only, shown big over
+  the map), a turn order with rounds, character sheets you can roll from (with spell slots and rests), DM notes and
+  handouts with pictures the DM can show on everyone's screen, and private notes for each person. Campaigns are named and kept like ACE Board's boards
   (`dnd/?c=<slug>`, room name `c:<slug>`). No points.
 - `shared/cards.js`: draws playing cards for poker and canasta (corner indices and face-card art).
 - `shared/board.js` and `shared/board.css`: the clan leaderboard (Today and All time) on the results of the daily

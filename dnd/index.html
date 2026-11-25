@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="../shared/site.css?v=20261123">
 <link rel="stylesheet" href="../shared/room.css?v=20261123">
 <link rel="stylesheet" href="../shared/fx.css?v=20261123">
-<link rel="stylesheet" href="style.css?v=20261125">
+<link rel="stylesheet" href="style.css?v=20261125b">
 </head>
 <body>
 <header class="sitebar">
@@ -56,13 +56,14 @@
       <summary><h2>What's in it</h2></summary>
       <ul class="how">
         <li><b>Maps</b>: the DM adds a map picture (or uses a blank grid), lines the grid up with it and picks which scene the party sees.</li>
-        <li><b>Tokens</b>: drag them square to square. Players move their own; the DM moves everything. Click one for HP, AC and conditions.</li>
-        <li><b>Fog of war</b>: the DM paints squares in or out. Monsters under the fog aren't sent to players at all.</li>
+        <li><b>Tokens</b>: drag them square to square. Players move their own; the DM moves everything. Click one for HP, AC and conditions; Shift+click or Shift+drag picks several to move or damage together. The DM has ready-made monsters.</li>
+        <li><b>Fog of war</b>: the DM paints squares in or out, or lets it clear by itself as the party explores. Monsters under the fog aren't sent to players at all.</li>
+        <li><b>Walls and doors</b>: the DM traces the map's walls; sight stops at them. Anyone can open a door (unless the DM locked it).</li>
         <li><b>Ruler, drawings and pings</b>: measure moves, draw spell areas (circles, cones, squares, lines) and ping a spot so everyone looks.</li>
         <li><b>Dice</b>: rolled on the server, so nobody can fake one. Type <code>2d6+3</code>, <code>1d20+5 adv</code> or <code>4d6kh3</code>, or roll straight from a character sheet. Rolls can go to the DM only.</li>
         <li><b>Turn order</b>: roll initiative for tokens and step through the rounds.</li>
-        <li><b>Character sheets</b>: abilities, saves, skills, HP, attacks, spells and gear. Click anything to roll it.</li>
-        <li><b>Notes</b>: the DM's private notes, handouts the DM shares with the party, and your own notes.</li>
+        <li><b>Character sheets</b>: abilities, saves, skills, HP, attacks, spell slots, rests and gear. Click anything to roll it.</li>
+        <li><b>Notes</b>: the DM's private notes, handouts with pictures the DM can show on everyone's screen, and your own notes.</li>
       </ul>
       <p class="muted small">Moving around: drag empty space or use the middle mouse button, and the scroll wheel zooms. On a phone, drag with one finger and pinch to zoom.</p>
     </details>
@@ -101,6 +102,8 @@
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/></svg></button>
     <button class="tb dm-only" type="button" data-tool="fog" title="Fog of war: paint squares in or out (F)" aria-label="Fog of war">
       <svg viewBox="0 0 24 24"><path d="M4 10h16M3 14h18M6 18h12M7 6a5 5 0 0 1 10 0"/></svg></button>
+    <button class="tb dm-only" type="button" data-tool="walls" title="Walls and doors (W)" aria-label="Walls and doors">
+      <svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM3 12h18M9 5v7M15 12v7"/></svg></button>
     <button id="addTokenBtn" class="tb" type="button" title="Add a token" aria-label="Add a token">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M8 12h8"/></svg></button>
     <span class="tt-sep"></span>
@@ -218,6 +221,8 @@
   </aside>
 
   <div id="sheet" class="tt-modal" hidden role="dialog" aria-modal="true" aria-labelledby="sheetName"></div>
+  <div id="handout" class="tt-modal" hidden role="dialog" aria-modal="true" aria-label="Handout"></div>
+  <div id="rollPop" class="tt-pop" hidden aria-hidden="true"></div>
   <div id="tokenForm" class="tt-modal" hidden role="dialog" aria-modal="true" aria-label="Add a token"></div>
 
   <div class="tt-notes-pop">
@@ -232,6 +237,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 <script src="../shared/live.js?v=20261123"></script>
 <script src="../shared/fx.js?v=20261123"></script>
-<script src="dnd.js?v=20261125"></script>
+<script src="dnd.js?v=20261125b"></script>
 </body>
 </html>

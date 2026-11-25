@@ -15,11 +15,22 @@
   const ABIL = ["str", "dex", "con", "int", "wis", "cha"];
   const ABIL_NAME = { str: "Strength", dex: "Dexterity", con: "Constitution", int: "Intelligence", wis: "Wisdom", cha: "Charisma" };
   const ZMIN = 6, ZMAX = 220;
+  const MONSTERS = [
+    ["Commoner", 4, 10, 0, 1], ["Kobold", 5, 12, 2, 1], ["Goblin", 7, 15, 2, 1], ["Giant rat", 7, 12, 2, 1],
+    ["Cultist", 9, 12, 1, 1], ["Bandit", 11, 12, 1, 1], ["Guard", 11, 16, 1, 1], ["Wolf", 11, 13, 2, 1],
+    ["Hobgoblin", 11, 18, 1, 1], ["Skeleton", 13, 13, 2, 1], ["Orc", 15, 13, 1, 1], ["Zombie", 22, 8, -2, 1],
+    ["Ghoul", 22, 12, 2, 1], ["Gnoll", 22, 15, 1, 1], ["Giant spider", 26, 14, 3, 2], ["Priest", 27, 13, 0, 1],
+    ["Bugbear", 27, 16, 2, 1], ["Brown bear", 34, 11, 0, 2], ["Dire wolf", 37, 14, 2, 2], ["Mage", 40, 12, 2, 1],
+    ["Wight", 45, 14, 1, 1], ["Ghost", 45, 11, 1, 1], ["Knight", 52, 18, 0, 1], ["Ogre", 59, 11, -1, 2],
+    ["Owlbear", 59, 13, 1, 2], ["Bandit captain", 65, 15, 3, 1], ["Troll", 84, 15, 1, 2], ["Young dragon", 133, 18, 0, 2],
+  ];
   const LIM = { image: 900000, grid: 120, linePts: 4000 };
 
   let socket = null, S = null, me = "", slug = null, viewSc = null, firstState = true;
   const cam = { x: -1, y: -1, z: 48 };
   let tool = "select", sel = null;
+  const picked = new Set();                 // selected tokens (sel is the one clicked last)
+  let wallMode = "wall", wallPts = null;    // the wall being drawn (grid corners x, y, x, y ...)
   let drawShape = "free", ink = INK[0], inkW = 3;
   let fogShow = true, fogBrush = 1, fogBox = false;
   let rollMode = "";
@@ -290,7 +301,8 @@
     lastActive = s.active;
     fogLocal.clear();
     drags.clear();
-    if (sel && !tokenById(sel)) sel = null;
+    for (const id of [...picked]) if (!tokenById(id)) picked.delete(id);
+    if (sel && !picked.has(sel)) sel = [...picked].pop() || null;
     if (firstState || (moved && viewSc === s.active)) { fitView(); firstState = false; }
     renderAll(old);
   }
@@ -369,7 +381,10 @@
   let frame = 0;
   function redraw() { if (!frame) frame = requestAnimationFrame(paint); }
   function tokenPos(t) {
-    if (act && act.kind === "token" && act.id === t.id) return { x: act.x, y: act.y };
+    if (act && act.kind === "token" && act.moved) {
+      const g = act.group.find(x => x.id === t.id);
+      if (g) return { x: g.ox + act.x - act.ox, y: g.oy + act.y - act.oy };
+    }
     const d = drags.get(t.id);
     if (d && Date.now() - d.t < 3000) return d;
     return t;
@@ -413,8 +428,9 @@
     for (const ln of sc.lines) paintLine(ln, px);
     if (act && act.kind === "draw") paintLine(act.line, px, true);
 
-    // fog of war
+    // fog of war, then walls and doors on top
     if (sc.fog) paintFog(sc, px);
+    paintWalls(sc, px);
 
     // tokens
     const cur = S.init.cur && S.init.list.find(e => e.id === S.init.cur);
@@ -436,6 +452,35 @@
     }
     if (act && act.kind === "ruler") paintRuler(act.p, colourOf(me), px);
 
+    // a box being dragged to select tokens
+    if (act && act.kind === "box") {
+      ctx.strokeStyle = "#fff";
+      ctx.fillStyle = "rgba(167, 139, 250, 0.12)";
+      ctx.lineWidth = px(1.5);
+      ctx.setLineDash([px(5), px(4)]);
+      const x = Math.min(act.a.x, act.b.x), y = Math.min(act.a.y, act.b.y), w = Math.abs(act.b.x - act.a.x), h = Math.abs(act.b.y - act.a.y);
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeRect(x, y, w, h);
+      ctx.setLineDash([]);
+    }
+    // the wall being drawn
+    if (tool === "walls" && wallPts && wallPts.length) {
+      const q = [...wallPts];
+      if (hover) { const v = vertex(hover); q.push(v.x, v.y); }
+      ctx.strokeStyle = wallMode === "door" ? "#f59f00" : "#c4b5fd";
+      ctx.lineWidth = px(wallMode === "door" ? 7 : 4);
+      ctx.beginPath();
+      ctx.moveTo(q[0], q[1]);
+      for (let i = 2; i < q.length; i += 2) ctx.lineTo(q[i], q[i + 1]);
+      ctx.stroke();
+    }
+    if (tool === "walls" && hover && (wallMode === "wall" || wallMode === "door")) {
+      const v = vertex(hover);
+      ctx.beginPath();
+      ctx.arc(v.x, v.y, px(5), 0, Math.PI * 2);
+      ctx.fillStyle = "#c4b5fd";
+      ctx.fill();
+    }
     // fog box being dragged
     if (act && act.kind === "fogbox") {
       const [x0, y0, x1, y1] = boxCells(act.a, act.b);
@@ -471,6 +516,35 @@
       ctx.globalAlpha = 1;
     }
     if (pings.length) redraw();
+  }
+
+  function paintWalls(sc, px) {
+    const dm = isDm(), strong = tool === "walls";
+    ctx.lineCap = "round";
+    for (const w of sc.walls || []) {
+      const [x1, y1, x2, y2] = w.p;
+      if (!w.door && !dm) continue;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      if (w.door) {
+        ctx.strokeStyle = w.open ? "rgba(105, 219, 124, 0.95)" : w.locked && dm ? "#ff6b6b" : "#f59f00";
+        ctx.lineWidth = px(w.open ? 4 : 8);
+        if (w.open) ctx.setLineDash([px(5), px(5)]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        if (!w.open && cam.z > 18) {               // a little handle in the middle
+          ctx.beginPath();
+          ctx.arc((x1 + x2) / 2, (y1 + y2) / 2, px(3), 0, Math.PI * 2);
+          ctx.fillStyle = "#3d2a05";
+          ctx.fill();
+        }
+      } else {
+        ctx.strokeStyle = strong ? "rgba(196, 181, 253, 0.95)" : "rgba(167, 139, 250, 0.45)";
+        ctx.lineWidth = px(strong ? 4 : 3);
+        ctx.stroke();
+      }
+    }
   }
 
   function paintFog(sc, px) {
@@ -622,7 +696,7 @@
       ctx.moveTo(cx + rad * 0.6, cy - rad * 0.6); ctx.lineTo(cx - rad * 0.6, cy + rad * 0.6);
       ctx.stroke();
     }
-    if (sel === t.id) {
+    if (picked.has(t.id)) {
       ctx.beginPath();
       ctx.arc(cx, cy, rad + px(4), 0, Math.PI * 2);
       ctx.strokeStyle = "#fff";
@@ -691,7 +765,28 @@
     const step = t.size < 1 ? 0.5 : 1;
     return { x: Math.round(x / step) * step, y: Math.round(y / step) * step };
   }
-  const sendDrag = throttle((id, x, y) => live({ k: "drag", sc: viewSc, id, x: +x.toFixed(2), y: +y.toFixed(2) }), 60);
+  const sendDrags = throttle(list => { for (const m of list) live({ k: "drag", sc: viewSc, id: m.id, x: +m.x.toFixed(2), y: +m.y.toFixed(2) }); }, 60);
+  const vertex = p => ({ x: Math.round(p.x), y: Math.round(p.y) });
+  function segDist(p, x1, y1, x2, y2) {
+    const dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy || 1;
+    const k = Math.max(0, Math.min(1, ((p.x - x1) * dx + (p.y - y1) * dy) / l2));
+    return Math.hypot(p.x - x1 - k * dx, p.y - y1 - k * dy);
+  }
+  function wallAt(p, doorsOnly, near = 0.3) {
+    const sc = scene();
+    let best = null, bd = near;
+    for (const w of sc.walls || []) {
+      if (doorsOnly && !w.door) continue;
+      const d = segDist(p, ...w.p);
+      if (d < bd) { bd = d; best = w; }
+    }
+    return best;
+  }
+  function finishWall() {
+    if (wallPts && wallPts.length >= 4) action("wall_add", { sc: viewSc, p: wallPts, door: wallMode === "door" });
+    wallPts = null;
+    redraw();
+  }
   const sendRuler = throttle(p => live({ k: "ruler", sc: viewSc, p }), 70);
   function boxCells(a, b) {
     const sc = scene();
@@ -760,6 +855,7 @@
     }
     if (pointers.size > 2) return;
     const p = worldPt(e), { sx, sy } = screenPt(e);
+    if (tool === "walls" && isDm() && e.button === 2) { finishWall(); return; }
     if (e.button === 1 || e.button === 2 || spaceDown) { act = { kind: "pan", sx, sy, cx: cam.x, cy: cam.y }; viewport.classList.add("panning"); e.preventDefault(); return; }
     if (e.button !== 0) return;
     if (e.altKey || tool === "ping") { ping(p); return; }
@@ -774,16 +870,43 @@
       return;
     }
     if (tool === "erase") { act = { kind: "erase", gone: new Set() }; eraseAt(p); return; }
+    if (tool === "walls" && isDm()) {
+      if (wallMode === "lock" || wallMode === "remove") {
+        const w = wallAt(p, wallMode === "lock");
+        if (w) action(wallMode === "lock" ? "door_lock" : "wall_del", { sc: viewSc, id: w.id });
+        return;
+      }
+      const v = vertex(p);
+      if (!wallPts) wallPts = [v.x, v.y];
+      else if (wallPts[wallPts.length - 2] === v.x && wallPts[wallPts.length - 1] === v.y) finishWall();   // same corner twice: done
+      else {
+        wallPts.push(v.x, v.y);
+        if (wallMode === "door") finishWall();
+      }
+      redraw();
+      return;
+    }
     if (tool === "fog" && isDm()) {
       if (fogBox) act = { kind: "fogbox", a: p, b: p };
       else { act = { kind: "fog", cells: new Set() }; paintFogAt(p); }
       return;
     }
+    const door = wallAt(p, true, 0.22);
+    if (door) { action("door", { sc: viewSc, id: door.id }); FX.sound("flip"); return; }
     const t = tokenAt(p);
     if (t) {
-      selectToken(t.id);
-      if (controls(t)) { act = { kind: "token", id: t.id, ox: t.x, oy: t.y, x: t.x, y: t.y, dx: p.x - t.x, dy: p.y - t.y, moved: false, sx, sy }; return; }
-    } else if (sel) selectToken(null);
+      if (e.shiftKey || e.ctrlKey || e.metaKey) { selectToken(t.id, true); return; }
+      if (!picked.has(t.id)) selectToken(t.id);
+      else { sel = t.id; renderCard(true); }
+      if (controls(t)) {
+        const group = [...picked].map(tokenById).filter(x => x && controls(x)).map(x => ({ id: x.id, ox: x.x, oy: x.y }));
+        act = { kind: "token", id: t.id, ox: t.x, oy: t.y, x: t.x, y: t.y, dx: p.x - t.x, dy: p.y - t.y, group, moved: false, sx, sy };
+        return;
+      }
+      return;
+    }
+    if (e.shiftKey) { act = { kind: "box", a: p, b: p }; return; }
+    if (picked.size) selectToken(null);
     act = { kind: "pan", sx, sy, cx: cam.x, cy: cam.y, click: true };
   });
   viewport.addEventListener("pointermove", e => {
@@ -804,7 +927,8 @@
     hover = p;
     if (!act) {
       if (tool === "select") { const t = tokenAt(p); viewport.classList.toggle("on-token", !!(t && controls(t))); }
-      if (tool === "fog") redraw();
+      if (tool === "fog" || tool === "walls") redraw();
+      if (tool === "select") viewport.classList.toggle("on-door", !!wallAt(p, true, 0.22));
       return;
     }
     if (act.kind === "pan") {
@@ -817,9 +941,7 @@
       act.moved = true;
       act.x = p.x - act.dx;
       act.y = p.y - act.dy;
-      sendDrag(act.id, act.x, act.y);
-      const t = tokenById(act.id), s = snap(t, act.x, act.y);
-      act.sx2 = s;
+      sendDrags(act.group.map(g => ({ id: g.id, x: g.ox + act.x - act.ox, y: g.oy + act.y - act.oy })));
       redraw();
     } else if (act.kind === "ruler") {
       const c = { x: Math.floor(p.x) + 0.5, y: Math.floor(p.y) + 0.5 };
@@ -839,7 +961,7 @@
       redraw();
     } else if (act.kind === "erase") eraseAt(p);
     else if (act.kind === "fog") paintFogAt(p);
-    else if (act.kind === "fogbox") { act.b = p; redraw(); }
+    else if (act.kind === "fogbox" || act.kind === "box") { act.b = p; redraw(); }
   });
   function endPointer(e) {
     pointers.delete(e.pointerId);
@@ -850,10 +972,21 @@
     viewport.classList.remove("panning");
     if (a.kind === "token") {
       if (a.moved) {
-        const t = tokenById(a.id), s = snap(t, a.x, a.y);
-        t.x = s.x; t.y = s.y;
-        action("tok_move", { sc: viewSc, id: a.id, x: s.x, y: s.y });
+        // snap the token that was grabbed; the others keep their places around it
+        const t = tokenById(a.id), s = snap(t, a.x, a.y), dx = s.x - a.ox, dy = s.y - a.oy;
+        const moves = a.group.map(g => ({ id: g.id, x: g.ox + dx, y: g.oy + dy }));
+        for (const m of moves) { const x = tokenById(m.id); if (x) { x.x = m.x; x.y = m.y; } }
+        if (moves.length === 1) action("tok_move", { sc: viewSc, id: a.id, x: s.x, y: s.y });
+        else action("tok_group", { sc: viewSc, op: "move", moves });
       }
+    } else if (a.kind === "box") {
+      const x0 = Math.min(a.a.x, a.b.x), x1 = Math.max(a.a.x, a.b.x), y0 = Math.min(a.a.y, a.b.y), y1 = Math.max(a.a.y, a.b.y);
+      for (const t of scene().tokens) {
+        const cx = t.x + t.size / 2, cy = t.y + t.size / 2;
+        if (cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1) picked.add(t.id);
+      }
+      sel = [...picked].pop() || null;
+      renderCard(true);
     } else if (a.kind === "ruler") {
       live({ k: "ruler", sc: viewSc, off: true });
     } else if (a.kind === "draw") {
@@ -898,27 +1031,40 @@
     if (e.key === "Escape") {
       if (!$("sheet").hidden) return closeModal("sheet");
       if (!$("tokenForm").hidden) return closeModal("tokenForm");
+      if (!$("handout").hidden) return closeModal("handout");
       if (act) return cancelAct();
+      if (wallPts) { wallPts = null; return redraw(); }
       selectToken(null);
       return;
     }
-    if (typing() || !$("sheet").hidden || !$("tokenForm").hidden) return;
+    if (e.key === "Enter" && wallPts && !typing()) { finishWall(); return; }
+    if (typing() || !$("sheet").hidden || !$("tokenForm").hidden || !$("handout").hidden) return;
     if (e.key === " ") { spaceDown = true; e.preventDefault(); return; }
-    const keys = { v: "select", r: "ruler", d: "draw", e: "erase", g: "ping", f: "fog" };
+    const keys = { v: "select", r: "ruler", d: "draw", e: "erase", g: "ping", f: "fog", w: "walls" };
     const k = e.key.toLowerCase();
-    if (keys[k] && !e.ctrlKey && !e.metaKey && (k !== "f" || isDm())) { setTool(keys[k]); return; }
-    const t = sel && tokenById(sel);
-    if (t && controls(t)) {
-      const step = t.size < 1 ? 0.5 : 1;
+    if (keys[k] && !e.ctrlKey && !e.metaKey && ((k !== "f" && k !== "w") || isDm())) { setTool(keys[k]); return; }
+    if (k === "a" && (e.ctrlKey || e.metaKey)) {             // select every token you can move
+      e.preventDefault();
+      picked.clear();
+      for (const t of scene().tokens) if (controls(t)) picked.add(t.id);
+      sel = [...picked].pop() || null;
+      renderCard(true);
+      return redraw();
+    }
+    const mine = [...picked].map(tokenById).filter(t => t && controls(t));
+    if (mine.length) {
+      const step = mine.every(t => t.size < 1) ? 0.5 : 1;
       const mv = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
       if (mv) {
         e.preventDefault();
-        t.x += mv[0]; t.y += mv[1];
-        action("tok_move", { sc: viewSc, id: t.id, x: t.x, y: t.y });
+        for (const t of mine) { t.x += mv[0]; t.y += mv[1]; }
+        if (mine.length === 1) action("tok_move", { sc: viewSc, id: mine[0].id, x: mine[0].x, y: mine[0].y });
+        else action("tok_group", { sc: viewSc, op: "move", moves: mine.map(t => ({ id: t.id, x: t.x, y: t.y })) });
         redraw();
       } else if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
-        action("tok_del", { sc: viewSc, id: t.id });
+        if (mine.length > 1 && !confirm(`Delete ${mine.length} tokens?`)) return;
+        action("tok_group", { sc: viewSc, op: "del", ids: mine.map(t => t.id) });
         selectToken(null);
       }
     }
@@ -927,6 +1073,7 @@
 
   // ---- Tools ---------------------------------------------------------------------------------
   function setTool(t) {
+    if (t !== "walls") wallPts = null;
     tool = t;
     viewport.dataset.tool = t;
     document.querySelectorAll(".tt-tools [data-tool]").forEach(b => b.classList.toggle("on", b.dataset.tool === t));
@@ -949,7 +1096,7 @@
   function renderToolOpts() {
     const box = $("toolOpts");
     box.innerHTML = "";
-    box.hidden = !["draw", "fog", "ruler", "erase", "ping"].includes(tool);
+    box.hidden = !["draw", "fog", "ruler", "erase", "ping", "walls"].includes(tool);
     const p = html => { const el = document.createElement("p"); el.className = "muted small"; el.style.margin = 0; el.innerHTML = html; return el; };
     if (tool === "draw") {
       box.append(seg([["free", "Pen"], ["line", "Line"], ["rect", "Square"], ["circle", "Circle"], ["cone", "Cone"]], drawShape, v => { drawShape = v; }));
@@ -979,58 +1126,108 @@
         b.addEventListener("click", () => action("scene_edit", { sc: sc.id, fog: true }));
         box.append(p("Fog is off on this scene, so players see the whole map."), b);
       } else box.append(p("Paint squares to reveal or hide them. Players see hidden squares as black, and monsters there aren't shown to them."));
+    } else if (tool === "walls") {
+      box.append(seg([["wall", "Wall"], ["door", "Door"], ["lock", "Lock"], ["remove", "Remove"]], wallMode, v => { wallMode = v; wallPts = null; }));
+      box.append(p({
+        wall: "Click grid corners along a wall. Click the last corner again, press Enter or right-click to finish.",
+        door: "Click the two ends of a door. Anyone can click a door to open or shut it.",
+        lock: "Click a door to lock or unlock it. Players can't open locked doors (they show red to you).",
+        remove: "Click a wall or door to take it away.",
+      }[wallMode]));
+      const sc = scene();
+      if (sc && !sc.auto) box.append(p("Walls and doors stop the party's sight when <b>Reveal as the party explores</b> is on (Scenes tab)."));
+      const clear = document.createElement("button");
+      clear.type = "button";
+      clear.className = "btn danger small-btn";
+      clear.textContent = "Remove every wall";
+      clear.addEventListener("click", () => { if (confirm("Remove every wall and door on this scene?")) action("walls_clear", { sc: viewSc }); });
+      box.append(clear);
     } else if (tool === "ruler") box.append(p(`Drag to measure. Everyone sees your ruler. Each square is ${per()} ${esc(unit())}.`));
     else if (tool === "erase") box.append(p(isDm() ? "Drag over drawings to rub them out." : "Drag over your drawings to rub them out."));
     else if (tool === "ping") box.append(p("Click to make everyone look at a spot. Alt+click pings with any tool."));
   }
 
-  // ---- Selected token ------------------------------------------------------------------------
-  function selectToken(id) {
-    sel = id;
+  // ---- Selected token(s) ----------------------------------------------------------------------
+  function selectToken(id, add) {
+    if (!id) picked.clear();
+    else if (add) { if (picked.has(id)) picked.delete(id); else picked.add(id); }
+    else { picked.clear(); picked.add(id); }
+    sel = id && picked.has(id) ? id : ([...picked].pop() || null);
     renderCard(true);
     redraw();
   }
+  const SIZES = [[0.5, "Tiny"], [1, "Medium (1 sq)"], [2, "Large (2)"], [3, "Huge (3)"], [4, "Gargantuan (4)"], [6, "Colossal (6)"]];
   function renderCard(force) {
     const card = $("tokenCard");
-    const t = sel && tokenById(sel);
-    if (!t) { card.hidden = true; card.dataset.id = ""; return; }
-    if (!force && card.dataset.id === t.id && card.contains(document.activeElement)) return;
-    card.dataset.id = t.id;
+    const list = [...picked].map(tokenById).filter(Boolean);
+    if (!list.length) { card.hidden = true; card.dataset.id = ""; return; }
+    const key = list.length > 1 ? "group:" + list.map(t => t.id).join(",") : list[0].id;
+    if (!force && card.dataset.id === key && card.contains(document.activeElement)) return;
+    const open = new Set([...card.querySelectorAll("details[open]")].map(d => d.dataset.sec));
+    card.dataset.id = key;
     card.hidden = false;
+    card.innerHTML = list.length > 1 ? groupCard(list) : tokenCard(tokenById(sel) || list[0]);
+    card.querySelectorAll("details").forEach(d => { if (open.has(d.dataset.sec)) d.open = true; });
+  }
+  function hpRow() {
+    return `<div class="row hp-row"><input type="number" class="num" id="hpDelta" min="0" placeholder="Amount" aria-label="Damage or healing">
+      <button type="button" class="btn danger small-btn" data-hp="-1">Damage</button><button type="button" class="btn small-btn" data-hp="1">Heal</button></div>`;
+  }
+  function tokenCard(t) {
     const can = controls(t), dm = isDm(), ch = charById(t.char);
     const hpKnown = t.hp != null || t.mhp != null;
-    let h = `<div class="row between">${can ? `<input class="name" data-k="name" value="${esc(t.name)}" maxlength="40" aria-label="Token name">` : `<h3>${esc(t.name)}</h3>`}
-      <button type="button" class="x" data-close aria-label="Close">✕</button></div>`;
-    if (ch) h += `<button type="button" class="link-btn" data-sheet>${esc(ch.name)}'s sheet</button>`;
+    let h = `<div class="row between card-head">${can ? `<input class="name" data-k="name" value="${esc(t.name)}" maxlength="40" aria-label="Token name">` : `<h3>${esc(t.name)}</h3>`}
+      ${t.ac != null ? `<span class="badge" title="Armour class">AC ${t.ac}</span>` : ""}<button type="button" class="x" data-close aria-label="Close">✕</button></div>`;
+    if (ch) h += `<button type="button" class="link-btn" data-sheet>Open ${esc(ch.name)}'s sheet</button>`;
     if (hpKnown) {
       const f = t.mhp ? Math.max(0, Math.min(1, t.hp / t.mhp)) : 0;
       h += `<div class="hpbar"><i style="width:${f * 100}%"></i><b>${t.hp ?? "?"} / ${t.mhp ?? "?"} HP</b></div>`;
-    } else if (t.look) h += `<p class="small">Looks <span class="look ${t.look}">${t.look === "down" ? "down" : t.look}</span></p>`;
+    } else if (t.look) h += `<p class="small">Looks <span class="look ${t.look}">${t.look}</span></p>`;
+    if (can) h += hpRow();
+    if (t.conds.length) h += `<div class="conds">${t.conds.map(c => `<button type="button" class="chip on" data-cond="${c}"${can ? ` title="Click to remove"` : " disabled"}>${c}</button>`).join("")}</div>`;
     if (can) {
-      h += `<div class="row"><label class="small muted">HP <input type="number" class="num" data-k="hp" value="${t.hp ?? ""}"></label>
-        <label class="small muted">Max <input type="number" class="num" data-k="mhp" value="${t.mhp ?? ""}"></label>
-        <label class="small muted">AC <input type="number" class="num" data-k="ac" value="${t.ac ?? ""}"></label></div>
-        <div class="row"><input type="number" class="num" id="hpDelta" min="0" placeholder="Amount" aria-label="Damage or healing">
-        <button type="button" class="btn danger small-btn" data-hp="-1">Damage</button><button type="button" class="btn small-btn" data-hp="1">Heal</button></div>`;
-    } else if (t.ac != null) h += `<p class="small">AC ${t.ac}</p>`;
-    h += `<div class="conds">${(can ? S.conditions : t.conds).map(c => `<button type="button" class="chip${t.conds.includes(c) ? " on" : ""}" data-cond="${c}"${can ? "" : " disabled"}>${c}</button>`).join("")}</div>`;
-    if (can) {
-      h += `<div class="row">${TOKEN_COLOURS.map(c => `<button type="button" class="sw${c === t.c ? " on" : ""}" style="--c:${c}" data-colour="${c}" aria-label="Colour"></button>`).join("")}</div>
-        <div class="row"><label class="small muted">Size <select data-k="size">${[[0.5, "Tiny"], [1, "Medium (1 sq)"], [2, "Large (2)"], [3, "Huge (3)"], [4, "Gargantuan (4)"], [6, "Colossal (6)"]].map(([v, l]) => `<option value="${v}"${v === t.size ? " selected" : ""}>${l}</option>`).join("")}</select></label>
-        ${ch ? "" : `<label class="small muted">Init bonus <input type="number" class="num" data-k="init" value="${t.init ?? ""}"></label>`}</div>`;
+      h += `<details data-sec="conds"><summary>Conditions</summary><div class="conds">${S.conditions.map(c => `<button type="button" class="chip${t.conds.includes(c) ? " on" : ""}" data-cond="${c}">${c}</button>`).join("")}</div></details>
+        <details data-sec="stats"><summary>Stats, size and look</summary>
+          <div class="row"><label class="small muted">HP <input type="number" class="num" data-k="hp" value="${t.hp ?? ""}"></label>
+            <label class="small muted">Max <input type="number" class="num" data-k="mhp" value="${t.mhp ?? ""}"></label>
+            <label class="small muted">AC <input type="number" class="num" data-k="ac" value="${t.ac ?? ""}"></label></div>
+          <div class="row"><label class="small muted">Size <select data-k="size">${SIZES.map(([v, l]) => `<option value="${v}"${v === t.size ? " selected" : ""}>${l}</option>`).join("")}</select></label>
+            ${ch ? "" : `<label class="small muted">Init <input type="number" class="num" data-k="init" value="${t.init ?? ""}"></label>`}
+            <label class="small muted" title="How far it sees, in squares, when the fog clears as the party explores">Sight <input type="number" class="num" data-k="sight" min="0" max="60" value="${t.sight ?? (t.owner || t.char ? 12 : 0)}"></label></div>
+          <div class="row">${TOKEN_COLOURS.map(c => `<button type="button" class="sw${c === t.c ? " on" : ""}" style="--c:${c}" data-colour="${c}" aria-label="Colour"></button>`).join("")}</div>
+          <button type="button" class="btn small-btn" data-pic>${t.img ? "Change picture" : "Add a picture"}</button>
+        </details>`;
       if (dm) {
         const people = Object.entries(S.names).filter(([q]) => !S.dms.includes(q));
-        h += `<div class="row"><label class="check"><input type="checkbox" data-k="hidden"${t.hidden ? " checked" : ""}> Hidden from players</label>
-          <label class="check"><input type="checkbox" data-k="showhp"${t.showhp ? " checked" : ""}> Players see HP</label></div>
+        h += `<details data-sec="dm"><summary>DM</summary>
+          <div class="row"><label class="check"><input type="checkbox" data-k="hidden"${t.hidden ? " checked" : ""}> Hidden from players</label>
+            <label class="check"><input type="checkbox" data-k="showhp"${t.showhp ? " checked" : ""}> Players see its HP</label></div>
           <div class="row"><label class="small muted">Moved by <select data-k="owner"><option value="">DM only</option>${people.map(([q, n]) => `<option value="${q}"${t.owner === q ? " selected" : ""}>${esc(n)}</option>`).join("")}</select></label>
-          <label class="small muted">Sheet <select data-k="char"><option value="">None</option>${S.chars.map(c => `<option value="${c.id}"${t.char === c.id ? " selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label></div>`;
-      }
-      h += `<label class="small muted">Note<textarea data-k="note" rows="2" maxlength="500" placeholder="${dm ? "Only DMs and whoever moves it see this" : "A note"}">${esc(t.note || "")}</textarea></label>`;
-      h += `<div class="row"><button type="button" class="btn small-btn" data-init>Roll initiative</button>
-        <button type="button" class="btn small-btn" data-pic>Picture</button><button type="button" class="btn small-btn" data-front>To front</button>
-        <button type="button" class="btn danger small-btn" data-del>Delete</button></div>`;
+            <label class="small muted">Sheet <select data-k="char"><option value="">None</option>${S.chars.map(c => `<option value="${c.id}"${t.char === c.id ? " selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label></div>
+          <label class="small muted">Note<textarea data-k="note" rows="2" maxlength="500" placeholder="Only DMs and whoever moves it see this">${esc(t.note || "")}</textarea></label>
+        </details>`;
+      } else h += `<label class="small muted">Note<textarea data-k="note" rows="2" maxlength="500">${esc(t.note || "")}</textarea></label>`;
+      h += `<div class="row card-btns"><button type="button" class="btn small-btn" data-init>Initiative</button>
+        <button type="button" class="btn small-btn" data-front>To front</button><button type="button" class="btn danger small-btn" data-del>Delete</button></div>`;
     } else if (t.note) h += `<p class="small">${esc(t.note)}</p>`;
-    card.innerHTML = h;
+    return h;
+  }
+  function groupCard(list) {
+    const mine = list.filter(controls);
+    let h = `<div class="row between card-head"><h3>${list.length} tokens</h3><button type="button" class="x" data-close aria-label="Close">✕</button></div>
+      <p class="muted small" style="margin:0">${esc(list.map(t => t.name).join(", "))}</p>`;
+    if (!mine.length) return h + `<p class="small">None of these are yours to change.</p>`;
+    if (mine.length < list.length) h += `<p class="small muted" style="margin:0">Changes only reach the ${mine.length} that are yours.</p>`;
+    h += hpRow();
+    h += `<details data-sec="gconds" open><summary>Conditions (on all of them)</summary><div class="conds">${S.conditions.map(c => {
+      const all = mine.every(t => t.conds.includes(c));
+      return `<button type="button" class="chip${all ? " on" : ""}" data-gcond="${c}" data-on="${all ? "" : "1"}">${c}</button>`;
+    }).join("")}</div></details>
+      <div class="row card-btns"><button type="button" class="btn small-btn" data-init>Initiative for all</button>
+      ${isDm() ? `<button type="button" class="btn small-btn" data-ghide="${mine.every(t => t.hidden) ? "" : "1"}">${mine.every(t => t.hidden) ? "Show all" : "Hide all"}</button>` : ""}
+      <button type="button" class="btn danger small-btn" data-del>Delete all</button></div>
+      <p class="muted small" style="margin:0">Shift+click a token to add it or take it out. Drag one to move them all.</p>`;
+    return h;
   }
   function editToken(t, set) {
     Object.assign(t, set);
@@ -1040,11 +1237,32 @@
   function initCard() {
     const card = $("tokenCard");
     card.addEventListener("click", async e => {
-      const t = sel && tokenById(sel);
-      if (!t) return;
+      const list = [...picked].map(tokenById).filter(Boolean);
+      const group = list.length > 1;
+      const t = group ? null : tokenById(sel) || list[0];
+      if (!list.length) return;
       const b = e.target.closest("button");
       if (!b) return;
       if (b.dataset.close != null) return selectToken(null);
+      const ids = list.filter(controls).map(x => x.id);
+      if (b.dataset.hp) {
+        const n = Math.abs(parseInt($("hpDelta").value, 10));
+        if (!n) { $("hpDelta").focus(); return note("Type how much damage or healing first."); }
+        const delta = n * Number(b.dataset.hp);
+        if (group) action("tok_group", { sc: viewSc, op: "hp", ids, delta });
+        else action("tok_edit", { sc: viewSc, id: t.id, set: { hpd: delta } });
+        $("hpDelta").value = "";
+        return;
+      }
+      if (b.dataset.init != null) return action("init_add", { sc: viewSc, ids, roll: true });
+      if (b.dataset.del != null) {
+        if (group) { if (!confirm(`Delete ${ids.length} tokens?`)) return; action("tok_group", { sc: viewSc, op: "del", ids }); }
+        else action("tok_del", { sc: viewSc, id: t.id });
+        return selectToken(null);
+      }
+      if (b.dataset.gcond) return action("tok_group", { sc: viewSc, op: "cond", ids, cond: b.dataset.gcond, on: !!b.dataset.on });
+      if (b.dataset.ghide != null) { for (const id of ids) action("tok_edit", { sc: viewSc, id, set: { hidden: !!b.dataset.ghide } }); return; }
+      if (!t) return;
       if (b.dataset.sheet != null) return openSheet(t.char);
       if (b.dataset.cond) {
         const conds = t.conds.includes(b.dataset.cond) ? t.conds.filter(c => c !== b.dataset.cond) : [...t.conds, b.dataset.cond];
@@ -1052,23 +1270,7 @@
         return renderCard(true);
       }
       if (b.dataset.colour) { editToken(t, { c: b.dataset.colour }); return renderCard(true); }
-      if (b.dataset.hp) {
-        const n = Math.abs(parseInt($("hpDelta").value, 10));
-        if (!n) { $("hpDelta").focus(); return note("Type how much damage or healing first."); }
-        let hp = (t.hp ?? t.mhp ?? 0) + n * Number(b.dataset.hp);
-        const ch = charById(t.char);
-        if (Number(b.dataset.hp) < 0 && ch && ch.thp) {           // temporary HP goes first
-          const soak = Math.min(ch.thp, n);
-          action("char_edit", { id: ch.id, set: { thp: ch.thp - soak } });
-          hp = (t.hp ?? 0) - (n - soak);
-        }
-        if (t.mhp && hp > t.mhp) hp = t.mhp;
-        editToken(t, { hp });
-        return renderCard(true);
-      }
-      if (b.dataset.init != null) return action("init_add", { sc: viewSc, ids: [t.id], roll: true });
       if (b.dataset.front != null) return action("tok_front", { sc: viewSc, id: t.id });
-      if (b.dataset.del != null) { action("tok_del", { sc: viewSc, id: t.id }); return selectToken(null); }
       if (b.dataset.pic != null) {
         const f = await pickFile();
         if (!f) return;
@@ -1077,10 +1279,10 @@
       }
     });
     card.addEventListener("change", e => {
-      const t = sel && tokenById(sel), k = e.target.dataset.k;
+      const t = picked.size === 1 && tokenById(sel), k = e.target.dataset.k;
       if (!t || !k) return;
       let v = e.target.type === "checkbox" ? e.target.checked : e.target.value;
-      if (["hp", "mhp", "ac", "init"].includes(k)) v = v === "" ? null : Number(v);
+      if (["hp", "mhp", "ac", "init", "sight"].includes(k)) v = v === "" ? null : Number(v);
       if (k === "size") v = Number(v);
       editToken(t, { [k]: v });
       if (k !== "name" && k !== "note") renderCard(true);
@@ -1099,6 +1301,7 @@
     box.innerHTML = `<form class="win narrow" autocomplete="off">
       <div class="row between"><h2 style="margin:0">Add a token</h2><button type="button" class="x" data-close aria-label="Close">✕</button></div>
       ${mine.length ? `<label class="field">From a character<select name="char"><option value="">None, a new token</option>${mine.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select></label>` : ""}
+      ${dm ? `<label class="field">Ready-made<select name="monster"><option value="">Pick one to fill in the numbers…</option>${MONSTERS.map(([n, hp, ac], i) => `<option value="${i}">${n} (HP ${hp}, AC ${ac})</option>`).join("")}</select></label>` : ""}
       <div class="form-grid">
         <label class="field full">Name<input name="name" maxlength="40" value="${esc(prefill.name || "")}" placeholder="${dm ? "Goblin, Guard captain…" : "Your character"}"></label>
         <label class="field">HP<input name="hp" type="number" min="0"></label>
@@ -1116,6 +1319,12 @@
     const form = box.querySelector("form");
     box.hidden = false;
     form.elements.name.focus();
+    if (form.elements.monster) form.elements.monster.addEventListener("change", () => {
+      const m = MONSTERS[form.elements.monster.value];
+      if (!m) return;
+      const F = form.elements;
+      [F.name.value, F.hp.value, F.ac.value, F.init.value, F.size.value] = [m[0], m[1], m[2], m[3], String(m[4])];
+    });
     form.addEventListener("click", async e => {
       const b = e.target.closest("button");
       if (!b) return;
@@ -1175,6 +1384,7 @@
     const time = new Date(e.at * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const priv = e.to ? `<span class="priv-tag">to DM</span>` : "";
     if (e.kind === "sys") li.innerHTML = `<span class="sys">${esc(e.text)}</span>`;
+    else if (e.kind === "show") li.innerHTML = `<span class="sys">The DM showed everyone <button type="button" class="link-btn" data-note="${esc(e.note)}">${esc(e.text)}</button></span>`;
     else if (e.kind === "chat") li.innerHTML = `<span class="who" style="color:${colourOf(e.by)}">${esc(e.who)}</span>${priv}<span class="time">${time}</span><br>${esc(e.text)}`;
     else {
       const r = e.roll;
@@ -1197,6 +1407,10 @@
       for (const e of added) ol.append(logItem(e));
       while (ol.children.length > list.length) ol.firstChild.remove();
       if (added.length) {
+        const r = [...added].reverse().find(e => e.kind === "roll");
+        if (r) popRoll(r);
+        const shown = [...added].reverse().find(e => e.kind === "show");
+        if (shown) openHandout(shown.note);
         if (added.some(e => e.kind === "roll")) FX.sound("roll");
         else if (added.some(e => e.kind === "chat" && e.by !== me)) FX.sound("tick");
         if (tab !== "chat") $$tab("chat").classList.add("ping");
@@ -1204,6 +1418,27 @@
     }
     lastLog = lastId;
     if (near || fresh) ol.scrollTop = ol.scrollHeight;
+  }
+  let popTimer = 0;
+  function popRoll(e) {
+    const r = e.roll, pop = $("rollPop");
+    pop.className = "tt-pop" + (r.crit ? " crit-" + r.crit : "") + (e.to ? " priv" : "");
+    pop.innerHTML = `<span class="who" style="color:${colourOf(e.by)}">${esc(e.who)}</span><span class="what">${esc(e.text || r.expr)}${e.to ? " · to DM" : ""}</span>
+      <b>${r.total}</b>${r.crit === "hit" ? "<span>Natural 20!</span>" : r.crit === "miss" ? "<span>Natural 1</span>" : ""}`;
+    pop.hidden = false;
+    pop.style.animation = "none";
+    void pop.offsetWidth;
+    pop.style.animation = "";
+    clearTimeout(popTimer);
+    popTimer = setTimeout(() => { pop.hidden = true; }, 2600);
+  }
+  function openHandout(id) {
+    const n = S.notes.find(x => x.id === id);
+    if (!n) return;
+    const box = $("handout");
+    box.innerHTML = `<div class="win"><div class="row between"><h2 style="margin:0">${esc(n.title)}</h2><button type="button" class="x" data-close aria-label="Close">✕</button></div>
+      ${n.img ? `<img class="handout-img" src="${assetUrl(n.img)}" alt="">` : ""}${n.text ? `<div class="note-text">${esc(n.text)}</div>` : ""}</div>`;
+    box.hidden = false;
   }
   function roll(expr, label, as) {
     action("roll", { expr, label: label || "", as: as || "", mode: rollMode, to: $("toDm").checked ? "dm" : "" });
@@ -1218,6 +1453,8 @@
       b.addEventListener("click", () => roll("1d" + n, n === 20 && rollMode ? (rollMode === "adv" ? "with advantage" : "with disadvantage") : ""));
       db.append(b);
     }
+    $("log").addEventListener("click", e => { const b = e.target.closest("[data-note]"); if (b) openHandout(b.dataset.note); });
+    $("handout").addEventListener("click", e => { if (e.target === $("handout") || e.target.closest("[data-close]")) closeModal("handout"); });
     $("rollMode").addEventListener("click", e => {
       const b = e.target.closest("button");
       if (!b) return;
@@ -1242,8 +1479,10 @@
     if (!init.cur) { b.hidden = true; return; }
     const cur = init.list.find(e => e.id === init.cur);
     b.hidden = false;
-    b.textContent = `Round ${init.round} · ${cur ? cur.name + "'s turn" : "the DM's turn"}`;
     const mine = cur && cur.tok && (() => { for (const sc of S.scenes) { const t = sc.tokens.find(x => x.id === cur.tok); if (t) return t.owner === me || (charById(t.char) || {}).owner === me; } return false; })();
+    b.innerHTML = `<span>Round ${init.round} · ${cur ? esc(cur.name) + "'s turn" : "the DM's turn"}</span>` +
+      (isDm() ? `<button type="button" class="btn small-btn" data-next>Next ▸</button>` : mine ? `<button type="button" class="btn primary small-btn" data-next>End my turn</button>` : "");
+    b.classList.toggle("mine", !!mine);
     if (mine && myTurnSeen !== init.cur + ":" + init.round) { FX.sound("ding"); note("It's your turn!"); }
     myTurnSeen = init.cur + ":" + init.round;
   }
@@ -1280,6 +1519,7 @@
       }
     });
     $("nextTurn").addEventListener("click", () => action("init_next"));
+    $("turnBanner").addEventListener("click", e => { if (e.target.closest("[data-next]")) action("init_next"); });
     $("prevTurn").addEventListener("click", () => action("init_prev"));
     $("initEnd").addEventListener("click", () => { if (confirm("End the fight and clear the turn order?")) action("init_clear"); });
     $("initSel").addEventListener("click", () => {
@@ -1415,6 +1655,12 @@
       </div>
       <div class="sec"><h4>Attacks</h4>${atks || `<p class="muted small" style="margin:0">No attacks yet.</p>`}
         ${can ? `<button type="button" class="btn small-btn" data-atkadd style="align-self:flex-start">Add attack</button>` : ""}</div>
+      <div class="sec"><h4>Spell slots <small class="muted" style="text-transform:none;letter-spacing:0">how many of each level, and tick the ones used</small></h4>
+        <div class="slots">${(ch.slots || []).map(([mx, used], i) => `<div class="slot"><span class="lbl">${["1st", "2nd", "3rd"][i] || i + 1 + "th"}</span>
+          <input type="number" min="0" max="9" data-f="slotmax.${i}" value="${mx}"${dis} aria-label="Level ${i + 1} slots">
+          <span class="pips">${Array.from({ length: mx }, (_, j) => `<input type="checkbox" data-f="slotuse.${i}.${j}"${used > j ? " checked" : ""}${dis} aria-label="Level ${i + 1} slot ${j + 1} used">`).join("")}</span></div>`).join("")}</div></div>
+      <div class="row"><label class="small muted">Hit dice <input data-f="hd" value="${esc(ch.hd || "")}" placeholder="3d10" maxlength="30" style="width:110px"${dis}></label>
+        ${can ? `<button type="button" class="btn small-btn" data-rest="short">Short rest</button><button type="button" class="btn small-btn" data-rest="long">Long rest</button>` : ""}</div>
       <div class="form-grid">
         <label class="field">Features and traits<textarea data-f="feats" rows="5"${dis}>${esc(ch.feats)}</textarea></label>
         <label class="field">Spells and slots<textarea data-f="spells" rows="5"${dis}>${esc(ch.spells)}</textarea></label>
@@ -1449,6 +1695,13 @@
       }
       if (!ownsChar(ch)) return;
       if (b.dataset.colour) { sheetSet(ch, { c: b.dataset.colour }); return renderSheet(); }
+      if (b.dataset.rest === "long") { if (confirm(`Long rest for ${ch.name}? HP, temporary HP, death saves and spell slots go back to normal.`)) action("char_rest", { id: ch.id, long: true }); return; }
+      if (b.dataset.rest === "short") {
+        const die = ((ch.hd || "").match(/d\d+/) || ["d8"])[0], c = mod(ch.abil.con);
+        const expr = prompt("Spend hit dice to heal? Type the dice to roll, or leave it empty for none.", `1${die}${c ? sign(c) : ""}`);
+        if (expr !== null) action("char_rest", { id: ch.id, expr: expr.trim() });
+        return;
+      }
       if (b.dataset.atkadd != null) { sheetSet(ch, { attacks: [...ch.attacks, { n: "", hit: "", dmg: "" }] }); return renderSheet(); }
       if (b.dataset.atkdel != null) { sheetSet(ch, { attacks: ch.attacks.filter((_, i) => i !== Number(b.dataset.atkdel)) }); return renderSheet(); }
       if (b.dataset.place != null) { placeChar(ch); return closeModal("sheet"); }
@@ -1476,6 +1729,13 @@
         const ds = [...ch.ds];
         ds[k] = v ? j + 1 : j;
         sheetSet(ch, { ds });
+      } else if (f.startsWith("slotmax.") || f.startsWith("slotuse.")) {
+        const parts = f.split(".");
+        const slots = (ch.slots || []).map(x => [...x]), i = Number(parts[1]);
+        if (parts[0] === "slotmax") { slots[i][0] = Math.max(0, Math.min(9, Number(v) || 0)); slots[i][1] = Math.min(slots[i][1], slots[i][0]); }
+        else slots[i][1] = v ? Number(parts[2]) + 1 : Number(parts[2]);
+        sheetSet(ch, { slots });
+        renderSheet();
       } else if (f.startsWith("atk.")) {
         const [, i, key] = f.split(".");
         const attacks = ch.attacks.map(a => ({ ...a }));
@@ -1499,8 +1759,11 @@
       ul.innerHTML = S.notes.map(n => isDm()
         ? `<li data-id="${n.id}" class="${n.shared ? "shared" : ""}"><div class="row"><input class="title" value="${esc(n.title)}" data-k="title" maxlength="60" aria-label="Note title">
             <label class="check"><input type="checkbox" data-k="shared"${n.shared ? " checked" : ""}> Shared</label><button type="button" class="x" data-del aria-label="Delete note">✕</button></div>
-            <textarea data-k="text" rows="4" aria-label="Note">${esc(n.text)}</textarea></li>`
-        : `<li class="shared"><b>${esc(n.title)}</b><div class="note-text">${esc(n.text)}</div></li>`).join("");
+            ${n.img ? `<img class="note-img" src="${assetUrl(n.img)}" alt="" data-open>` : ""}
+            <textarea data-k="text" rows="4" aria-label="Note">${esc(n.text)}</textarea>
+            <div class="row"><button type="button" class="btn small-btn" data-img>${n.img ? "Change picture" : "Add picture"}</button>${n.img ? `<button type="button" class="link-btn" data-noimg>Remove picture</button>` : ""}
+            <button type="button" class="btn primary small-btn" data-show>Show everyone</button></div></li>`
+        : `<li class="shared" data-id="${n.id}"><b>${esc(n.title)}</b>${n.img ? `<img class="note-img" src="${assetUrl(n.img)}" alt="" data-open>` : ""}<div class="note-text">${esc(n.text)}</div></li>`).join("");
     }
     $("noteEmpty").hidden = S.notes.length > 0;
     if (document.activeElement !== $("myNotes")) $("myNotes").value = S.mine || "";
@@ -1518,9 +1781,21 @@
       const li = e.target.closest("li");
       if (li && e.target.dataset.k === "shared") action("note_edit", { id: li.dataset.id, shared: e.target.checked });
     });
-    ul.addEventListener("click", e => {
+    ul.addEventListener("click", async e => {
       const li = e.target.closest("li");
-      if (li && e.target.closest("[data-del]") && confirm("Delete this note?")) action("note_del", { id: li.dataset.id });
+      if (!li) return;
+      const id = li.dataset.id;
+      if (e.target.closest("[data-del]")) { if (confirm("Delete this note?")) action("note_del", { id }); }
+      else if (e.target.closest("[data-open]")) openHandout(id);
+      else if (e.target.closest("[data-show]")) action("note_show", { id });
+      else if (e.target.closest("[data-noimg]")) action("note_img", { id, src: "" });
+      else if (e.target.closest("[data-img]")) {
+        const f = await pickFile();
+        if (!f) return;
+        note("Getting the picture ready…");
+        try { action("note_img", { id, src: (await shrink(f, 2000, false)).url }); }
+        catch { note("That picture couldn't be used. Try a PNG or JPG."); }
+      }
     });
     let t = 0;
     $("myNotes").addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => action("my_notes", { text: $("myNotes").value }), 700); });
@@ -1553,6 +1828,8 @@
         ${["#000000", "#ffffff", "#7c3aed"].map(c => `<button type="button" class="sw${sc.gc === c ? " on" : ""}" style="--c:${c}" data-gc="${c}" aria-label="Grid colour"></button>`).join("")}</div>
       <div class="row"><label class="check"><input type="checkbox" data-k="fog"${sc.fog ? " checked" : ""}> Fog of war</label>
         ${sc.fog ? `<button type="button" class="btn small-btn" data-fogall="1">Reveal all</button><button type="button" class="btn small-btn" data-fogall="0">Hide all</button>` : ""}</div>
+      ${sc.fog ? `<label class="check"><input type="checkbox" data-k="auto"${sc.auto ? " checked" : ""}> Reveal as the party explores</label>
+        <p class="muted small" style="margin:0">The fog clears around the players' tokens as they move, as far as each one sees (Sight on its card) and not through walls or shut doors. Draw walls with the wall tool (W).</p>` : ""}
       <div class="row">${sc.id !== S.active ? `<button type="button" class="btn primary small-btn" data-show>Show to players</button>` : ""}
         <button type="button" class="btn small-btn" data-copy>Copy scene</button><button type="button" class="btn danger small-btn" data-del>Delete scene</button></div>`;
   }
@@ -1583,7 +1860,7 @@
     box.addEventListener("change", e => {
       const sc = scene(), k = e.target.dataset.k;
       if (!sc || !k) return;
-      if (k === "grid" || k === "fog") action("scene_edit", { sc: sc.id, [k]: e.target.checked });
+      if (k === "grid" || k === "fog" || k === "auto") action("scene_edit", { sc: sc.id, [k]: e.target.checked });
       else if (k === "name") action("scene_edit", { sc: sc.id, name: e.target.value });
       else if (k === "cols") { const cols = Number(e.target.value) || sc.cols; action("scene_edit", { sc: sc.id, cols, rows: rowsFor(sc, cols) }); }
       else if (k === "rows") action("scene_edit", { sc: sc.id, rows: Number(e.target.value) || sc.rows });
@@ -1614,7 +1891,7 @@
         } catch { note("That picture couldn't be used. Try a PNG or JPG."); }
       }
     });
-    $("scenePick").addEventListener("change", e => { viewSc = e.target.value; selectToken(null); fitView(); renderAll(); });
+    $("scenePick").addEventListener("change", e => { viewSc = e.target.value; wallPts = null; selectToken(null); fitView(); renderAll(); });
     $("showScene").addEventListener("click", () => action("scene_show", { sc: viewSc }));
   }
 
