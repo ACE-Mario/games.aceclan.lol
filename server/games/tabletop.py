@@ -26,6 +26,9 @@ What a campaign holds:
     pretend     players the DM makes up ("Make fake player") to try the table out alone: each gets a token, and
     players     the DM can play as one, seeing and doing exactly what a real player would (walls, fog, triggers,
                 hidden stairs). The DM's actions carry "as": <pretend player id> while they do.
+    spawn       each scene's player spawn: the area (x, y, w, h) the DM marks in the map maker. When the party is sent
+                to a scene (Show to players, a link, a trigger), their tokens land there. Stairs players walk
+                onto still put them next to the stairs that lead back.
     notes       the DM's notes; ones marked shared are handouts every player can read, and the DM can show one
                 (with its picture) on everyone's screen. Each person also has their own private notes.
 
@@ -68,14 +71,18 @@ MAX_LABELS = 200
 # Indoor floors (and doors) get walls round them by themselves wherever they meet nothing or solid wall, so the DM
 # just draws rooms and corridors ("Walls round it" can be turned off for open ground).
 # S is a secret door: players see plain wall there (and get no door) until the DM turns it into a D.
-TILES = ".fogdslpwDS"
+# h is a hidden wall: a wall for sight and moving, joined up with the walls round it, but players see floor there
+# until the DM (or a trigger) shows it; then it's H, a wall they can see. Showing or hiding takes the whole
+# connected stretch of it.
+TILES = ".fogdslpwDShH"
 OPEN_TILES = "fogdslpDS"
-SOLID_TILES = ".w"
+SOLID_TILES = ".whH"
+WALL_TILES = "whH"
 # Whether a painted square gets walls where it meets rock is up to the DM ("Walls round it" in the map maker):
 # one "1" or "0" a square in "wl". Doors always do. Maps from before "wl" walled stone and wood only.
 OLD_WALLED = "foDS"
 PROPS = ("table", "chair", "barrel", "crate", "chest", "bed", "shelf", "pillar", "statue", "stairs", "torch",
-         "campfire", "altar", "well", "tree", "bush", "rock", "rubble", "rug", "web", "trap")
+         "campfire", "altar", "well", "tree", "bush", "rock", "rubble", "rug", "web", "trap", "lever", "plate")
 DM_PROPS = ("trap",)                                # players never get these, until the DM shows them ("found")
 # Any prop can also be hidden (players don't get it, and hidden stairs don't take anyone anywhere) until the DM
 # or a trigger reveals it. A hidden prop can sit under another one (stairs under a rug): when it's revealed, the
@@ -95,9 +102,20 @@ STARTER_LIB = (                   # name, kind, HP, AC, initiative bonus, size
     ("Knight", "npc", 52, 18, 0, 1),
 )
 # Triggers (the DM's Scripting tab): an area of squares, or a token, and what happens when a player's token
-# steps into it ("enter") or can see it ("see": any distance, walls and shut doors block, hidden tokens can't be seen).
-TRIG_WHEN = ("enter", "see")
-TRIG_DO = ("tell", "text", "scene", "reveal")      # just tell the DM, show players a message, move them, unhide tokens and props
+# steps into it ("enter"), can see it ("see": any distance, walls and shut doors block, hidden tokens can't be seen),
+# or clicks it while standing on it or right next to it ("use": a chest, a lever, a door, an NPC).
+TRIG_WHEN = ("enter", "see", "use")
+TRIG_DO = ("tell", "text", "scene", "reveal", "open", "give")   # give: a loot chest, its items go to the party   # tell the DM, show a message, move them, unhide things, open things
+# "reveal" and "open" work on the trigger's own squares, or on another area of the map ("tgt": a lever across the room).
+# "open" opens doors (unlocking them), turns secret doors into doors and takes hidden walls away: a secret passage.
+# "ask": the trigger doesn't do anything by itself; the DM is told, has the player roll (off the site), then sets it
+# off or skips it from the right-click menu ("pending" until then).
+MAX_ITEMS = 100
+MAX_MARKS = 80                    # places on the world map
+MAX_BOARD = 80                    # notes pinned on the handout board
+MAX_HP = 9999
+ITEM_KINDS = ("item", "key", "handout")
+ENC_DIFFS = ("easy", "medium", "hard", "deadly")       # the party's things; a key the party holds opens doors set to need it
 MAX_TRIGS = 100
 MAX_POPS = 30
 MAX_FAKES = 8
@@ -335,7 +353,7 @@ def _campaigns():
 
 
 SAVED_KEYS = ("name", "slug", "owner", "created", "dms", "dmcode", "names", "scenes", "order", "active", "at",
-              "chars", "notes", "mine", "log", "init", "settings", "assets", "logn", "lib", "pops", "popn", "fakes")
+              "chars", "notes", "mine", "log", "init", "settings", "assets", "logn", "lib", "pops", "popn", "fakes", "items", "enc", "world", "board")
 
 
 class Tabletop:
@@ -350,7 +368,8 @@ class Tabletop:
              "chars": {}, "notes": {}, "mine": {}, "log": [], "logn": 0,
              "init": {"list": [], "cur": None, "round": 0},
              "settings": {"per": 5, "unit": "ft"}, "assets": {}, "lib": self._starter_lib(), "pops": [], "popn": 0,
-             "fakes": {}, "playas": {},
+             "fakes": {}, "playas": {}, "items": {}, "enc": {"lvl": 1, "diff": "medium"},
+             "world": {"img": None, "marks": {}, "open": False}, "board": {},
              "deleted": False, "dirty": True, "changed": 0.0}
         sc = self._scene("The first map", 24, 16)
         s["scenes"][sc["id"]] = sc
@@ -371,7 +390,7 @@ class Tabletop:
         return {"id": new_id(), "name": name, "img": None, "cols": cols, "rows": rows, "ox": 0.0, "oy": 0.0,
                 "grid": True, "gc": "#000000", "fog": False, "auto": False, "seen": "0" * (cols * rows),
                 "tokens": {}, "lines": {}, "walls": {}, "tiles": "." * (cols * rows), "wl": "1" * (cols * rows),
-                "props": {}, "labels": {}, "trig": {}, "block": True}
+                "props": {}, "labels": {}, "trig": {}, "block": True, "spawn": None}
 
     def default_seat(self, room):
         return {}
@@ -455,6 +474,15 @@ class Tabletop:
             s["at"] = {}
         if not isinstance(s.get("lib"), dict):
             s["lib"] = self._starter_lib()
+        if not isinstance(s.get("enc"), dict) or "lvl" not in s["enc"]:
+            s["enc"] = {"lvl": 1, "diff": "medium"}
+        if not isinstance(s.get("items"), dict):
+            s["items"] = {}
+        if not isinstance(s.get("world"), dict):
+            s["world"] = {"img": None, "marks": {}, "open": False}
+        s["world"].setdefault("marks", {})
+        if not isinstance(s.get("board"), dict):
+            s["board"] = {}
         if not isinstance(s.get("fakes"), dict):
             s["fakes"] = {}
         s["names"].update(s["fakes"])
@@ -469,6 +497,7 @@ class Tabletop:
             sc.setdefault("labels", {})
             sc.setdefault("trig", {})
             sc.setdefault("block", True)
+            sc.setdefault("spawn", None)
             if len(sc.get("wl") or "") != len(sc["tiles"]):
                 sc["wl"] = "".join("1" if t in OLD_WALLED or t == "." else "0" for t in sc["tiles"])
         for ch in s["chars"].values():
@@ -524,6 +553,8 @@ class Tabletop:
         used.update(c.get("img") for c in s["chars"].values())
         used.update(n.get("img") for n in s["notes"].values())
         used.update(e.get("img") for e in s.get("lib", {}).values())
+        used.update(i.get("img") for i in s.get("items", {}).values())
+        used.add(s.get("world", {}).get("img"))
         for name in [a for a in s["assets"] if a not in used]:
             s["assets"].pop(name, None)
             try:
@@ -543,6 +574,10 @@ class Tabletop:
                 wl[y * cols + x] = oldw[y * sc["cols"] + x]
         sc["cols"], sc["rows"], sc["seen"], sc["tiles"], sc["wl"] = cols, rows, "".join(seen), "".join(tiles), "".join(wl)
         sc["props"] = {k: v for k, v in sc.get("props", {}).items() if v["x"] < cols and v["y"] < rows}
+        sp = sc.get("spawn")
+        if sp:                                          # keep the spawn on the map
+            sc["spawn"] = None if sp["x"] >= cols or sp["y"] >= rows else {
+                "x": sp["x"], "y": sp["y"], "w": min(sp["w"], cols - sp["x"]), "h": min(sp["h"], rows - sp["y"])}
         self._auto_walls(sc)
 
     def _auto_walls(self, sc):
@@ -566,7 +601,7 @@ class Tabletop:
         def wall_between(x1, y1, x2, y2):
             a, b = tile(x1, y1), tile(x2, y2)
             return ((walled(x1, y1) and b in SOLID_TILES) or (walled(x2, y2) and a in SOLID_TILES)
-                    or (a == "w" and b in OPEN_TILES) or (b == "w" and a in OPEN_TILES))
+                    or (a in WALL_TILES and b in OPEN_TILES) or (b in WALL_TILES and a in OPEN_TILES))
 
         made = 0
 
@@ -604,7 +639,7 @@ class Tabletop:
             p = [x, y + 0.5, x + 1, y + 0.5] if across else [x + 0.5, y, x + 0.5, y + 1]
             old = doors.get(f"{x},{y}") or {}
             add(p, door=True, open=bool(old.get("open")), locked=bool(old.get("locked")), tile=f"{x},{y}",
-                secret=t == "S", showlock=bool(old.get("showlock")))
+                secret=t == "S", showlock=bool(old.get("showlock")), key=old.get("key"))
 
     def _covered(self, sc, t):
         """Is this token fully under fog (so players can't see it)?"""
@@ -715,9 +750,18 @@ class Tabletop:
         """Everyone (not DMs) who's on this scene."""
         return [q for q in s["names"] if not self.is_dm(s, q) and self._where(s, q) == sc["id"]]
 
-    def _fire(self, s, sc, tr, t, how):
-        if tr.get("once"):
+    def _fire(self, s, sc, tr, t, how, force=False):
+        if tr.get("ask") and not force:            # the DM decides (after a roll): it waits till then
             tr["used"] = True
+            tr["pending"] = {"tok": t["id"], "how": how, "name": t["name"]}
+            cells = self._trig_cells(sc, tr) or [(tr.get("x", 0), tr.get("y", 0))]
+            at = [sum(c[0] for c in cells) / len(cells) + 0.5, sum(c[1] for c in cells) / len(cells) + 0.5]
+            verb = {"enter": "stepped into", "use": "used"}.get(how, "can see")
+            self._pop(s, f'{tr["name"]}: your call', f'{t["name"]} {verb} it. Have them roll, then right-click it to set it off or skip it.',
+                      dm=True, sc=sc["id"], at=at)
+            return
+        tr["pending"] = None
+        tr["used"] = bool(tr.get("once"))
         who = self._owner_of(s, t)
         everyone = tr.get("who") == "all"
         to = self._players_on(s, sc) if everyone else [q for q in [who] if q and not self.is_dm(s, q)]
@@ -740,7 +784,22 @@ class Tabletop:
                 for q in to:
                     s["at"][q] = target["id"]
                 did = f' Sent {"the party" if everyone else "them"} to {target["name"]}.'
+        elif tr["do"] == "give":                   # loot: these items go straight to the party
+            got = [i for i in (s["items"].get(k) for k in tr.get("items") or []) if i and not i["given"]]
+            for i in got:
+                i["given"] = True
+            if got:
+                names = ", ".join(i["name"] for i in got)
+                self._pop(s, tr["name"], (tr.get("text") + "\n\n" if tr.get("text") else "") + f"The party got: {names}. It's in the Items tab.",
+                          to=[q for q in s["names"] if not self.is_dm(s, q)])
+                did = f" The party got {names}."
+            else:
+                did = " There was nothing left to give."
+        elif tr["do"] == "open":
+            got = self._open_area(sc, self._tgt_cells(sc, tr) or cells)
+            did = f" Opened {got}." if got else ""
         elif tr["do"] == "reveal":
+            cells = self._tgt_cells(sc, tr) or cells
             n = 0
             for o in sc["tokens"].values():
                 if o.get("hidden") and self._touches(o, cells):
@@ -754,10 +813,72 @@ class Tabletop:
                 if pr.get("hidden") and (pr["x"], pr["y"]) in area:
                     self._set_hidden(sc, pr, False)
                     m += 1
-            got = [f"{n} hidden token{'s' if n != 1 else ''}"] * bool(n) + [f"{m} hidden prop{'s' if m != 1 else ''}"] * bool(m)
+            w = self._show_hwall(sc, cells, True)
+            got = ([f"{n} hidden token{'s' if n != 1 else ''}"] * bool(n) + [f"{m} hidden prop{'s' if m != 1 else ''}"] * bool(m)
+                   + ["a hidden wall"] * bool(w))
             did = f" Revealed {' and '.join(got)}." if got else ""
-        verb = "stepped into" if how == "enter" else "can see"
+        verb = {"enter": "stepped into", "use": "used"}.get(how, "can see")
         self._pop(s, tr["name"], f'{t["name"]} {verb} it.{did}', dm=True, sc=sc["id"], at=at)
+
+    def _tgt_cells(self, sc, tr):
+        g = tr.get("tgt")
+        if not g:
+            return None
+        return [(x, y) for y in range(g["y"], min(sc["rows"], g["y"] + g["h"])) for x in range(g["x"], min(sc["cols"], g["x"] + g["w"]))]
+
+    def _open_area(self, sc, cells):
+        """A lever (or such) opens what's in these squares: doors (unlocked and opened), secret doors (they become
+        doors) and hidden walls (they're gone: a passage). Hidden tokens and props there show too. Says what it did."""
+        cols, rows = sc["cols"], sc["rows"]
+        area = set(cells)
+        T = list(sc.get("tiles", ""))
+        secret = 0
+        for x, y in cells:
+            if T and T[y * cols + x] == "S":
+                T[y * cols + x] = "D"
+                secret += 1
+        gone = set()                                  # hidden walls touching the area, the whole stretch
+        todo = [(x, y) for x, y in cells if T and T[y * cols + x] in "hH"]
+        while todo:
+            c = todo.pop()
+            if c in gone:
+                continue
+            gone.add(c)
+            x, y = c
+            for xx, yy in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if 0 <= xx < cols and 0 <= yy < rows and T[yy * cols + xx] in "hH" and (xx, yy) not in gone:
+                    todo.append((xx, yy))
+        for x, y in gone:
+            near = [T[yy * cols + xx] for xx, yy in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1))
+                    if 0 <= xx < cols and 0 <= yy < rows and (xx, yy) not in gone]
+            T[y * cols + x] = next((n for n in near if n in "fogd"), "f")
+        if secret or gone:
+            sc["tiles"] = "".join(T)
+            self._auto_walls(sc)
+        doors = 0
+        for w in sc["walls"].values():
+            if not w.get("door"):
+                continue
+            if w.get("tile"):
+                x, y = map(int, w["tile"].split(","))
+            else:
+                x, y = int((w["p"][0] + w["p"][2]) / 2), int((w["p"][1] + w["p"][3]) / 2)
+            if (x, y) in area and (not w.get("open") or w.get("locked") or w.get("secret")):
+                w["open"], w["locked"], w["secret"] = True, False, False
+                doors += 1
+        shown = 0
+        for o in sc["tokens"].values():
+            if o.get("hidden") and self._touches(o, cells):
+                o["hidden"] = False
+                shown += 1
+        for pr in list(sc.get("props", {}).values()):
+            if pr.get("hidden") and (pr["x"], pr["y"]) in area:
+                self._set_hidden(sc, pr, False)
+                shown += 1
+        self._reveal(sc)
+        got = ([f"{doors} door{'s' if doors != 1 else ''}"] * bool(doors) + ["a hidden wall"] * bool(gone)
+               + [f"{shown} hidden thing{'s' if shown != 1 else ''}"] * bool(shown))
+        return " and ".join(got)
 
     def _triggers(self, s, sc, moved=(), by_player=False):
         """Check this scene's triggers after something changed. moved: tokens that just moved."""
@@ -778,7 +899,7 @@ class Tabletop:
                         self._fire(s, sc, tr, t, "enter")
                         break
                 tr["inside"] = sorted(now)
-            else:
+            elif tr["when"] == "see":
                 if walls is None:
                     walls = [w["p"] for w in sc["walls"].values() if not (w.get("door") and w.get("open"))]
                 seer = next((t for t in pcs if cells and self._sees(sc, t, cells, walls)), None)
@@ -988,6 +1109,25 @@ class Tabletop:
         if was and not pr["hidden"]:
             self._uncover(sc, pr)
 
+    def _show_hwall(self, sc, cells, show):
+        """Show (h -> H) or hide (H -> h) the hidden walls touching these squares, the whole joined-up stretch."""
+        T, cols, rows = list(sc.get("tiles", "")), sc["cols"], sc["rows"]
+        src, dst = ("h", "H") if show else ("H", "h")
+        todo = [(x, y) for x, y in cells if 0 <= x < cols and 0 <= y < rows and T[y * cols + x] == src]
+        n = 0
+        while todo:
+            x, y = todo.pop()
+            if T[y * cols + x] != src:
+                continue
+            T[y * cols + x] = dst
+            n += 1
+            for xx, yy in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if 0 <= xx < cols and 0 <= yy < rows and T[yy * cols + xx] == src:
+                    todo.append((xx, yy))
+        if n:
+            sc["tiles"] = "".join(T)
+        return n
+
     def _free_spot(self, sc, t, near):
         """A square near (x, y) where token t fits: on the map, not in rock or wall, not on another token."""
         cols, rows, T = sc["cols"], sc["rows"], sc.get("tiles", "")
@@ -1014,12 +1154,14 @@ class Tabletop:
                 return x, y
         return max(0, min(cols - n, nx)), max(0, min(rows - n, ny))
 
-    def _arrive(self, s, sc, t, target):
-        """Move token t from scene sc to scene target, next to the stairs (or door...) that lead back."""
+    def _arrive(self, s, sc, t, target, stairs=False):
+        """Move token t from scene sc to scene target: into its player spawn, or (walking stairs, or no spawn)
+        next to the stairs (or door...) that lead back."""
         back = next((pr for pr in target.get("props", {}).values() if pr.get("to") == sc["id"]), None)
         near = (back["x"], back["y"]) if back else (target["cols"] // 2, target["rows"] // 2)
         del sc["tokens"][t["id"]]
-        t["x"], t["y"] = self._free_spot(target, t, near)
+        spot = None if stairs and back else self._spawn_spot(target, t)
+        t["x"], t["y"] = spot or self._free_spot(target, t, near)
         target["tokens"][t["id"]] = t
         for e in s["init"]["list"]:
             if e.get("tok") == t["id"]:
@@ -1065,6 +1207,15 @@ class Tabletop:
                     todo.append(b)
         return True
 
+    def _spawn_spot(self, sc, t):
+        """A free square for token t inside the scene's player spawn (or as close to it as it gets), or None."""
+        sp = sc.get("spawn")
+        if not sp:
+            return None
+        cx, cy = sp["x"] + sp["w"] // 2, sp["y"] + sp["h"] // 2
+        x, y = self._free_spot(sc, t, (cx, cy))
+        return x, y
+
     def _take_stairs(self, s, sc, t, pid, dm):
         """A player's token moved onto a link players may use: it goes to the linked scene, and so do they."""
         if dm:
@@ -1073,7 +1224,7 @@ class Tabletop:
         for pr in sc.get("props", {}).values():
             target = s["scenes"].get(pr.get("to") or "")
             if pr.get("open") and not pr.get("hidden") and target and target is not sc and x0 <= pr["x"] < x0 + n and y0 <= pr["y"] < y0 + n:
-                self._arrive(s, sc, t, target)
+                self._arrive(s, sc, t, target, stairs=True)
                 for who in {pid, self._owner_of(s, t)}:
                     if who and not self.is_dm(s, who):
                         s["at"][who] = target["id"]
@@ -1150,9 +1301,9 @@ class Tabletop:
         if action == "play_as":
             if not dm:
                 return need_dm
-            fid = data.get("id")
-            if fid and (not isinstance(fid, str) or fid not in s["fakes"]):
-                return "That pretend player isn't there any more."
+            fid = data.get("id")                      # a pretend player to play as, or a real one to look as
+            if fid and (not isinstance(fid, str) or fid not in self._viewable(room)):
+                return "That player isn't here any more."
             if fid:
                 s["playas"][pid] = fid
             else:
@@ -1264,9 +1415,7 @@ class Tabletop:
                 self._tidy_assets(s)
                 return None
             if action == "scene_show":
-                s["active"] = sc["id"]
-                s["at"] = {}                            # everyone, wherever they wandered off to
-                self._sys(s, f"The party moves to {sc['name']}.")
+                self._show_scene(s, sc)
                 return None
             if action == "scene_move":
                 i = s["order"].index(sc["id"])
@@ -1329,6 +1478,14 @@ class Tabletop:
             e.update(id=new_id(), cat=data.get("cat") if data.get("cat") in LIB_CATS else "enemy",
                      name=re.sub(r"\s+\d+$", "", t["name"]) or t["name"], mhp=mhp if mhp is not None else hp, ac=ac)
             lib[e["id"]] = e
+            return None
+        if action == "enc_set":                       # random encounters: the party's level and how hard a fight
+            if not dm:
+                return need_dm
+            lvl = num(data.get("lvl"), 1, 20)
+            diff = data.get("diff") if data.get("diff") in ENC_DIFFS else s["enc"].get("diff", "medium")
+            size = num(data.get("size"), 0, 12) if "size" in data else s["enc"].get("size", 0)
+            s["enc"] = {"lvl": lvl or s["enc"].get("lvl", 1), "diff": diff, "size": size or 0}
             return None
         if action == "lib_del":
             if not dm:
@@ -1477,7 +1634,126 @@ class Tabletop:
             return None
 
         # -- Map maker --
-        if action in ("tiles", "map_set", "prop_add", "prop_del", "prop_edit", "trap_fire", "prop_link", "link_go", "label_add", "label_edit",
+        if action in ("break_set", "break_hit"):     # breakable walls and doors: HP the DM sets and knocks off
+            if not dm:
+                return need_dm
+            sc = s["scenes"].get(str(data.get("sc", "")))
+            if not sc:
+                return "That scene isn't there any more."
+            cols, rows = sc["cols"], sc["rows"]
+            x, y = num(data.get("x"), 0, cols - 1), num(data.get("y"), 0, rows - 1)
+            if x is None or y is None:
+                return "Couldn't find that square."
+            if sc["tiles"][y * cols + x] not in WALL_TILES + "DS":
+                return "Only walls and doors can be broken."
+            hp = sc.setdefault("hp", {})
+            k = f"{x},{y}"
+            if action == "break_set":
+                n = num(data.get("hp"), 0, MAX_HP) or 0
+                if n:
+                    hp[k] = [n, n]
+                else:
+                    hp.pop(k, None)
+                return None
+            if k not in hp:
+                return "That isn't breakable. Give it HP first."
+            n = num(data.get("dmg"), -MAX_HP, MAX_HP) or 0
+            hp[k][0] = max(0, min(hp[k][1], hp[k][0] - n))
+            if hp[k][0] == 0:
+                self._break(s, sc, x, y)
+            return None
+        if action in ("world_img", "world_open", "mark_add", "mark_edit", "mark_del", "mark_go"):   # the world map
+            if not dm:
+                return need_dm
+            w = s["world"]
+            if action == "world_img":
+                if data.get("src"):
+                    name, err = self._store_image(s, data["src"])
+                    if err:
+                        return err
+                    w["img"] = name
+                else:
+                    w["img"] = None
+                self._tidy_assets(s)
+                return None
+            if action == "world_open":
+                w["open"] = bool(data.get("open"))
+                return None
+            if action == "mark_add":
+                if len(w["marks"]) >= MAX_MARKS:
+                    return f"The world map can have {MAX_MARKS} places."
+                mx, my = num(data.get("x"), 0, 1, 4), num(data.get("y"), 0, 1, 4)
+                if mx is None or my is None:
+                    return "Couldn't put a place there."
+                sid = str(data.get("sc") or "")
+                m = {"id": new_id(), "x": mx, "y": my, "name": line(data.get("name"), 40) or "Somewhere",
+                     "sc": sid if sid in s["scenes"] else None, "shown": bool(data.get("shown", True))}
+                w["marks"][m["id"]] = m
+                return None
+            m = w["marks"].get(str(data.get("id", "")))
+            if not m:
+                return "That place isn't there any more."
+            if action == "mark_del":
+                del w["marks"][m["id"]]
+                return None
+            if action == "mark_go":
+                sc = s["scenes"].get(m.get("sc") or "")
+                if not sc:
+                    return "That place doesn't lead to a scene yet."
+                self._show_scene(s, sc)
+                return None
+            d = data.get("set") if isinstance(data.get("set"), dict) else {}
+            if "name" in d:
+                m["name"] = line(d["name"], 40) or m["name"]
+            if "sc" in d:
+                m["sc"] = str(d["sc"]) if str(d["sc"] or "") in s["scenes"] else None
+            if "shown" in d:
+                m["shown"] = bool(d["shown"])
+            if "x" in d and "y" in d:
+                mx, my = num(d["x"], 0, 1, 4), num(d["y"], 0, 1, 4)
+                if mx is not None and my is not None:
+                    m["x"], m["y"] = mx, my
+            return None
+        if action in ("board_add", "board_edit", "board_del", "board_move"):   # the handout board: anyone can use it
+            board = s["board"]
+            if action == "board_move":
+                bx, by = num(data.get("x"), 0, 1, 4), num(data.get("y"), 0, 1, 4)
+                if bx is None or by is None:
+                    return None
+                if data.get("item"):
+                    it = s["items"].get(str(data["item"]))
+                    if not it or not (dm or (it["given"] and it.get("pin"))):
+                        return "That isn't on the board."
+                    it["bx"], it["by"] = bx, by
+                    return None
+                n = board.get(str(data.get("id", "")))
+                if not n:
+                    return "That note isn't there any more."
+                n["x"], n["y"] = bx, by
+                return None
+            if action == "board_add":
+                if len(board) >= MAX_BOARD:
+                    return f"The board holds {MAX_BOARD} notes. Take some down first."
+                t = text(data.get("text"), 600).strip()
+                if not t:
+                    return "Write something first."
+                n = {"id": new_id(), "text": t, "by": pid, "name": me,
+                     "x": num(data.get("x"), 0, 1, 4) or 0.05, "y": num(data.get("y"), 0, 1, 4) or 0.05}
+                board[n["id"]] = n
+                return None
+            n = board.get(str(data.get("id", "")))
+            if not n:
+                return "That note isn't there any more."
+            if not dm and n["by"] != pid:
+                return "Only whoever wrote it (or the DM) can change that."
+            if action == "board_del":
+                del board[n["id"]]
+                return None
+            t = text(data.get("text"), 600).strip()
+            if t:
+                n["text"] = t
+            return None
+        if action in ("tiles", "map_set", "spawn_set", "hwall", "prop_add", "prop_del", "prop_edit", "trap_fire", "prop_link", "link_go", "label_add", "label_edit",
                       "label_del"):
             if not dm:
                 return need_dm
@@ -1535,6 +1811,21 @@ class Tabletop:
                         if w.get("auto") and w.get("door"):
                             w["open"], w["locked"] = False, w.get("tile") in shut
                 self._reveal(sc)
+                return None
+            if action == "hwall":                     # show or hide a stretch of hidden wall
+                x, y = num(data.get("x"), 0, cols - 1), num(data.get("y"), 0, rows - 1)
+                if x is None or y is None or not self._show_hwall(sc, [(x, y)], bool(data.get("show"))):
+                    return "There's no hidden wall there."
+                return None
+            if action == "spawn_set":                 # the player spawn: an area, or none
+                if data.get("clear"):
+                    sc["spawn"] = None
+                    return None
+                x, y = num(data.get("x"), 0, cols - 1), num(data.get("y"), 0, rows - 1)
+                if x is None or y is None:
+                    return "Couldn't put the spawn there."
+                w, h = num(data.get("w"), 1, cols - x) or 1, num(data.get("h"), 1, rows - y) or 1
+                sc["spawn"] = {"x": x, "y": y, "w": w, "h": h}
                 return None
             if action == "prop_add":
                 k = data.get("k")
@@ -1617,13 +1908,28 @@ class Tabletop:
             return None
 
         # -- Walls and doors --
-        if action in ("trig_add", "trig_edit", "trig_del"):
+        if action in ("trig_add", "trig_edit", "trig_del", "trig_go"):
             if not dm:
                 return need_dm
             sc = s["scenes"].get(str(data.get("sc", "")))
             if not sc:
                 return "That scene isn't there any more."
             trigs = sc.setdefault("trig", {})
+            if action == "trig_go":                   # the DM's call on an "ask me first" trigger
+                tr = trigs.get(str(data.get("id", "")))
+                if not tr or not tr.get("pending"):
+                    return "That trigger isn't waiting on you."
+                pend = tr["pending"]
+                if data.get("skip"):
+                    tr["pending"], tr["used"] = None, False
+                    return None
+                t = sc["tokens"].get(pend["tok"]) or {"id": pend["tok"], "name": pend.get("name") or "Someone",
+                                                       "x": tr.get("x", 0), "y": tr.get("y", 0), "size": 1}
+                if t["id"] not in sc["tokens"] and tr["do"] == "scene":
+                    tr["pending"], tr["used"] = None, bool(tr.get("once"))
+                    return "Their token isn't on this map any more."
+                self._fire(s, sc, tr, t, pend["how"], force=True)
+                return None
             if action == "trig_del":
                 trigs.pop(str(data.get("id", "")), None)
                 return None
@@ -1647,12 +1953,11 @@ class Tabletop:
                 if not tr:
                     return "That trigger isn't there any more."
             tr["name"] = line(d.get("name"), 40) or tr["name"]
-            if d.get("when") in TRIG_WHEN and not tr.get("tok"):
+            if d.get("when") in TRIG_WHEN and (not tr.get("tok") or d["when"] in ("see", "use")):
                 tr["when"] = d["when"]
             if d.get("do") in TRIG_DO:
                 tr["do"] = d["do"]
-            if tr["do"] == "reveal" and tr.get("tok"):
-                tr["do"] = "tell"
+
             tr["who"] = "all" if d.get("who") == "all" else "them"
             if "once" in d:
                 tr["once"] = bool(d["once"])
@@ -1660,17 +1965,62 @@ class Tabletop:
                 tr["text"] = text(d["text"], 1000)
             if "to" in d:
                 tr["to"] = str(d["to"]) if d["to"] in s["scenes"] else None
+            if "ask" in d:
+                tr["ask"] = bool(d["ask"])
+            if isinstance(d.get("items"), list):     # what a loot chest gives
+                tr["items"] = [str(k) for k in d["items"][:MAX_ITEMS] if str(k) in s["items"]]
+            if "tgt" in d:                         # somewhere else on the map for "reveal" and "open"
+                g = d["tgt"] if isinstance(d["tgt"], dict) else None
+                gx, gy = (num(g.get("x"), 0, sc["cols"] - 1), num(g.get("y"), 0, sc["rows"] - 1)) if g else (None, None)
+                tr["tgt"] = None if gx is None or gy is None else {
+                    "x": gx, "y": gy, "w": num(g.get("w"), 1, sc["cols"] - gx) or 1, "h": num(g.get("h"), 1, sc["rows"] - gy) or 1}
+            if tr["do"] in ("reveal", "open") and tr.get("tok") and not tr.get("tgt"):
+                tr["do"] = "tell"                      # a token trigger needs an area to work on
             if d.get("reset") or action == "trig_add":
-                tr["used"], tr["seen"], tr["inside"] = False, False, []
+                tr["used"], tr["seen"], tr["inside"], tr["pending"] = False, False, [], None
             if tr["when"] == "enter":            # tokens already standing in it don't set it off
                 cells = self._trig_cells(sc, tr) or []
                 tr["inside"] = sorted(t["id"] for t in sc["tokens"].values() if self._pc(t) and self._touches(t, cells))
-            else:                                # nor does something already in sight
+            elif tr["when"] == "see":            # nor does something already in sight
                 cells = self._trig_cells(sc, tr)
                 walls = [w["p"] for w in sc["walls"].values() if not (w.get("door") and w.get("open"))]
                 tr["seen"] = bool(cells) and any(self._sees(sc, t, cells, walls) for t in sc["tokens"].values()
                                                   if self._pc(t) and not t.get("hidden"))
             trigs[tr["id"]] = tr
+            return None
+        if action == "interact":                      # a player clicked a square or a token: "use" triggers there
+            sc = self._scene_of(s, data, dm, pid)
+            if dm or not sc:
+                return None
+            tok = sc["tokens"].get(str(data.get("tok") or ""))
+            if tok and not self._seen_by_players(sc, tok):
+                tok = None
+            if tok:
+                n = max(1, int(tok["size"]))
+                cells = [(x, y) for y in range(int(tok["y"]), int(tok["y"]) + n) for x in range(int(tok["x"]), int(tok["x"]) + n)]
+            else:
+                x, y = num(data.get("x"), -1, MAX_GRID), num(data.get("y"), -1, MAX_GRID)
+                if x is None or y is None or not (0 <= x < sc["cols"] and 0 <= y < sc["rows"]):
+                    return None
+                cells = [(x, y)]
+            mine = [t for t in sc["tokens"].values() if self._controls(s, pid, t) and not t.get("hidden") and t is not tok]
+
+            def next_to(t):                           # on it, or one square away (diagonals count)
+                n = max(1, int(t["size"]))
+                x0, y0 = int(t["x"] + 0.001), int(t["y"] + 0.001)
+                return any(x0 - 1 <= cx <= x0 + n and y0 - 1 <= cy <= y0 + n for cx, cy in cells)
+            user = next((t for t in mine if next_to(t)), None)
+            if not user:
+                return None
+            for tr in list(sc.get("trig", {}).values()):
+                if tr["when"] != "use" or tr.get("used"):
+                    continue
+                if tok:
+                    hit = tr.get("tok") == tok["id"]
+                else:
+                    hit = not tr.get("tok") and tr["x"] <= x < tr["x"] + tr["w"] and tr["y"] <= y < tr["y"] + tr["h"]
+                if hit:
+                    self._fire(s, sc, tr, user, "use")
             return None
         if action == "door":
             sc = self._scene_of(s, data, dm, pid)
@@ -1680,12 +2030,17 @@ class Tabletop:
             if not dm and not self._door_seen(sc, w):
                 return "You can't see that door."
             if w.get("locked") and not dm:             # players only learn it's a lock if the DM shows it
-                return "It's locked." if w.get("showlock") else "It won't open."
+                key = s["items"].get(w.get("key") or "")
+                if key and key.get("given"):          # the party has the key: it unlocks
+                    w["locked"] = False
+                    self._pop(s, key["name"], f'{me} unlocks the door with the {key["name"]}.', to=self._players_on(s, sc))
+                else:
+                    return "It's locked." if w.get("showlock") else "It won't open."
             w["open"] = not w.get("open")
             self._reveal(sc)
             self._triggers(s, sc)
             return None
-        if action in ("wall_add", "wall_del", "walls_clear", "door_lock", "door_showlock"):
+        if action in ("wall_add", "wall_del", "walls_clear", "door_lock", "door_showlock", "door_key"):
             if not dm:
                 return need_dm
             sc = s["scenes"].get(str(data.get("sc", "")))
@@ -1695,9 +2050,14 @@ class Tabletop:
                 sc["walls"] = {k: w for k, w in sc["walls"].items() if w.get("auto")}
                 self._reveal(sc)
                 return None
-            if action in ("wall_del", "door_lock", "door_showlock"):
+            if action in ("wall_del", "door_lock", "door_showlock", "door_key"):
                 w = sc["walls"].get(str(data.get("id", "")))
-                if w and action == "door_showlock" and w.get("door"):     # let players see the padlock, or not
+                if w and action == "door_key" and w.get("door"):          # which of the party's keys opens it
+                    k = str(data.get("key") or "")
+                    w["key"] = k if k in s["items"] else None
+                    if w["key"]:
+                        w["locked"] = True
+                elif w and action == "door_showlock" and w.get("door"):     # let players see the padlock, or not
                     w["showlock"] = not w.get("showlock")
                 elif w and action == "wall_del" and not w.get("auto"):
                     del sc["walls"][w["id"]]
@@ -1919,6 +2279,62 @@ class Tabletop:
                 return None
             return "Unknown action."
 
+        # -- The party's things: items, keys and handouts --
+        if action in ("item_add", "item_edit", "item_img", "item_del"):
+            if not dm:
+                return need_dm
+            items = s["items"]
+            if action == "item_add":
+                if len(items) >= MAX_ITEMS:
+                    return f"The party can have {MAX_ITEMS} things. Delete some first."
+                d = data.get("item") if isinstance(data.get("item"), dict) else {}
+                it = {"id": new_id(), "name": line(d.get("name"), 40) or "Something", "text": text(d.get("text"), 4000),
+                      "kind": d.get("kind") if d.get("kind") in ITEM_KINDS else "item", "img": None, "given": False}
+                if d.get("src"):
+                    it["img"], err = self._store_image(s, d["src"])
+                    if err:
+                        return err
+                items[it["id"]] = it
+                return None
+            it = items.get(str(data.get("id", "")))
+            if not it:
+                return "That isn't there any more."
+            if action == "item_del":
+                del items[it["id"]]
+                for sc in s["scenes"].values():
+                    for w in sc["walls"].values():
+                        if w.get("key") == it["id"]:
+                            w["key"] = None
+                self._tidy_assets(s)
+                return None
+            if action == "item_img":
+                if data.get("src"):
+                    name, err = self._store_image(s, data["src"])
+                    if err:
+                        return err
+                    it["img"] = name
+                else:
+                    it["img"] = None
+                self._tidy_assets(s)
+                return None
+            d = data.get("set") if isinstance(data.get("set"), dict) else {}
+            if "name" in d:
+                it["name"] = line(d["name"], 40) or it["name"]
+            if "text" in d:
+                it["text"] = text(d["text"], 4000)
+            if d.get("kind") in ITEM_KINDS:
+                it["kind"] = d["kind"]
+            if "pin" in d:
+                it["pin"] = bool(d["pin"])
+            if "given" in d:
+                was, it["given"] = it["given"], bool(d["given"])
+                if it["given"] and not was and "pin" not in it and (it["kind"] == "handout" or it.get("img")):
+                    it["pin"] = True                    # handouts and pictures go up on the board
+                if it["given"] and not was:            # everyone is told what the party got
+                    who = [q for q in s["names"] if not self.is_dm(s, q)]
+                    self._pop(s, "The party got something", f'{it["name"]}. It\'s in the Items tab.', to=who)
+            return None
+
         # -- DM notes and handouts --
         if action == "note_add":
             if not dm:
@@ -2011,6 +2427,8 @@ class Tabletop:
     def _scene_view(self, s, sc, dm):
         out = {k: sc[k] for k in ("id", "name", "img", "cols", "rows", "ox", "oy", "grid", "gc", "fog")}
         out["seen"] = sc["seen"] if sc["fog"] else ""
+        if dm:                                         # breakable squares' HP: never sent to players
+            out["hp"] = sc.get("hp", {})
         toks = []
         for t in sc["tokens"].values():
             if not dm and not self._seen_by_players(sc, t):
@@ -2032,12 +2450,22 @@ class Tabletop:
         out["block"] = sc.get("block", True)
         if dm:
             out["trig"] = list(sc.get("trig", {}).values())
+            out["spawn"] = sc.get("spawn")
         tiles, seen, cols = sc.get("tiles", ""), sc["seen"], sc["cols"]
 
         def clear(x, y):
             return dm or not sc["fog"] or seen[int(y) * cols + int(x)] == "1"
         if not dm and "S" in tiles:                     # secret doors look like wall
             tiles = tiles.replace("S", ".")
+        if not dm and ("h" in tiles or "H" in tiles):   # a hidden wall looks like the floor beside it; a shown one is wall
+            T = list(tiles.replace("H", "w"))
+            for i, t in enumerate(T):
+                if t == "h":
+                    x, y = i % cols, i // cols
+                    near = [T[yy * cols + xx] for xx, yy in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1))
+                            if 0 <= xx < cols and 0 <= yy < sc["rows"]]
+                    T[i] = next((n for n in near if n in "fogd"), "f")
+            tiles = "".join(T)
         if not dm and sc["fog"] and tiles.strip("."):
             tiles = "".join(t if seen[i] == "1" else "?" for i, t in enumerate(tiles))
         out["tiles"] = tiles
@@ -2063,6 +2491,56 @@ class Tabletop:
                              if w.get("door") and not w.get("secret") and self._door_seen(sc, w)]
         return out
 
+    def _world_view(self, s, dm):
+        w = s.get("world") or {}
+        if dm:
+            return {"img": w.get("img"), "open": bool(w.get("open")), "marks": list(w.get("marks", {}).values())}
+        if not w.get("open"):
+            return None
+        here = s["active"]
+        return {"img": w.get("img"), "open": True,
+                "marks": [{"id": m["id"], "x": m["x"], "y": m["y"], "name": m["name"], "here": m.get("sc") == here}
+                          for m in w.get("marks", {}).values() if m.get("shown")]}
+
+    def _show_scene(self, s, sc):
+        """Everyone goes to this scene; with a spawn there, the party's tokens go too."""
+        was = {s["active"]} | {self._where(s, q) for q in s["names"] if not self.is_dm(s, q)}
+        if sc.get("spawn"):
+            for old in [s["scenes"][i] for i in was if i in s["scenes"] and i != sc["id"]]:
+                for t in [t for t in old["tokens"].values() if self._pc(t)]:
+                    q = self._owner_of(s, t)
+                    if q and not self.is_dm(s, q):
+                        self._arrive(s, old, t, sc)
+        s["active"] = sc["id"]
+        s["at"] = {}                                    # everyone, wherever they wandered off to
+        self._sys(s, f"The party moves to {sc['name']}.")
+
+    def _break(self, s, sc, x, y):
+        """A breakable square hit 0 HP: it's floor now, with rubble on it."""
+        cols, rows = sc["cols"], sc["rows"]
+        T = list(sc["tiles"])
+        i = y * cols + x
+        near = [T[yy * cols + xx] for xx, yy in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1))
+                if 0 <= xx < cols and 0 <= yy < rows]
+        was = T[i]
+        T[i] = "o" if "o" in near else next((n for n in near if n in "fogd"), "f")
+        sc["tiles"] = "".join(T)
+        sc.setdefault("hp", {}).pop(f"{x},{y}", None)
+        if len(sc.get("props", {})) < MAX_PROPS:
+            pid_ = new_id()
+            sc.setdefault("props", {})[pid_] = {"id": pid_, "k": "rubble", "x": x, "y": y, "r": 0}
+        self._auto_walls(sc)
+        self._reveal(sc)
+        what = "door" if was in "DS" else "wall"
+        who = [q for q in s["names"] if not self.is_dm(s, q) and self._where(s, q) == sc["id"]]
+        self._pop(s, "Crash!", f"The {what} gives way.", to=who, sc=sc["id"], at=[x, y])
+
+    def _viewable(self, room):
+        """Everyone a DM can view as: players here now, and ones who've been (and pretend ones)."""
+        s = room.state
+        names = {**s["names"], **{q: p["name"] for q, p in room.players.items()}}
+        return {q: n for q, n in names.items() if not self.is_dm(s, q)}
+
     def view(self, room, pid):
         s = room.state
         if not self.is_dm(s, pid):
@@ -2070,10 +2548,17 @@ class Tabletop:
         fake = s.get("playas", {}).get(pid)
         if fake in s["fakes"]:                      # a DM playing as a pretend player sees just what they would
             out = self._view(room, fake)
-            out.update(playAs=fake, fakes=s["fakes"], realDm=True)
+            out.update(playAs=fake, fakes=s["fakes"], realDm=True,
+                       viewable=self._viewable(room))
+            return out
+        if fake and fake in self._viewable(room):        # looking through a real player's eyes: look only
+            out = self._view(room, fake)
+            out.update(playAs=fake, look=True, fakes=s["fakes"], realDm=True,
+                       viewable=self._viewable(room))
             return out
         out = self._view(room, pid)
         out["fakes"] = s["fakes"]
+        out["viewable"] = self._viewable(room)   # who the DM can view as
         return out
 
     def _view(self, room, pid):
@@ -2115,6 +2600,10 @@ class Tabletop:
                      "cur": cur, "round": init["round"]},
             "settings": s["settings"],
             "lib": list(s.get("lib", {}).values()) if dm else [],
+            "enc": s.get("enc") if dm else None,
+            "items": [i for i in s.get("items", {}).values() if dm or i["given"]],
+            "world": self._world_view(s, dm),
+            "board": list(s.get("board", {}).values()),
             "pops": [p for p in s.get("pops", []) if (p["dm"] if dm else pid in p["to"])][-10:],
             "conditions": list(CONDITIONS), "skills": SKILLS,
             "limits": {"image": MAX_IMAGE_CHARS, "grid": MAX_GRID, "linePts": MAX_LINE_PTS},

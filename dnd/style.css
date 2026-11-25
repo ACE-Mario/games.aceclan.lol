@@ -396,3 +396,46 @@ textarea:focus { border-color: var(--accent); outline: none; }
 .tt-menu button { all: unset; box-sizing: border-box; padding: 7px 10px; border-radius: 6px; font-size: .88rem; color: var(--text); cursor: pointer; }
 .tt-menu button:hover, .tt-menu button:focus-visible { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .tt-menu button.danger { color: #ff8787; }
+
+/* Party items */
+.tt-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tt-items li { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px; border-radius: 8px; background: var(--bg2); border: 1px solid var(--line); }
+.tt-items li.ungiven { opacity: .7; border-style: dashed; }
+.tt-items .it-open { flex: 1; min-width: 0; display: flex; gap: 10px; align-items: center; background: none; border: 0; padding: 2px; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.tt-items .face { width: 36px; height: 36px; flex: none; border-radius: 8px; border: 1px solid var(--line); background: var(--bg) center / cover no-repeat; display: grid; place-items: center; font-size: 20px; }
+.tt-items .info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tt-items .info b { overflow-wrap: anywhere; }
+.tt-items .btns { display: flex; flex-direction: row; gap: 4px; flex-wrap: wrap; flex-basis: 100%; justify-content: flex-end; }
+#itemForm { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+#itemForm textarea, #itemForm input, #itemForm select { width: 100%; }
+.tt-enc { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.tt-enc label { display: flex; align-items: center; gap: 6px; }
+.tt-itemchecks { display: flex; flex-direction: column; gap: 3px; max-height: 140px; overflow: auto; }
+
+/* World map and handout board */
+.tt-modal > .win.wide { width: min(1200px, 100%); height: calc(100vh - 32px); }
+.tt-world { position: relative; flex: 1; min-height: 0; display: grid; place-items: center; overflow: hidden; border-radius: 8px; background: var(--bg2); }
+.tt-wi { position: relative; }
+.tt-world img { max-width: 100%; max-height: calc(100vh - 170px); display: block; user-select: none; }
+.tt-world.dm img { cursor: crosshair; }
+.tt-world-empty { color: var(--muted, #999); padding: 40px; text-align: center; }
+.tt-mark { position: absolute; transform: translate(-50%, -100%); background: none; border: 0; padding: 0; display: flex; flex-direction: column; align-items: center; cursor: pointer; color: #fff; font: 600 .8rem/1.2 system-ui, sans-serif; touch-action: none; }
+.tt-mark i { width: 18px; height: 18px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: #e5484d; border: 2px solid #fff; box-shadow: 0 2px 6px #000a; order: 2; }
+.tt-mark span { background: #000c; padding: 2px 6px; border-radius: 6px; white-space: nowrap; margin-bottom: 4px; }
+.tt-mark.here i { background: #40c057; }
+.tt-mark.hid { opacity: .55; }
+.tt-mark.on span { outline: 2px solid #9775fa; }
+.tt-markedit { flex-wrap: wrap; gap: 8px; align-items: center; }
+.tt-cork { position: relative; flex: 1; min-height: 400px; border-radius: 8px; overflow: hidden;
+  background: #8a6239 radial-gradient(#0000 60%, #0003) ; box-shadow: inset 0 0 40px #0006; }
+.tt-pin { position: absolute; width: 150px; padding: 8px; border-radius: 4px; box-shadow: 0 4px 10px #0007; cursor: grab; touch-action: none; user-select: none; }
+.tt-pin::before { content: ""; position: absolute; top: -5px; left: 50%; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: #e5484d; box-shadow: 0 1px 3px #0008; }
+.tt-pin.card { background: #f4ecd8; color: #2b2116; display: flex; flex-direction: column; gap: 4px; align-items: center; text-align: center; }
+.tt-pin.card img { width: 100%; max-height: 110px; object-fit: cover; border-radius: 2px; }
+.tt-pin.card .ico { font-size: 34px; }
+.tt-pin.card.ungiven { opacity: .6; }
+.tt-pin.note { background: #ffe066; color: #2b2116; transform: rotate(-1.5deg); }
+.tt-pin.note p { margin: 0 0 4px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .9rem; }
+.tt-pin small { opacity: .7; font-size: .7rem; }
+.tt-pin .x { position: absolute; top: 2px; right: 4px; background: none; border: 0; color: #2b2116; cursor: pointer; }
+.tt-pin.lift { cursor: grabbing; z-index: 5; box-shadow: 0 10px 24px #000a; }

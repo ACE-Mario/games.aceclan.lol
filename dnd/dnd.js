@@ -104,6 +104,7 @@
 
   // ---- Little helpers ------------------------------------------------------------------------
   let asPlayer = false;                     // a DM looking at the map the way players see it
+  let wantAny = false, spawnShown = false, trigPick = null;   // trigPick: a trigger form waiting for its target area  // wantAny: go to "any player" once back from someone's view
   const isDm = () => !!(S && S.dm) && !asPlayer;
   const rawScene = () => S && (S.scenes.find(s => s.id === viewSc) || S.scenes[0]);
   const scene = () => { const sc = rawScene(); return sc && asPlayer ? playerScene(sc) : sc; };
@@ -142,16 +143,22 @@
     clearTimeout(noteTimer);
     if (msg) noteTimer = setTimeout(() => { n.hidden = true; }, 5000);
   }
+  const LOOK_OK = ["play_as", "fake_add", "fake_del", "rename"];
   function action(type, extra = {}, failed = null) {
     if (!socket) return;
+    if (S && S.look && !LOOK_OK.includes(type)) {          // looking through a real player's eyes changes nothing
+      note(`You're only looking as ${S.names[S.playAs] || "them"}. Click Back to DM view to do things.`);
+      if (failed) failed();
+      return;
+    }
     socket.timeout(15000).emit("action", asFake(type, { type, ...extra }), (err, res) => {
       if (err) note("The server didn't answer. Check your connection and try again.");
       else if (res && res.error) { note(res.error); if (failed) failed(); }
     });
   }
   // A DM playing as a pretend player sends everything as them (except what's about the pretend players).
-  const asFake = (type, msg) => (S && S.playAs && !["fake_add", "fake_del", "play_as", "rename"].includes(type) ? { ...msg, as: S.playAs } : msg);
-  const live = msg => socket && socket.emit("live", asFake("live", msg));
+  const asFake = (type, msg) => (S && S.playAs && !S.look && !LOOK_OK.includes(type) ? { ...msg, as: S.playAs } : msg);
+  const live = msg => socket && !(S && S.look) && socket.emit("live", asFake("live", msg));
   function throttle(fn, ms) {
     let last = 0, timer = 0, args = null;
     return (...a) => {
@@ -387,8 +394,12 @@
       if (act) cancelAct();
       wallPts = null;
       selectToken(null);
-      if (s.playAs) { setMode("play"); setTab("room"); note(`You're playing as ${s.names[s.playAs]}: you see and do just what they would. Click Back to DM view when you're done.`); }
-      else setTab("scenes");
+      if (s.playAs) {
+        setMode("play"); setTab("room");
+        note(s.look ? `You're looking through ${s.names[s.playAs]}'s eyes: just what their fog and sight show. Click Back to DM view when you're done.`
+          : `You're playing as ${s.names[s.playAs]}: you see and do just what they would. Click Back to DM view when you're done.`);
+      }
+      else if (!wantAny) setTab("scenes");
     }
     showMode();
     if (!isDm() && TOOL_MODE[tool]) setTool("select");
@@ -405,6 +416,7 @@
     if (firstState && !EXTRAS) { setTab(s.dm ? "scenes" : "room"); if (!s.dm) setPanel(false); }
     if (firstState || switched || (moved && viewSc === s.active)) { fitView(); firstState = false; }
     renderAll(old);
+    if (wantAny && !s.playAs && s.dm) { wantAny = false; setAsPlayer(true); }
   }
   function renderAll(old) {
     $("campTitle").textContent = S.camp.name;
@@ -421,6 +433,10 @@
     renderTurns();
     renderParty();
     renderNotes();
+    renderItems();
+    renderWorldBtn();
+    if (!$("worldMap").hidden) renderWorld();
+    if (!$("boardBox").hidden) renderBoard();
     renderScenes();
     renderRoom();
     showAsBtn();
@@ -428,9 +444,10 @@
     renderCard();
     refreshSheet();
     if (tool === "script" && !act) renderToolOpts();
+    if (tool === "build" && !act && !!(sc && sc.spawn) !== spawnShown) renderToolOpts();
     if (tool === "lib") {
       const k = libSignature();
-      if (k !== libKey) { libKey = k; if (libArm) libArm = libFind(libArm.id) || null; renderToolOpts(); }
+      if (k !== libKey) { libKey = k; if (libArm && !libArm.enc) libArm = libFind(libArm.id) || null; renderToolOpts(); }
     }
     redraw();
   }
@@ -518,10 +535,13 @@
     const T = tilesOf(sc), drawn = /[^.?]/.test(T);
     if (drawn) {
       ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(tileLayer(sc, T, wallsOf(sc), !!img), 0, 0, sc.cols, sc.rows);
+      ctx.drawImage(tileLayer(sc, T.replace(/[hH]/g, "w"), wallsOf(sc), !!img), 0, 0, sc.cols, sc.rows);
+      if (isDm() && /[hH]/.test(T)) paintHiddenWalls(sc, T, n => n / cam.z);
+      if (isDm() && sc.hp) paintBreakable(sc, n => n / cam.z);
     }
     for (const pr of sc.props || []) if (!pr.hidden) paintProp(ctx, pr, pr.off ? 0.4 : 0);     // a disarmed trap is faint
     if (isDm()) for (const pr of sc.props || []) if (pr.hidden) paintHiddenProp(pr);
+    if (isDm() && sc.spawn) paintSpawn(sc.spawn, n => n / cam.z);
     if (cam.z > 12) for (const pr of sc.props || []) {          // where stairs lead
       const to = isDm() ? pr.to && (S.scenes.find(x => x.id === pr.to) || {}).name : pr.go;
       if (to) tag(`→ ${to}`, pr.x + 0.5, pr.y + 1 + px(8), isDm() && !pr.open ? "#adb5bd" : "#ffd43b", px, 10);
@@ -698,6 +718,16 @@
       return v;
     });
     let tiles = (sc.tiles || "").replace(/S/g, ".");
+    if (/[hH]/.test(tiles)) {                      // hidden walls look like the floor beside them; shown ones are wall
+      const T = Array.from(tiles.replace(/H/g, "w"));
+      T.forEach((t, i) => {
+        if (t !== "h") return;
+        const x = i % cols, y = Math.floor(i / cols);
+        const near = [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]].filter(([a, b]) => a >= 0 && b >= 0 && a < cols && b < rows).map(([a, b]) => T[b * cols + a]);
+        T[i] = near.find(n => "fogd".includes(n)) || "f";
+      });
+      tiles = T.join("");
+    }
     if (fog && /[^.]/.test(tiles)) tiles = Array.from(tiles, (t, i) => (seen[i] === "1" ? t : "?")).join("");
     const doorSeen = w => {
       if (!fog) return true;
@@ -721,8 +751,17 @@
   }
   function showAsBtn() {
     const on = asPlayer || !!(S && S.playAs);
-    $("asPlayerBtn").textContent = S && S.playAs ? `Back to DM view (playing as ${S.names[S.playAs] || "someone"})` : on ? "Back to DM view" : "View as player";
+    $("asPlayerBtn").textContent = S && S.playAs ? `Back to DM view (${S.look ? "looking" : "playing"} as ${S.names[S.playAs] || "someone"})` : on ? "Back to DM view" : "View as player";
     $("asPlayerBtn").classList.toggle("primary", on);
+    // the picker: everyone at once (what any player sees), or one player's own fog and sight
+    const pick = $("viewAsPick"), who = Object.entries(S ? S.viewable || {} : {});
+    pick.hidden = !(S && (S.dm || S.playAs)) || !who.length;
+    if (document.activeElement !== pick) {
+      const fakes = (S && S.fakes) || {};
+      pick.innerHTML = `<option value="">View as…</option><option value="*">Any player</option>` +
+        who.sort((a, b) => a[1].localeCompare(b[1])).map(([q, n]) => `<option value="${q}">${esc(n)}${q in fakes ? " (pretend)" : ""}</option>`).join("");
+      pick.value = (S && S.playAs) || (asPlayer ? "*" : "");
+    }
   }
   function makeFake() {
     const name = prompt("Name for the pretend player (you'll play as them to try things out)", `Pretend player ${Object.keys(S.fakes || {}).length + 1}`);
@@ -814,11 +853,12 @@
   const OPEN = "fogdslpDS";
   const solidT = t => t === "." || t === "w";
   const TILE_INFO = [["f", "Stone", "#f7f4ec"], ["o", "Wood", "#d9b483"], ["g", "Grass", "#c9dea0"], ["d", "Dirt", "#dcc59a"],
-    ["s", "Water", "#94c2e4"], ["l", "Lava", "#f08a3c"], ["p", "Pit", "#34302c"], ["w", "Wall", "#5c554d"]];
+    ["s", "Water", "#94c2e4"], ["l", "Lava", "#f08a3c"], ["p", "Pit", "#34302c"], ["w", "Wall", "#5c554d"],
+    ["h", "Hidden wall", "#9775fa"]];        // a wall players see as floor until you show it
   const PROP_INFO = [["table", "Table"], ["chair", "Chair"], ["bed", "Bed"], ["shelf", "Shelf"], ["rug", "Rug"], ["chest", "Chest"],
     ["barrel", "Barrel"], ["crate", "Crate"], ["stairs", "Stairs"], ["pillar", "Pillar"], ["statue", "Statue"], ["altar", "Altar"],
     ["torch", "Torch"], ["campfire", "Fire"], ["well", "Well"], ["tree", "Tree"], ["bush", "Bush"], ["rock", "Rock"],
-    ["rubble", "Rubble"], ["web", "Web"], ["trap", "Trap (DM)"]];
+    ["rubble", "Rubble"], ["web", "Web"], ["trap", "Trap (DM)"], ["lever", "Lever"], ["plate", "Pressure plate"]];
   const tileColour = t => (TILE_INFO.find(x => x[0] === t) || TILE_INFO[0])[2];
   let tileCache = { key: "", canvas: null };
   function rnd(x, y, k = 0) {
@@ -1001,6 +1041,41 @@
   }
 
   // props are drawn in ink too, a square each
+  function paintHiddenWalls(sc, T, px) {     // DM only: hidden walls in purple, shown ones outlined
+    ctx.save();
+    ctx.lineWidth = px(1.5);
+    for (let i = 0; i < T.length; i++) {
+      const t = T[i];
+      if (t !== "h" && t !== "H") continue;
+      const x = i % sc.cols, y = Math.floor(i / sc.cols);
+      if (t === "h") { ctx.fillStyle = "rgba(151, 117, 250, 0.45)"; ctx.fillRect(x, y, 1, 1); }
+      ctx.strokeStyle = "#9775fa";
+      ctx.setLineDash(t === "h" ? [px(4), px(3)] : []);
+      ctx.strokeRect(x + 0.08, y + 0.08, 0.84, 0.84);
+    }
+    ctx.restore();
+  }
+  function paintBreakable(sc, px) {          // DM only: breakable walls and doors show their HP
+    ctx.save();
+    for (const [k, [hp, mhp]] of Object.entries(sc.hp || {})) {
+      const [x, y] = k.split(",").map(Number), f = mhp ? hp / mhp : 0;
+      ctx.fillStyle = "#000b";
+      ctx.fillRect(x + 0.1, y + 0.78, 0.8, 0.14);
+      ctx.fillStyle = f > 0.5 ? "#40c057" : f > 0.25 ? "#fab005" : "#fa5252";
+      ctx.fillRect(x + 0.1, y + 0.78, 0.8 * f, 0.14);
+      if (cam.z > 28) {
+        ctx.font = `700 ${px(10)}px system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillStyle = "#fff";
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = px(3);
+        ctx.strokeText(`${hp}/${mhp}`, x + 0.5, y + 0.76);
+        ctx.fillText(`${hp}/${mhp}`, x + 0.5, y + 0.76);
+      }
+    }
+    ctx.restore();
+  }
   function paintHiddenProp(pr) {            // only the DM sees these: faint, in a dashed box
     const px = n => n / cam.z;
     paintProp(ctx, pr, 0.5);
@@ -1067,6 +1142,15 @@
         poly([0.05, 0.05, 0.25, -0.05, 0.33, 0.18, 0.12, 0.28], "#a9a398");
         poly([-0.2, 0.15, -0.05, 0.12, -0.08, 0.3], "#c4beb3");
         break;
+      case "lever":                              // a lever in its slot
+        box(-0.3, 0.06, 0.6, 0.22, "#8d8479");
+        g.lineWidth = 0.07; ln(0, 0.14, 0.22, -0.3); g.lineWidth = 0.045;
+        disc(0.09, "#e03131", 0.22, -0.3);
+        break;
+      case "plate":                              // a stone pressure plate, a little raised
+        box(-0.36, -0.36, 0.72, 0.72, "#bdb5a8");
+        g.strokeStyle = "rgba(28, 26, 24, 0.45)"; g.strokeRect(-0.26, -0.26, 0.52, 0.52); g.strokeStyle = INKC;
+        break;
       case "trap":                               // only the DM ever gets these
         g.strokeStyle = "#e03131"; g.lineWidth = 0.05;
         g.setLineDash([0.09, 0.06]); g.strokeRect(-0.42, -0.42, 0.84, 0.84); g.setLineDash([]);
@@ -1113,6 +1197,22 @@
         tag(`⚡ ${tr.name}`, tr.x + tr.w / 2, tr.y + px(12), c, px);
       }
     }
+    for (const tr of sc.trig || []) {               // what a lever (or such) works on, somewhere else
+      if (!tr.tgt) continue;
+      const g = tr.tgt, from = tr.tok ? (() => { const t = sc.tokens.find(x => x.id === tr.tok); return t ? { x: t.x + t.size / 2, y: t.y + t.size / 2 } : null; })()
+        : { x: tr.x + tr.w / 2, y: tr.y + tr.h / 2 };
+      ctx.strokeStyle = "#da77f2";
+      ctx.strokeRect(g.x, g.y, g.w, g.h);
+      if (from) { ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(g.x + g.w / 2, g.y + g.h / 2); ctx.stroke(); }
+      tag(`${tr.do === "open" ? "opens" : "reveals"}: ${tr.name}`, g.x + g.w / 2, g.y + g.h + px(10), "#da77f2", px);
+    }
+    if (act && act.kind === "tgtbox") {
+      const [x0, y0, x1, y1] = boxCells(act.a, act.b);
+      ctx.strokeStyle = "#da77f2";
+      ctx.fillStyle = "rgba(218,119,242,0.18)";
+      ctx.fillRect(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+      ctx.strokeRect(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+    }
     if (act && act.kind === "trig") {
       const [x0, y0, x1, y1] = boxCells(act.a, act.b);
       ctx.strokeStyle = TRIG;
@@ -1122,7 +1222,22 @@
     }
     ctx.restore();
   }
+  function paintSpawn(sp, px, live) {          // the player spawn (DM only)
+    ctx.save();
+    ctx.fillStyle = "rgba(64, 192, 87, 0.14)";
+    ctx.fillRect(sp.x, sp.y, sp.w, sp.h);
+    ctx.strokeStyle = "#40c057";
+    ctx.lineWidth = px(2);
+    ctx.setLineDash([px(6), px(4)]);
+    ctx.strokeRect(sp.x + 0.04, sp.y + 0.04, sp.w - 0.08, sp.h - 0.08);
+    ctx.restore();
+    tag(live ? `Spawn ${sp.w} × ${sp.h}` : "Player spawn", sp.x + sp.w / 2, sp.y - px(12), "#40c057", px);
+  }
   function paintBuildPreview(sc, px) {
+    if (act && act.kind === "spawnbox") {
+      const [x0, y0, x1, y1] = boxCells(act.a, act.b);
+      paintSpawn({ x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 }, px, true);
+    }
     if (act && act.kind === "room") {
       const [x0, y0, x1, y1] = boxCells(act.a, act.b);
       ctx.fillStyle = act.code === "." ? "rgba(255, 107, 107, 0.18)" : "rgba(255, 255, 255, 0.35)";
@@ -1494,6 +1609,11 @@
   function buildDown(e, p) {
     const sc = scene(), c = cellAt(p), rub = e.button === 2;
     const w = rub || build.mode === "erase" || build.walls ? "1" : "0";
+    if (build.mode === "spawn") {
+      if (rub) action("spawn_set", { sc: sc.id, clear: true });
+      else act = { kind: "spawnbox", a: p, b: p };
+      return;
+    }
     if (build.mode === "room") { act = { kind: "room", a: p, b: p, code: rub ? "." : build.tile, w }; redraw(); return; }
     if (build.mode === "brush" || build.mode === "erase") {
       act = { kind: "paint", code: rub || build.mode === "erase" ? "." : build.tile, w, cells: new Map() };
@@ -1814,6 +1934,16 @@
   }
 
   // ---- The DM's right-click menu: what's on that square and what you can do with it ---------------
+  // "Player interacts" triggers: a player clicks a square or a token while standing next to it. The server checks.
+  function interact(what) {
+    if (!S || isDm() || S.look || asPlayer || !scene()) return;
+    action("interact", { sc: scene().id, ...what });
+  }
+  function showScene(id) {
+    const sc = S.scenes.find(x => x.id === id);
+    action("scene_show", { sc: id });
+    if (sc && !sc.spawn) note(`${sc.name} has no player spawn, so the party's tokens stay where they were. Mark one in Map making (Spawn).`);
+  }
   function closeMenu() { const m = $("ctxMenu"); if (m) m.remove(); }
   function openMenu(mx, my, p) {
     closeMenu();
@@ -1837,6 +1967,11 @@
       add(door.open ? "Shut it" : "Open it", () => action("door", { sc: sc.id, id: door.id }));
       add(door.locked ? "Unlock it" : "Lock it", () => action("door_lock", { sc: sc.id, id: door.id }));
       if (door.locked) add(door.showlock ? "Hide the padlock from players" : "Show players it's locked", () => action("door_showlock", { sc: sc.id, id: door.id }));
+      for (const k of itemList().filter(it => it.kind === "key")) {
+        if (door.key !== k.id) add(`🔑 Opens with the ${k.name}`, () => action("door_key", { sc: sc.id, id: door.id, key: k.id }));
+        else add(`🔑 No key (the ${k.name} won't open it)`, () => action("door_key", { sc: sc.id, id: door.id, key: "" }));
+      }
+      if (!itemList().some(it => it.kind === "key")) add("Give it a key… (make one in the Items tab)", () => { setPanel(true); setTab("items"); $("itemKind").value = "key"; $("itemName").focus(); });
       if (dc && door.secret) add("They found it (players see a door now)", () => sendTiles([[dc[0], dc[1], "D"]], !play));
       if (!play) {
         if (dc && !door.secret) add("Make it a secret door", () => sendTiles([[dc[0], dc[1], "S"]]));
@@ -1858,9 +1993,37 @@
       add("Turn it", () => action("prop_edit", { sc: sc.id, id: pr.id, r: ((pr.r || 0) + 1) % 4 }));
       if (pr.k !== "trap" || to) add(to ? "Change where it leads" : "Make it lead to another scene", () => openLinkForm(pr));
       if (to) add(`Take the party to ${to.name}`, () => { if (confirm(`Take the party to "${to.name}"? Everyone's tokens on this map go with them.`)) action("link_go", { sc: sc.id, id: pr.id }); });
+      const mine = (sc.trig || []).filter(tr => !tr.tok && c.x >= tr.x && c.x < tr.x + tr.w && c.y >= tr.y && c.y < tr.y + tr.h);
+      if (!mine.length && pr.k === "lever") add("Make it work: open something when pulled…", () => openTrigForm({ x: c.x, y: c.y, w: 1, h: 1, when: "use", do: "open", name: "Lever", once: false }));
+      if (!mine.length && pr.k === "plate") add("Make it work: something happens when stepped on…", () => openTrigForm({ x: c.x, y: c.y, w: 1, h: 1, when: "enter", do: "open", name: "Pressure plate" }));
+      if (!mine.length && pr.k === "chest") add("Make it a loot chest…", () => openTrigForm({ x: c.x, y: c.y, w: 1, h: 1, when: "use", do: "give", name: "Chest", text: "You open the chest." }));
       if (pr.hidden) add("Trigger: reveal it when a player steps here", () => openTrigForm({ x: c.x, y: c.y, w: 1, h: 1, do: "reveal", when: "enter", name: `Find the ${name.toLowerCase()}` }));
       else if (pr.k !== "trap" && !propsAt(c).some(x => x.hidden)) add("Hide stairs under it", () => { addProp({ k: "stairs", x: c.x, y: c.y, r: 0, hidden: true }); note("Hidden stairs added. Right-click again to choose where they lead, or to add a trigger that finds them."); });
       add("Delete", () => { const was = propSnap(pr); remember({ what: "taking a prop away", undo: () => addProp(was), redo: () => delPropAt(was) }); action("prop_del", { sc: sc.id, id: pr.id }); }, "danger");
+    }
+    const ht = on ? tilesOf(rawScene())[c.y * sc.cols + c.x] : "";
+    if (ht === "h" || ht === "H") {
+      const add = group(ht === "h" ? "Hidden wall (players see floor)" : "Hidden wall (shown to players)");
+      add(ht === "h" ? "Show it to players" : "Hide it again", () => action("hwall", { sc: sc.id, x: c.x, y: c.y, show: ht === "h" }));
+      if (ht === "h") add("Trigger: show it when a player steps here", () => openTrigForm({ x: c.x, y: c.y, w: 1, h: 1, do: "reveal", when: "enter", name: "Hidden wall" }));
+    }
+    const dcell = door && door.tile ? door.tile.split(",").map(Number) : null;
+    const bc = on && "whHDS".includes(ht || "-") ? c : dcell ? { x: dcell[0], y: dcell[1] } : null;
+    if (bc) {
+      const k = bc.x + "," + bc.y, hp = (sc.hp || {})[k], what = "DS".includes(tilesOf(rawScene())[bc.y * sc.cols + bc.x]) ? "door" : "wall";
+      const add = group(hp ? `Breakable ${what}: ${hp[0]}/${hp[1]} HP` : `Breakable ${what}`);
+      if (hp) {
+        add("Hit it… (take off HP)", () => {
+          const n = prompt(`How much damage? (it has ${hp[0]} HP left)`, "");
+          if (n !== null && n.trim() && !isNaN(+n)) action("break_hit", { sc: sc.id, x: bc.x, y: bc.y, dmg: +n });
+        });
+        add("Break it now", () => action("break_hit", { sc: sc.id, x: bc.x, y: bc.y, dmg: hp[0] }));
+        add("Change its HP…", () => { const n = prompt("HP", String(hp[1])); if (n !== null && +n > 0) action("break_set", { sc: sc.id, x: bc.x, y: bc.y, hp: +n }); });
+        add("Make it unbreakable", () => action("break_set", { sc: sc.id, x: bc.x, y: bc.y, hp: 0 }));
+      } else add(`Make it breakable (give it HP)…`, () => {
+        const n = prompt(`HP for this ${what} square? Players never see it.`, what === "door" ? "15" : "30");
+        if (n !== null && +n > 0) action("break_set", { sc: sc.id, x: bc.x, y: bc.y, hp: +n });
+      });
     }
     const lb = labelAt(p);
     if (lb) {
@@ -1870,15 +2033,24 @@
       add("Delete", () => action("label_del", { sc: sc.id, id: lb.id }), "danger");
     }
     for (const tr of on ? (sc.trig || []).filter(tr => !tr.tok && c.x >= tr.x && c.x < tr.x + tr.w && c.y >= tr.y && c.y < tr.y + tr.h) : []) {
-      const add = group(`⚡ ${tr.name}` + (tr.used ? " (gone off)" : ""));
-      if (tr.used) add("Set it again", () => action("trig_edit", { sc: sc.id, id: tr.id, trig: { who: tr.who, reset: true } }));
+      const add = group(`⚡ ${tr.name}` + (tr.pending ? ` (waiting: ${tr.pending.name})` : tr.used ? " (gone off)" : ""));
+      if (tr.pending) {
+        add("Set it off (they rolled)", () => action("trig_go", { sc: sc.id, id: tr.id }));
+        add("Skip it this time", () => action("trig_go", { sc: sc.id, id: tr.id, skip: true }));
+      }
+      if (tr.used && !tr.pending) add("Set it again", () => action("trig_edit", { sc: sc.id, id: tr.id, trig: { who: tr.who, reset: true } }));
       add("Edit the trigger", () => openTrigForm(tr));
       add("Delete", () => action("trig_del", { sc: sc.id, id: tr.id }), "danger");
     }
-    if (on && !propsAt(c).length) {
+    if (on && !propsAt(c).length && !"hHw".includes(ht || "-")) {
       const add = group(`Square ${c.x + 1}, ${c.y + 1}`);
       add("Hide stairs here", () => { addProp({ k: "stairs", x: c.x, y: c.y, r: 0, hidden: true }); note("Hidden stairs added. Right-click them to choose where they lead."); });
       add("Trigger here", () => openTrigForm({ x: c.x, y: c.y, w: 1, h: 1 }));
+      add(`🎲 Random encounter here (${encLabel()})`, () => { const g = rollEncounter(); if (g) dropEncounter(g, { x: c.x + 0.5, y: c.y + 0.5 }); });
+      add(sc.spawn ? "Move the player spawn here" : "Put the player spawn here", () => {
+        const x = Math.max(0, Math.min(sc.cols - 3, c.x - 1)), y = Math.max(0, Math.min(sc.rows - 3, c.y - 1));
+        action("spawn_set", { sc: sc.id, x, y, w: Math.min(3, sc.cols), h: Math.min(3, sc.rows) });
+      });
     }
     if (!groups.length) return;
     const m = document.createElement("div");
@@ -1904,7 +2076,11 @@
     m.querySelector("button").focus({ preventScroll: true });
   }
   document.addEventListener("pointerdown", e => { if (!e.target.closest("#ctxMenu")) closeMenu(); }, true);
-  document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu(); });
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    closeMenu();
+    if (trigPick) { const tr = trigPick.tr; trigPick = null; if (act && act.kind === "tgtbox") act = null; openTrigForm(tr); }
+  });
   addEventListener("blur", closeMenu);
   viewport.addEventListener("wheel", closeMenu, { passive: true });
 
@@ -2021,6 +2197,7 @@
     if (tool === "walls" && isDm() && e.button === 2) { finishWall(); return; }
     if (tool === "build" && isDm() && !spaceDown && !e.altKey && (e.button === 0 || e.button === 2)) { buildDown(e, p); return; }
     if (e.button === 1 && e.altKey && isDm()) { e.preventDefault(); pickAt(p); return; }     // like pick block
+    if (tool === "script" && isDm() && e.button === 0 && trigPick) { act = { kind: "tgtbox", a: p, b: p }; return; }
     if (tool === "script" && isDm() && e.button === 0 && !spaceDown && !e.altKey && !e.shiftKey) {
       const sc = scene(), c = cellAt(p), t = tokenAt(p);
       const hit = (sc.trig || []).find(tr => (tr.tok && t && tr.tok === t.id)) ||
@@ -2031,7 +2208,7 @@
       return;
     }
     if (tool === "lib" && libArm && isDm() && !spaceDown && !e.altKey) {
-      if (e.button === 0) { placeFromLib(libArm, p); return; }
+      if (e.button === 0) { if (libArm.enc) { dropEncounter(libArm.enc, p); libArm = null; renderToolOpts(); redraw(); } else placeFromLib(libArm, p); return; }
       if (e.button === 2) { libArm = null; renderToolOpts(); redraw(); return; }
     }
     if (e.button === 1 || e.button === 2 || spaceDown) {
@@ -2073,8 +2250,13 @@
       return;
     }
     const door = wallAt(p, true, 0.22);
-    if (door) { action("door", { sc: viewSc, id: door.id }); FX.sound("flip"); return; }
+    if (door) {
+      action("door", { sc: viewSc, id: door.id }); FX.sound("flip");
+      interact({ x: Math.floor((door.p[0] + door.p[2]) / 2), y: Math.floor((door.p[1] + door.p[3]) / 2) });
+      return;
+    }
     const t = tokenAt(p);
+    if (t && !controls(t)) interact({ tok: t.id });
     if (t) {
       if (e.shiftKey || e.ctrlKey || e.metaKey) { selectToken(t.id, true); return; }
       if (!picked.has(t.id)) selectToken(t.id);
@@ -2091,12 +2273,12 @@
       if (isDm()) {
         const to = S.scenes.find(x => x.id === link.to);
         if (to && confirm(`Take the party to "${to.name}"? Everyone's tokens on this map go with them.`)) action("link_go", { sc: viewSc, id: link.id });
-      } else note(`Drag your token onto it to go to ${link.go}.`);
+      } else { note(`Drag your token onto it to go to ${link.go}.`); interact(cellAt(p)); }
       return;
     }
     if (e.shiftKey) { act = { kind: "box", a: p, b: p }; return; }
     if (picked.size) selectToken(null);
-    act = { kind: "pan", sx, sy, cx: cam.x, cy: cam.y, click: true };
+    act = { kind: "pan", sx, sy, cx: cam.x, cy: cam.y, click: true, p };
   });
   viewport.addEventListener("pointermove", e => {
     if (!S) return;
@@ -2151,7 +2333,7 @@
     } else if (act.kind === "erase") eraseAt(p);
     else if (act.kind === "fog") paintFogAt(p);
     else if (act.kind === "paint") paintTileAt(p);
-    else if (act.kind === "fogbox" || act.kind === "box" || act.kind === "room" || act.kind === "trig") { act.b = p; redraw(); }
+    else if (act.kind === "fogbox" || act.kind === "box" || act.kind === "room" || act.kind === "trig" || act.kind === "spawnbox" || act.kind === "tgtbox") { act.b = p; redraw(); }
   });
   // Put tokens back where they were when the server won't have the move (a wall in the way, say).
   function moveTokens(sc, moves) {
@@ -2169,6 +2351,7 @@
     act = null;
     viewport.classList.remove("panning");
     if (a.kind === "pan" && a.menu && a.click !== false) { openMenu(a.mx, a.my, a.p); return; }
+    if (a.kind === "pan" && !a.menu && a.click && a.p) interact(cellAt(a.p));      // a plain click on a square
     if (a.kind === "token") {
       if (a.moved) {
         // snap the token that was grabbed; the others keep their places around it
@@ -2195,6 +2378,18 @@
         action("line_add", { sc: viewSc, line: a.line });
       }
     } else if (a.kind === "paint" || a.kind === "room") buildUp(a);
+    else if (a.kind === "tgtbox" && trigPick) {
+      const sc = scene(), [x0, y0, x1, y1] = boxCells(a.a, a.b), x = Math.max(0, x0), y = Math.max(0, y0);
+      const tr = trigPick.tr;
+      trigPick = null;
+      if (x < sc.cols && y < sc.rows) tr.tgt = { x, y, w: Math.min(sc.cols - 1, x1) - x + 1, h: Math.min(sc.rows - 1, y1) - y + 1 };
+      openTrigForm(tr);
+    }
+    else if (a.kind === "spawnbox") {
+      const sc = scene(), [x0, y0, x1, y1] = boxCells(a.a, a.b);
+      const x = Math.max(0, x0), y = Math.max(0, y0);
+      if (x < sc.cols && y < sc.rows) action("spawn_set", { sc: sc.id, x, y, w: Math.min(sc.cols - 1, x1) - x + 1, h: Math.min(sc.rows - 1, y1) - y + 1 });
+    }
     else if (a.kind === "trig") {
       const sc = scene(), [x0, y0, x1, y1] = boxCells(a.a, a.b);
       const x = Math.max(0, x0), y = Math.max(0, y0);
@@ -2241,6 +2436,8 @@
       if (libArm) { libArm = null; renderToolOpts(); return redraw(); }
       if (!$("trigForm").hidden) return closeModal("trigForm");
       if (!$("popMsg").hidden) return closeModal("popMsg");
+      if (!$("boardBox").hidden) return closeModal("boardBox");
+      if (!$("worldMap").hidden) return closeModal("worldMap");
       if (act) return cancelAct();
       if (wallPts) { wallPts = null; return redraw(); }
       selectToken(null);
@@ -2386,7 +2583,8 @@
   // ---- The Scripting tab: triggers -------------------------------------------------------------
   function trigSummary(tr) {
     const sc = scene(), t = tr.tok && sc.tokens.find(x => x.id === tr.tok);
-    const when = tr.tok ? `A player sees ${t ? t.name : "a token that's gone"}` : tr.when === "see" ? "A player sees it" : "A player steps in";
+    const when = tr.when === "use" ? `A player next to ${tr.tok ? (t ? t.name : "a token that's gone") : "it"} clicks it`
+      : tr.tok ? `A player sees ${t ? t.name : "a token that's gone"}` : tr.when === "see" ? "A player sees it" : "A player steps in";
     const to = S.scenes.find(x => x.id === tr.to);
     const who = tr.who === "all" ? "everyone" : "them";
     const then = { tell: "tell me", text: `show ${who} a message`, scene: to ? `send ${tr.who === "all" ? "the party" : "them"} to ${to.name}` : "send them… (pick a scene)", reveal: "reveal hidden tokens in it" }[tr.do];
@@ -2420,25 +2618,33 @@
     const t = tr.tok && sc.tokens.find(x => x.id === tr.tok);
     const others = S.scenes.filter(x => x.id !== sc.id);
     const v = { name: tr.name || (t ? `${t.name} is seen` : "Trigger"), when: tr.when || (t ? "see" : "enter"), do: tr.do || "text",
-      who: tr.who || "them", once: tr.once ?? true, text: tr.text || "", to: tr.to || "" };
+      who: tr.who || "them", once: tr.once ?? true, text: tr.text || "", to: tr.to || "", ask: !!tr.ask, tgt: tr.tgt || null, items: tr.items || [] };
+    const items = S.items || [];
     box.innerHTML = `<form class="win narrow" autocomplete="off">
       <div class="row between"><h2 style="margin:0">${isNew ? "New trigger" : "Trigger"}</h2><button type="button" class="x" data-close aria-label="Close">✕</button></div>
       <label class="field">Name<input name="name" maxlength="40" value="${esc(v.name)}"></label>
-      ${t ? `<p class="small">When a player's token can see <b>${esc(t.name)}</b>.</p>`
-        : `<label class="field">When<select name="when">
-          <option value="enter"${v.when === "enter" ? " selected" : ""}>A player's token steps into it</option>
-          <option value="see"${v.when === "see" ? " selected" : ""}>A player's token can see it</option></select></label>`}
+      <label class="field">When<select name="when">
+        ${t ? "" : `<option value="enter"${v.when === "enter" ? " selected" : ""}>A player's token steps into it</option>`}
+        <option value="see"${v.when === "see" ? " selected" : ""}>A player's token can see ${t ? esc(t.name) : "it"}</option>
+        <option value="use"${v.when === "use" ? " selected" : ""}>Player interacts: clicks ${t ? esc(t.name) : "it"} from right next to it</option></select></label>
       <label class="field">Then<select name="do">
         <option value="text"${v.do === "text" ? " selected" : ""}>Show a message</option>
         <option value="scene"${v.do === "scene" ? " selected" : ""}>Send them to another scene</option>
-        ${t ? "" : `<option value="reveal"${v.do === "reveal" ? " selected" : ""}>Reveal the hidden tokens and props in it</option>`}
+        <option value="reveal"${v.do === "reveal" ? " selected" : ""}>Reveal the hidden tokens, props and walls ${t ? "in an area" : "in it"}</option>
+        <option value="open"${v.do === "open" ? " selected" : ""}>Open doors, secret doors and hidden walls (a lever)</option>
+        <option value="give"${v.do === "give" ? " selected" : ""}>Give the party items (a loot chest)</option>
         <option value="tell"${v.do === "tell" ? " selected" : ""}>Just tell me</option></select></label>
-      <label class="field" data-for="text">Message<textarea name="text" rows="4" maxlength="1000" placeholder="The floor gives way beneath you!">${esc(v.text)}</textarea></label>
+      <div class="field" data-for="reveal open">Where<span class="small">${v.tgt ? `An area ${v.tgt.w} × ${v.tgt.h} at ${v.tgt.x + 1}, ${v.tgt.y + 1} <button type="button" class="link-btn" data-tgtclear>Use its own squares</button>` : t ? "Pick an area for it to work on" : "Its own squares"}</span>
+        <button type="button" class="btn small-btn" data-tgtpick>${v.tgt ? "Pick another area" : "Pick an area somewhere else"}</button></div>
+      <div class="field" data-for="give">Items${items.length ? `<div class="tt-itemchecks">${items.map(i => `<label class="check"><input type="checkbox" name="item" value="${i.id}"${v.items.includes(i.id) ? " checked" : ""}> ${esc(i.name)}${i.given ? " (the party has it)" : ""}</label>`).join("")}</div>`
+        : `<span class="muted small">Make the items first, in the Items tab.</span>`}</div>
+      <label class="field" data-for="text give">Message<textarea name="text" rows="4" maxlength="1000" placeholder="The floor gives way beneath you!">${esc(v.text)}</textarea></label>
       <label class="field" data-for="scene">Scene<select name="to">${others.length ? others.map(x => `<option value="${x.id}"${v.to === x.id ? " selected" : ""}>${esc(x.name)}</option>`).join("") : `<option value="">Make another scene first</option>`}</select></label>
       <label class="field" data-for="text scene">Who<select name="who">
         <option value="them"${v.who === "them" ? " selected" : ""}>The player who set it off</option>
         <option value="all"${v.who === "all" ? " selected" : ""}>Everyone on this map</option></select></label>
       <label class="check"><input type="checkbox" name="once"${v.once ? " checked" : ""}> Only the first time</label>
+      <label class="check" title="It doesn't do anything by itself: you're told, have them roll, then right-click it to set it off or skip"><input type="checkbox" name="ask"${v.ask ? " checked" : ""}> Ask me first (they roll for it)</label>
       ${tr.used ? `<label class="check"><input type="checkbox" name="reset" checked> It's gone off: set it again</label>` : ""}
       <p class="muted small">You get told every time it goes off.</p>
       <div class="row"><button class="btn primary" type="submit">${isNew ? "Make it" : "Save"}</button>
@@ -2450,14 +2656,26 @@
     F.do.addEventListener("change", show);
     show();
     F.name.select();
+    const collect = () => {
+      const d = { name: F.name.value.trim(), do: F.do.value, who: F.who.value, once: F.once.checked, text: F.text.value, to: F.to.value || null,
+        ask: F.ask.checked, tgt: v.tgt, items: [...form.querySelectorAll('[name="item"]:checked')].map(x => x.value) };
+      if (F.when) d.when = F.when.value;
+      return d;
+    };
     form.addEventListener("click", e => {
       if (e.target.closest("[data-close]")) closeModal("trigForm");
       else if (e.target.closest("[data-del]")) { action("trig_del", { sc: sc.id, id: tr.id }); closeModal("trigForm"); }
+      else if (e.target.closest("[data-tgtclear]")) openTrigForm({ ...tr, ...collect(), tgt: null });
+      else if (e.target.closest("[data-tgtpick]")) {          // drag a box on the map, then the form comes back
+        trigPick = { tr: { ...tr, ...collect() } };
+        closeModal("trigForm");
+        if (tool !== "script") setTool("script");
+        note("Drag a box over what it should open or reveal. Esc to cancel.");
+      }
     });
     form.addEventListener("submit", e => {
       e.preventDefault();
-      const d = { name: F.name.value.trim(), do: F.do.value, who: F.who.value, once: F.once.checked, text: F.text.value, to: F.to.value || null };
-      if (F.when) d.when = F.when.value;
+      const d = collect();
       if (F.reset && F.reset.checked) d.reset = true;
       if (isNew) action("trig_add", { sc: sc.id, trig: { ...d, ...(t ? { tok: t.id } : { x: tr.x, y: tr.y, w: tr.w, h: tr.h }) } });
       else action("trig_edit", { sc: sc.id, id: tr.id, trig: d });
@@ -2524,6 +2742,104 @@
     if (libHidden) tok.hidden = true;
     action("tok_add", { sc: sc.id, tok });
   }
+
+  // ---- Random encounters: party level + difficulty -> a fair group from the ready enemies ------
+  const CR_XP = { "0": 10, "1/8": 25, "1/4": 50, "1/2": 100, 1: 200, 2: 450, 3: 700, 4: 1100, 5: 1800, 6: 2300, 7: 2900, 8: 3900, 9: 5000, 10: 5900,
+    11: 7200, 12: 8400, 13: 10000, 14: 11500, 15: 13000, 16: 15000, 17: 18000, 18: 20000, 19: 22000, 20: 25000, 21: 33000, 22: 41000, 23: 50000, 24: 62000 };
+  const ENC_XP = [[25, 50, 75, 100], [50, 100, 150, 200], [75, 150, 225, 400], [125, 250, 375, 500], [250, 500, 750, 1100], [300, 600, 900, 1400],
+    [350, 750, 1100, 1700], [450, 900, 1400, 2100], [550, 1100, 1600, 2400], [600, 1200, 1900, 2800], [800, 1600, 2400, 3600], [1000, 2000, 3000, 4500],
+    [1100, 2200, 3400, 5100], [1250, 2500, 3800, 5700], [1400, 2800, 4300, 6400], [1600, 3200, 4800, 7200], [2000, 3900, 5900, 8800],
+    [2100, 4200, 6300, 9500], [2400, 4900, 7300, 10900], [2800, 5700, 8500, 12700]];
+  const ENC_DIFFS = [["easy", "Easy"], ["medium", "Medium"], ["hard", "Hard"], ["deadly", "Deadly"]];
+  const encMult = n => n <= 1 ? 1 : n === 2 ? 1.5 : n <= 6 ? 2 : n <= 10 ? 2.5 : n <= 14 ? 3 : 4;
+  const encCfg = () => Object.assign({ lvl: 1, diff: "medium", size: 0 }, S.enc || {});
+  function encParty() {
+    const c = encCfg();
+    if (c.size) return c.size;
+    const sc = scene(), on = sc ? sc.tokens.filter(t => t.owner || t.char).length : 0;
+    return Math.max(1, on || Object.keys(S.names).filter(q => !S.dms.includes(q)).length || 4);
+  }
+  const encLabel = () => { const c = encCfg(); return `${(ENC_DIFFS.find(d => d[0] === c.diff) || ENC_DIFFS[1])[1].toLowerCase()}, ${encParty()} × level ${c.lvl}`; };
+  function crXp(e) {
+    const st = e.stats || statsOf(e.name);
+    const cr = st && String(st.cr || "").trim().split(/\s/)[0];
+    return cr != null && CR_XP[cr] != null ? CR_XP[cr] : null;
+  }
+  function rollEncounter() {
+    const c = encCfg(), n = encParty(), row = ENC_XP[Math.max(0, Math.min(19, c.lvl - 1))], di = Math.max(0, ENC_DIFFS.findIndex(d => d[0] === c.diff));
+    const lo = row[di] * n, hi = (di < 3 ? row[di + 1] : row[3] * 1.6) * n;
+    const pool = (S.lib || []).filter(e => (e.cat === "enemy" || e.cat === "boss") && crXp(e) > 10).map(e => ({ e, xp: crXp(e) }));
+    if (!pool.length) { note("No enemies with a challenge rating in the Tokens tab. Add some with stat blocks first."); return null; }
+    const score = g => { const cnt = g.reduce((a, x) => a + x.n, 0); return g.reduce((a, x) => a + x.xp * x.n, 0) * encMult(cnt); };
+    const fits = [];
+    let best = null, bestD = Infinity;
+    for (let i = 0; i < 400; i++) {
+      const a = pool[Math.floor(Math.random() * pool.length)];
+      const g = [{ ...a, n: 1 }];
+      if (pool.length > 1 && Math.random() < 0.45) {         // sometimes a leader plus their minions
+        const b = pool[Math.floor(Math.random() * pool.length)];
+        if (b.e.id !== a.e.id) g.push({ ...b, n: 1 + Math.floor(Math.random() * 4) });
+      }
+      g[0].n = 1 + Math.floor(Math.random() * (g.length > 1 ? 2 : 8));
+      const v = score(g), cnt = g.reduce((t, x) => t + x.n, 0);
+      if (cnt > 12) continue;
+      if (v >= lo && v < hi) fits.push(g);
+      const d = v < lo ? lo - v : v >= hi ? v - hi : 0;
+      if (d < bestD) { bestD = d; best = g; }
+    }
+    const g = fits.length ? fits[Math.floor(Math.random() * fits.length)] : best;
+    if (!fits.length) note("Nothing on your enemy list fits that exactly, so this is the closest.");
+    return g;
+  }
+  function dropEncounter(g, p) {
+    const sc = scene();
+    if (!sc || !g) return;
+    const T = tilesOf(rawScene()), drawn = /[^.?]/.test(T), taken = new Set();
+    for (const t of sc.tokens) for (let dx = 0; dx < (t.size || 1); dx++) for (let dy = 0; dy < (t.size || 1); dy++) taken.add((t.x + dx) + "," + (t.y + dy));
+    const okCell = (x, y) => inScene(sc, x, y) && !taken.has(x + "," + y) && (!drawn || "fogd".includes(T[y * sc.cols + x]));
+    const cx = Math.floor(p.x), cy = Math.floor(p.y), spots = [];
+    for (let r = 0; r < 12; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) === r) spots.push([cx + dx, cy + dy]);
+    }
+    const names = [];
+    for (const { e, n } of g) {
+      for (let i = 0; i < n; i++) {
+        const k = Math.max(1, e.size || 1);
+        const at = spots.find(([x, y]) => { for (let a = 0; a < k; a++) for (let b = 0; b < k; b++) if (!okCell(x + a, y + b)) return false; return true; });
+        if (!at) continue;
+        for (let a = 0; a < k; a++) for (let b = 0; b < k; b++) taken.add((at[0] + a) + "," + (at[1] + b));
+        placeFromLib(e, { x: at[0] + (k - 1) / 2, y: at[1] + (k - 1) / 2 });
+      }
+      names.push(n > 1 ? `${n} × ${e.name}` : e.name);
+    }
+    note(`Encounter (${encLabel()}): ${names.join(", ")}`);
+  }
+  function renderEncounter(box, p) {
+    const c = encCfg(), wrap = document.createElement("div");
+    wrap.className = "tt-enc";
+    wrap.innerHTML = `<h4 style="margin:6px 0 2px">🎲 Random encounter</h4>
+      <div class="row"><label class="small">Party level <input type="number" min="1" max="20" value="${c.lvl}" class="num" data-lvl></label>
+      <label class="small">Players <input type="number" min="0" max="12" value="${c.size || ""}" placeholder="${encParty()}" class="num" data-size title="Leave empty to count the players' tokens on this map"></label></div>`;
+    const set = d => action("enc_set", d);
+    wrap.querySelector("[data-lvl]").addEventListener("change", ev => set({ lvl: ev.target.value }));
+    wrap.querySelector("[data-size]").addEventListener("change", ev => set({ size: ev.target.value || 0 }));
+    wrap.append(seg(ENC_DIFFS, c.diff, v => { S.enc = { ...c, diff: v }; set({ diff: v }); }));
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn primary small-btn";
+    b.textContent = libArm && libArm.enc ? "Click the map to drop them (Esc to cancel)" : "Roll an encounter";
+    b.addEventListener("click", () => {
+      const g = rollEncounter();
+      if (!g) return;
+      const lead = g[0].e;
+      libArm = { id: "enc", enc: g, name: g.map(x => (x.n > 1 ? x.n + " × " : "") + x.e.name).join(", "), c: lead.c, size: lead.size || 1 };
+      renderToolOpts(); redraw();
+    });
+    wrap.append(b);
+    if (libArm && libArm.enc) wrap.append(p(`Rolled: ${esc(libArm.name)}. Click where they should be, or roll again.`));
+    else wrap.append(p("Uses the enemies and bosses on your list that have a challenge rating. You can also right-click an empty square."));
+    box.append(wrap);
+  }
   function renderLib(box, p) {
     const sc = scene();
     if (!sc) return;
@@ -2571,15 +2887,16 @@
       make.addEventListener("click", () => openTokenForm());
       r.append(save, make);
       box.append(r);
+      renderEncounter(box, p);
     }
-    box.append(p(libArm ? `Click the map to put down ${esc(libArm.name)}. Right-click or Esc when you're done.`
+    box.append(p(libArm && !libArm.enc ? `Click the map to put down ${esc(libArm.name)}. Right-click or Esc when you're done.`
       : libCat === "players" ? "Drag a player onto the map. If they already have a token here, it moves there."
       : "Drag one onto the map, or click it and then click the map (as many times as you like)."));
     box.scrollTop = keep;
   }
   function libSignature() {
     const sc = scene();
-    return JSON.stringify([S.lib, S.names, S.dms, sel, sc && sc.id, sc && sc.tokens.map(t => t.owner || "")]);
+    return JSON.stringify([S.lib, S.enc, S.names, S.dms, sel, sc && sc.id, sc && sc.tokens.map(t => t.owner || (t.char ? "c" : ""))]);
   }
   function initLib() {
     const box = $("toolOpts");
@@ -2638,7 +2955,7 @@
     rb.disabled = !redoStack.length;
     ur.append(ub, rb);
     box.append(ur);
-    const modes = seg([["room", "Room"], ["brush", "Brush"], ["erase", "Erase"], ["door", "Door"], ["prop", "Props"], ["link", "Stairs"], ["label", "Label"]],
+    const modes = seg([["room", "Room"], ["brush", "Brush"], ["erase", "Erase"], ["door", "Door"], ["prop", "Props"], ["link", "Stairs"], ["label", "Label"], ["spawn", "Spawn"]],
       build.mode, v => { build.mode = v; });
     modes.classList.add("tt-modes");                    // two rows, so none get cut off
     box.append(modes);
@@ -2693,6 +3010,8 @@
       box.append(hid);
     }
     if (build.mode === "door") box.append(seg([[false, "Door"], [true, "Secret door"]], build.secret, v => { build.secret = v; }));
+    if (build.mode === "spawn") box.append(p("Drag a box where the party arrives when you send them to this scene (Show to players, a link or a trigger). Right-click to take it away."));
+    { const sc = scene(); spawnShown = !!(sc && sc.spawn); if (sc && !sc.spawn) box.append(p("⚠ This map has no player spawn yet. Pick <b>Spawn</b> and drag where the party should arrive.")); }
     if (build.mode === "label") {
       const l = document.createElement("label");
       l.className = "check small";
@@ -3324,6 +3643,224 @@
     });
   }
 
+
+  // ---- Party items (keys, handouts, loot) ----------------------------------------------------
+  const ITEM_ICON = { item: "🎒", key: "🔑", handout: "📜" };
+  let itemPic = null, itemsSeen = -1;
+  const itemList = () => (S.items || []);
+  function renderItems() {
+    const list = itemList(), dm = isDm();
+    const given = list.filter(it => it.given).length;
+    if (!dm && itemsSeen >= 0 && given > itemsSeen && tab !== "items") $$tab("items").classList.add("ping");
+    itemsSeen = given;
+    $("itemEmpty").textContent = list.length ? "" : dm ? "Nothing yet. Add keys, letters, maps or loot below, then give them to the party." : "The party hasn't got anything yet.";
+    $("itemEmpty").hidden = !!list.length;
+    const keep = $("itemList").scrollTop;
+    $("itemList").innerHTML = list.map(it => {
+      const pic = it.img ? `<span class="face" style="background-image:url('${assetUrl(it.img)}')"></span>` : `<span class="face ico">${ITEM_ICON[it.kind] || "🎒"}</span>`;
+      const doors = it.kind === "key" ? S.scenes.reduce((n, sc) => n + (sc.walls || []).filter(w => w.key === it.id).length, 0) : 0;
+      const sub = [it.kind === "key" ? "Key" : it.kind === "handout" ? "Handout" : "Item",
+        dm ? (it.given ? "Given" : "Not given yet") : "", dm && it.kind === "key" ? (doors ? `opens ${doors} door${doors > 1 ? "s" : ""}` : "no doors yet") : ""].filter(Boolean).join(" · ");
+      return `<li data-id="${it.id}" class="${dm && !it.given ? "ungiven" : ""}"><button type="button" class="it-open" data-open>${pic}<span class="info"><b>${esc(it.name)}</b><span class="muted small">${esc(sub)}</span></span></button>
+        ${dm ? `<div class="btns"><button type="button" class="btn small-btn${it.given ? "" : " primary"}" data-give>${it.given ? "Take back" : "Give"}</button><button type="button" class="btn small-btn" data-pin title="Put it on the handout board, or take it down">${it.pin ? "Unpin" : "Pin"}</button><button type="button" class="btn small-btn" data-edit>Edit</button><button type="button" class="btn small-btn" data-pic>${it.img ? "New picture" : "Picture"}</button><button type="button" class="btn danger small-btn" data-del aria-label="Delete ${esc(it.name)}">✕</button></div>` : ""}</li>`;
+    }).join("");
+    $("itemList").scrollTop = keep;
+  }
+  function openItem(id) {
+    const it = itemList().find(x => x.id === id);
+    if (!it) return;
+    const box = $("handout");
+    box.innerHTML = `<div class="win"><div class="row between"><h2 style="margin:0">${ITEM_ICON[it.kind] || ""} ${esc(it.name)}</h2><button type="button" class="x" data-close aria-label="Close">✕</button></div>
+      ${it.img ? `<img class="handout-img" src="${assetUrl(it.img)}" alt="">` : ""}${it.text ? `<div class="note-text">${esc(it.text)}</div>` : ""}
+      ${it.kind === "key" ? `<p class="muted small">Walk up to a locked door and open it. If this is its key, it opens.</p>` : ""}</div>`;
+    box.hidden = false;
+  }
+  async function itemPicture() {
+    const f = await pickFile();
+    if (!f) return null;
+    try { return (await shrink(f, 1400)).url; }
+    catch { note("That picture didn't work. Try a PNG or JPG."); return null; }
+  }
+  function initItems() {
+    $("itemPic").addEventListener("click", async () => {
+      const url = await itemPicture();
+      if (!url) return;
+      itemPic = url;
+      $("itemPicName").textContent = "Picture added";
+    });
+    $("itemForm").addEventListener("submit", e => {
+      e.preventDefault();
+      const name = $("itemName").value.trim();
+      if (!name) return;
+      const give = e.submitter && e.submitter.dataset.give === "1";
+      const item = { name, kind: $("itemKind").value, text: $("itemText").value.trim() };
+      if (itemPic) item.src = itemPic;
+      const before = new Set(itemList().map(x => x.id));
+      action("item_add", { item }, null);
+      if (give) {   // give it once the server has it
+        const wait = Date.now(), tick = setInterval(() => {
+          const it = itemList().find(x => !before.has(x.id) && x.name === name);
+          if (it) { clearInterval(tick); action("item_edit", { id: it.id, set: { given: true } }); }
+          else if (Date.now() - wait > 8000) clearInterval(tick);
+        }, 150);
+      }
+      $("itemName").value = ""; $("itemText").value = ""; itemPic = null; $("itemPicName").textContent = "";
+    });
+    $("itemList").addEventListener("click", async e => {
+      const li = e.target.closest("li"), it = li && itemList().find(x => x.id === li.dataset.id);
+      if (!it) return;
+      if (e.target.closest("[data-give]")) return action("item_edit", { id: it.id, set: { given: !it.given } });
+      if (e.target.closest("[data-pin]")) return action("item_edit", { id: it.id, set: { pin: !it.pin } });
+      if (e.target.closest("[data-del]")) { if (confirm(`Delete ${it.name}?` + (it.kind === "key" ? " Doors it opened won't have a key any more." : ""))) action("item_del", { id: it.id }); return; }
+      if (e.target.closest("[data-pic]")) { const url = await itemPicture(); if (url) action("item_img", { id: it.id, src: url }); return; }
+      if (e.target.closest("[data-edit]")) {
+        const name = prompt("Name", it.name);
+        if (name === null) return;
+        const text = prompt("What players read when they open it", it.text || "");
+        if (text === null) return;
+        return action("item_edit", { id: it.id, set: { name: name.trim() || it.name, text } });
+      }
+      if (e.target.closest("[data-open]")) openItem(it.id);
+    });
+  }
+
+
+  // ---- World map: a picture with places; the DM sends the party to a place's scene ------------
+  let worldSel = null;
+  function renderWorldBtn() {
+    $("worldBtn").hidden = !(isDm() || (S.world && S.world.open));
+  }
+  function renderWorld() {
+    const w = S.world, box = $("worldMap"), dm = isDm();
+    if (!w) return closeModal("worldMap");
+    const marks = w.marks || [], m = worldSel && marks.find(x => x.id === worldSel);
+    if (!m) worldSel = null;
+    const scName = id => (S.scenes.find(x => x.id === id) || {}).name;
+    box.innerHTML = `<div class="win wide"><div class="row between"><h2 style="margin:0">World map</h2>
+      <div class="row">${dm ? `<label class="check small"><input type="checkbox" data-open ${w.open ? "checked" : ""}> Players can open it</label>
+      <button type="button" class="btn small-btn" data-img>${w.img ? "New picture" : "Add a picture"}</button>` : ""}
+      <button type="button" class="x" data-close aria-label="Close">✕</button></div></div>
+      <div class="tt-world${dm ? " dm" : ""}"><div class="tt-wi">${w.img ? `<img src="${assetUrl(w.img)}" alt="" draggable="false">` : `<div class="tt-world-empty">${dm ? "Add a picture of your world, then click it to add places." : "No map yet."}</div>`}
+      ${marks.map(x => `<button type="button" class="tt-mark${x.here || (dm && x.sc === S.active) ? " here" : ""}${dm && !x.shown ? " hid" : ""}${x.id === worldSel ? " on" : ""}" data-mark="${x.id}" style="left:${x.x * 100}%;top:${x.y * 100}%" title="${esc(x.name)}"><i></i><span>${esc(x.name)}${x.here || (dm && x.sc === S.active) ? " (you are here)" : ""}</span></button>`).join("")}</div></div>
+      ${dm && m ? `<div class="tt-markedit row"><b>${esc(m.name)}</b>
+        <label class="small">Scene <select data-msc><option value="">None</option>${S.scenes.map(x => `<option value="${x.id}"${x.id === m.sc ? " selected" : ""}>${esc(x.name)}</option>`).join("")}</select></label>
+        <label class="check small"><input type="checkbox" data-mshown ${m.shown ? "checked" : ""}> Players see it</label>
+        <button type="button" class="btn primary small-btn" data-go ${m.sc ? "" : "disabled"}>Take the party there</button>
+        <button type="button" class="btn small-btn" data-rename>Rename</button>
+        <button type="button" class="btn danger small-btn" data-mdel>Delete</button></div>`
+        : dm ? `<p class="muted small" style="margin:0">Click the map to add a place. Click a place to link it to a scene and send the party there (they land on that scene's player spawn). Drag places to move them.</p>` : ""}</div>`;
+    box.hidden = false;
+  }
+  function initWorld() {
+    $("worldBtn").addEventListener("click", () => { worldSel = null; renderWorld(); });
+    const box = $("worldMap");
+    let drag = null;
+    box.addEventListener("click", async e => {
+      if (e.target === box || e.target.closest("[data-close]")) return closeModal("worldMap");
+      if (!isDm()) return;
+      if (e.target.closest("[data-img]")) {
+        const f = await pickFile();
+        if (!f) return;
+        try { action("world_img", { src: (await shrink(f, 2400)).url }); } catch { note("That picture didn't work. Try a PNG or JPG."); }
+        return;
+      }
+      const m = worldSel && (S.world.marks || []).find(x => x.id === worldSel);
+      if (m && e.target.closest("[data-go]")) { if (confirm(`Take the party to ${m.name}?`)) { action("mark_go", { id: m.id }); closeModal("worldMap"); } return; }
+      if (m && e.target.closest("[data-mdel]")) { action("mark_del", { id: m.id }); worldSel = null; return; }
+      if (m && e.target.closest("[data-rename]")) { const n = prompt("Name", m.name); if (n && n.trim()) action("mark_edit", { id: m.id, set: { name: n.trim() } }); return; }
+    });
+    box.addEventListener("change", e => {
+      if (!isDm()) return;
+      if (e.target.matches("[data-open]")) return action("world_open", { open: e.target.checked });
+      const m = worldSel && (S.world.marks || []).find(x => x.id === worldSel);
+      if (m && e.target.matches("[data-msc]")) action("mark_edit", { id: m.id, set: { sc: e.target.value } });
+      if (m && e.target.matches("[data-mshown]")) action("mark_edit", { id: m.id, set: { shown: e.target.checked } });
+    });
+    const frac = (e, area) => { const r = area.getBoundingClientRect(); return { x: Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), y: Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)) }; };
+    box.addEventListener("pointerdown", e => {
+      const area = e.target.closest(".tt-wi");
+      if (!area || e.button !== 0) return;
+      const mk = e.target.closest("[data-mark]");
+      if (mk) { e.preventDefault(); drag = { id: mk.dataset.mark, el: mk, area, x0: e.clientX, y0: e.clientY, moved: false }; return; }
+      if (!isDm() || !S.world.img) return;
+      const f = frac(e, area), name = prompt("Name of this place", "");
+      if (name && name.trim()) action("mark_add", { x: f.x, y: f.y, name: name.trim(), shown: true });
+    });
+    addEventListener("pointermove", e => {
+      if (!drag || !isDm()) return;
+      if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 4) drag.moved = true;
+      if (!drag.moved) return;
+      const f = frac(e, drag.area);
+      drag.el.style.left = f.x * 100 + "%"; drag.el.style.top = f.y * 100 + "%";
+    });
+    addEventListener("pointerup", e => {
+      if (!drag) return;
+      const d = drag; drag = null;
+      if (d.moved && isDm()) { const f = frac(e, d.area); action("mark_edit", { id: d.id, set: { x: f.x, y: f.y } }); }
+      else { worldSel = worldSel === d.id ? null : d.id; if (isDm()) renderWorld(); }
+    });
+  }
+
+  // ---- Handout board: pinned handouts and pictures, plus notes anyone can stick up -------------
+  function renderBoard() {
+    const box = $("boardBox"), dm = isDm();
+    const pins = itemList().filter(it => it.pin && (dm || it.given)), notes = S.board || [];
+    const keep = box.querySelector(".tt-cork");
+    box.innerHTML = `<div class="win wide"><div class="row between"><h2 style="margin:0">Handout board</h2>
+      <div class="row"><button type="button" class="btn primary small-btn" data-add>Add a note</button><button type="button" class="x" data-close aria-label="Close">✕</button></div></div>
+      <div class="tt-cork">${pins.map((it, i) => `<div class="tt-pin card${it.given ? "" : " ungiven"}" data-item="${it.id}" style="left:${(it.bx ?? (0.03 + (i % 5) * 0.19)) * 100}%;top:${(it.by ?? (0.05 + Math.floor(i / 5) * 0.3)) * 100}%">
+        ${it.img ? `<img src="${assetUrl(it.img)}" alt="" draggable="false">` : `<span class="ico">${ITEM_ICON[it.kind] || "📜"}</span>`}<b>${esc(it.name)}</b>${dm && !it.given ? `<small>not given yet</small>` : ""}</div>`).join("")}
+      ${notes.map(n => `<div class="tt-pin note" data-note="${n.id}" style="left:${n.x * 100}%;top:${n.y * 100}%"><p>${esc(n.text)}</p><small>${esc(n.name || "")}</small>
+        ${dm || n.by === me ? `<button type="button" class="x" data-ndel aria-label="Take it down">✕</button>` : ""}</div>`).join("")}
+      ${!pins.length && !notes.length ? `<div class="tt-world-empty">Nothing pinned yet. Handouts and pictures the DM gives you go up here, and anyone can add a note.</div>` : ""}</div></div>`;
+    box.hidden = false;
+  }
+  function initBoard() {
+    $("boardBtn").addEventListener("click", renderBoard);
+    const box = $("boardBox");
+    let drag = null;
+    box.addEventListener("click", e => {
+      if (e.target === box || e.target.closest("[data-close]")) return closeModal("boardBox");
+      if (e.target.closest("[data-add]")) {
+        const t = prompt("Your note (everyone can read it)", "");
+        if (t && t.trim()) action("board_add", { text: t.trim(), x: 0.05 + Math.random() * 0.6, y: 0.05 + Math.random() * 0.6 });
+        return;
+      }
+      const nd = e.target.closest("[data-ndel]");
+      if (nd) { action("board_del", { id: nd.closest("[data-note]").dataset.note }); return; }
+    });
+    box.addEventListener("pointerdown", e => {
+      const el = e.target.closest(".tt-pin");
+      if (!el || e.button !== 0 || e.target.closest("button")) return;
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      drag = { el, area: el.parentElement, dx: e.clientX - r.left, dy: e.clientY - r.top, x0: e.clientX, y0: e.clientY, moved: false };
+      el.classList.add("lift");
+    });
+    const spot = e => { const r = drag.area.getBoundingClientRect(); return { x: Math.max(0, Math.min(0.92, (e.clientX - drag.dx - r.left) / r.width)), y: Math.max(0, Math.min(0.9, (e.clientY - drag.dy - r.top) / r.height)) }; };
+    addEventListener("pointermove", e => {
+      if (!drag) return;
+      if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 4) drag.moved = true;
+      if (!drag.moved) return;
+      const f = spot(e);
+      drag.el.style.left = f.x * 100 + "%"; drag.el.style.top = f.y * 100 + "%";
+    });
+    addEventListener("pointerup", e => {
+      if (!drag) return;
+      const d = drag, f = spot(e);
+      drag = null;
+      d.el.classList.remove("lift");
+      if (d.moved) {
+        if (d.el.dataset.item) action("board_move", { item: d.el.dataset.item, x: f.x, y: f.y });
+        else action("board_move", { id: d.el.dataset.note, x: f.x, y: f.y });
+      } else if (d.el.dataset.item) openItem(d.el.dataset.item);
+      else if (d.el.dataset.note) {
+        const n = (S.board || []).find(x => x.id === d.el.dataset.note);
+        if (n && (isDm() || n.by === me)) { const t = prompt("Change the note", n.text); if (t && t.trim()) action("board_edit", { id: n.id, text: t.trim() }); }
+      }
+    });
+  }
+
   // ---- Party (character list) ----------------------------------------------------------------
   function face(ch, big) {
     const img = ch.img ? `background-image:url('${assetUrl(ch.img)}');` : "";
@@ -3661,16 +4198,24 @@
       if (!sc || !b) return;
       if (b.dataset.gc) action("scene_edit", { sc: sc.id, gc: b.dataset.gc });
       else if (b.dataset.fogall) action("fog_all", { sc: sc.id, show: b.dataset.fogall === "1" });
-      else if (b.dataset.show != null) action("scene_show", { sc: sc.id });
+      else if (b.dataset.show != null) showScene(sc.id);
       else if (b.dataset.copy != null) action("scene_copy", { sc: sc.id });
       else if (b.dataset.nomap != null) action("scene_img", { sc: sc.id, src: "" });
       else if (b.dataset.del != null) { if (confirm(`Delete the scene "${sc.name}", with its tokens and drawings?`)) action("scene_del", { sc: sc.id }); }
       else if (b.dataset.map != null) importMap(sc);
     });
     $("scenePick").addEventListener("change", e => { viewSc = e.target.value; wallPts = null; selectToken(null); fitView(); renderAll(); });
-    $("showScene").addEventListener("click", () => action("scene_show", { sc: viewSc }));
+    $("showScene").addEventListener("click", () => showScene(viewSc));
     $("asPlayerBtn").addEventListener("click", () => { if (S && S.playAs) action("play_as", { id: null }); else setAsPlayer(!asPlayer); });
     $("fakeBtn").addEventListener("click", makeFake);
+    $("viewAsPick").addEventListener("change", e => {
+      const v = e.target.value;
+      e.target.blur();
+      if (v === "*") { if (S.playAs) { wantAny = true; action("play_as", { id: null }); } else setAsPlayer(true); }
+      else if (v) { if (asPlayer) setAsPlayer(false); action("play_as", { id: v }); }
+      else if (S.playAs) action("play_as", { id: null });
+      else if (asPlayer) setAsPlayer(false);
+    });
     $("fakeBtn2").addEventListener("click", makeFake);
   }
 
@@ -3762,6 +4307,9 @@
     initChat();
     initTurns();
     initParty();
+    initItems();
+    initWorld();
+    initBoard();
     initSheet();
     initNotes();
     initScenes();
