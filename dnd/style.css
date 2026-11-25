@@ -67,6 +67,7 @@ body.is-dm .player-only { display: none !important; }
   left: 66px; top: 70px; display: flex; flex-direction: column; gap: 8px; padding: 10px; max-width: 250px; font-size: .85rem;
 }
 .tt-opts .row { gap: 5px; }
+.tt-opts > * { flex-shrink: 0; }              /* a long panel scrolls instead of squashing what's in it */
 .tt-opts.build { max-width: 330px; max-height: calc(100% - 90px); overflow-y: auto; }
 .tt-opts.build > .seg button { padding: 6px 8px; }
 .seg.tt-modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); }
