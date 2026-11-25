@@ -2411,7 +2411,7 @@
     const p = worldPt(e), { sx, sy } = screenPt(e);
     if (e.button === 2 && e.shiftKey && isDm()) { e.preventDefault(); openMenu(e.clientX, e.clientY, p); return; }   // the menu in any tool
     if (tool === "walls" && isDm() && e.button === 2) { finishWall(); return; }
-    if (tool === "build" && isDm() && !spaceDown && !e.altKey && (e.button === 0 || e.button === 2)) { buildDown(e, p); return; }
+    if (tool === "build" && isDm() && !spaceDown && !e.altKey && (e.button === 0 || e.button === 2) && !(e.button === 0 && tokenAt(p))) { buildDown(e, p); return; }
     if (e.button === 1 && e.altKey && isDm()) { e.preventDefault(); pickAt(p); return; }     // like pick block
     if (tool === "script" && isDm() && e.button === 0 && trigPick) { act = { kind: "tgtbox", a: p, b: p }; return; }
     if (tool === "script" && isDm() && e.button === 0 && !spaceDown && !e.altKey && !e.shiftKey) {
@@ -2472,6 +2472,13 @@
       return;
     }
     const t = tokenAt(p);
+    if (t && e.pointerType === "touch") {          // phones: a tap opens its card, a drag just moves it (or the map)
+      if (controls(t) && !(S.cut && !isDm())) {
+        const group = (picked.has(t.id) ? [...picked].map(tokenById) : [t]).filter(x => x && controls(x)).map(x => ({ id: x.id, ox: x.x, oy: x.y }));
+        act = { kind: "token", id: t.id, ox: t.x, oy: t.y, x: t.x, y: t.y, dx: p.x - t.x, dy: p.y - t.y, group, moved: false, sx, sy, tap: t.id };
+      } else act = { kind: "pan", sx, sy, cx: cam.x, cy: cam.y, click: true, tapTok: t.id };
+      return;
+    }
     if (t && !controls(t)) interact({ tok: t.id });
     if (t) {
       if (e.shiftKey || e.ctrlKey || e.metaKey) { selectToken(t.id, true); return; }
@@ -2570,6 +2577,8 @@
     viewport.classList.remove("panning");
     if (a.kind === "pan" && a.menu && a.click !== false) { openMenu(a.mx, a.my, a.p); return; }
     if (a.kind === "pan" && !a.menu && a.click && a.p) interact(cellAt(a.p));      // a plain click on a square
+    if (a.kind === "pan" && a.tapTok && a.click) tapToken(a.tapTok);
+    if (a.kind === "token" && a.tap && !a.moved) tapToken(a.tap);
     if (a.kind === "token") {
       if (a.moved) {
         // snap the token that was grabbed; the others keep their places around it
@@ -3345,6 +3354,81 @@
     search(t.name);
   }
 
+  // ---- D&D Beyond: a character's share link (the server fetches it) or its exported PDF fills in a token -----
+  const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+  let pdfjsLoad = null;
+  function loadPdfJs() {
+    if (!pdfjsLoad) pdfjsLoad = new Promise((ok, bad) => {
+      const sc = document.createElement("script");
+      sc.src = PDFJS + "pdf.min.js";
+      sc.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + "pdf.worker.min.js"; ok(window.pdfjsLib); };
+      sc.onerror = () => { pdfjsLoad = null; bad(new Error("pdf.js")); };
+      document.head.append(sc);
+    });
+    return pdfjsLoad;
+  }
+  async function ddbFromLink() {
+    const u = await askText("Import from D&D Beyond", "", { label: "Paste the character's link, like dndbeyond.com/characters/12345678. The character has to be Public (Character Settings > Character Privacy).", max: 200, ok: "Import" });
+    if (!u || !u.trim()) return null;
+    note("Getting the character from D&D Beyond…");
+    try {
+      const r = await (await fetch(`${AceLive.SERVER}/api/dnd/lookup/ddb?u=${encodeURIComponent(u.trim())}`)).json();
+      if (!r.ok) { note(r.error); return null; }
+      return r.char;
+    } catch { note("Couldn't reach the game server. Try again, or use the PDF."); return null; }
+  }
+  function pickPdf() {
+    return new Promise(ok => {
+      const f = document.createElement("input");
+      f.type = "file"; f.accept = "application/pdf,.pdf";
+      f.onchange = () => ok(f.files[0] || null);
+      f.click();
+    });
+  }
+  // The fields D&D Beyond's PDF (and the official sheet) fill in; names vary, so match loosely.
+  function ddbFromFields(fields) {
+    const val = {};
+    for (const [k, list] of Object.entries(fields || {})) {
+      const v = (Array.isArray(list) ? list : [list]).map(o => o && o.value).find(x => x != null && String(x).trim() !== "" && x !== "Off");
+      if (v != null) val[k.toLowerCase().replace(/[^a-z0-9]/g, "")] = String(v).trim();
+    }
+    const pick = (...re) => { for (const r of re) { const k = Object.keys(val).find(x => r.test(x)); if (k) return val[k]; } return ""; };
+    const n = v => { const m = String(v || "").match(/-?\d+/); return m ? Number(m[0]) : null; };
+    const name = pick(/^charactername$/, /^charactername\d*$/, /^name$/);
+    const mhp = n(pick(/^(maxhp|hpmax)\d*$/, /hitpointmax/, /maxhitpoints/));
+    const hp = n(pick(/^(currenthp|hpcurrent)\d*$/, /currenthitpoints/));
+    const ac = n(pick(/^ac\d*$/, /^armou?rclass/));
+    const speed = n(pick(/^speed\d*$/));
+    const init = n(pick(/^init(iative)?\d*$/));
+    const cls = pick(/^classlevel/, /^class\d*$/);
+    if (!name && mhp == null && ac == null) return null;
+    return { name: name.slice(0, 40), mhp, hp: hp ?? mhp, ac, speed, init, cls };
+  }
+  async function ddbFromPdf() {
+    const f = await pickPdf();
+    if (!f) return null;
+    note("Reading the PDF…");
+    try {
+      const lib = await loadPdfJs();
+      const doc = await lib.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise;
+      const c = ddbFromFields(await doc.getFieldObjects());
+      if (!c) { note("That PDF has no character sheet in it. On D&D Beyond, open the character and use Export to PDF, or paste the link instead."); return null; }
+      return c;
+    } catch { note("Couldn't read that PDF. Try exporting it again from D&D Beyond, or paste the link instead."); return null; }
+  }
+  // Put an imported character on an existing token.
+  async function ddbOnToken(t, how) {
+    const c = await (how === "pdf" ? ddbFromPdf() : ddbFromLink());
+    if (!c) return;
+    const set = {};
+    for (const k of ["name", "mhp", "hp", "ac", "speed", "init"]) if (c[k] != null && c[k] !== "") set[k] = c[k];
+    if (c.cls && !t.note) set.note = c.cls + (c.race ? ", " + c.race : "");
+    editToken(t, set);
+    if (c.img) { try { action("tok_img", { sc: viewSc, id: t.id, src: (await shrink(await (await fetch(c.img)).blob(), 256, true)).url }); } catch { /* no picture then */ } }
+    note(`${c.name || t.name}: HP ${c.hp ?? "?"}/${c.mhp ?? "?"}, AC ${c.ac ?? "?"}${how === "pdf" ? ". Add a picture with Upload." : ""}`);
+    renderCard(true);
+  }
+
   // ---- NPC voice: a reminder of how they talk pops up over them when the DM clicks one ---------------
   let voiceOn = null, voiceTimer = 0;
   function showVoice(t) {
@@ -3439,6 +3523,14 @@
     });
   }
 
+  function tapToken(id) {                          // a tap on a phone: what a click does on a computer
+    const t = tokenById(id);
+    if (!t) return;
+    if (!controls(t)) interact({ tok: t.id });
+    selectToken(t.id);
+    if (isDm() && t.voice) showVoice(t);
+    if (controls(t) && S.cut && !isDm()) note("Hold on: the DM is showing you something.");
+  }
   function selectToken(id, add) {
     if (tool === "lib") setTimeout(renderToolOpts);          // the Save button names the selected token
     if (!id) picked.clear();
@@ -3476,6 +3568,8 @@
     if (can) h += `<div class="row tt-picrow"><span class="small muted">Picture</span><button type="button" class="btn small-btn" data-pic>${t.img ? "Change" : "Upload"}</button>
       <button type="button" class="btn small-btn" data-picfind title="Search free pictures on Wikimedia Commons">Find one online</button>
       ${t.img ? `<button type="button" class="btn small-btn" data-picdel>Remove</button>` : ""}</div>`;
+    if (can) h += `<div class="row tt-picrow"><span class="small muted">D&amp;D Beyond</span><button type="button" class="btn small-btn" data-ddb="link" title="Fill in name, HP, AC, speed and picture from a public D&D Beyond character">Paste link</button>
+      <button type="button" class="btn small-btn" data-ddb="pdf" title="Fill in name, HP, AC and speed from the PDF D&D Beyond exports">Upload PDF</button></div>`;
     if (can && !t.img) {
       const auto = iconName({ name: t.name });
       h += `<label class="small muted row tt-picrow">Icon <select data-k="icon"><option value="">${auto ? `Match its name (${esc(auto.replace(/-/g, " "))})` : "Match its name (none fits)"}</option>
@@ -3584,6 +3678,7 @@
         if (f) setPicture(t, f);
       }
       if (b.dataset.picfind != null) openPicFind(t);
+      if (b.dataset.ddb) ddbOnToken(t, b.dataset.ddb);
       if (b.dataset.picdel != null) action("tok_img", { sc: viewSc, id: t.id, src: null });
     });
     card.addEventListener("change", e => {
@@ -3759,9 +3854,10 @@
       </div>
       <div class="row">${TOKEN_COLOURS.map((c, i) => `<button type="button" class="sw${i === (dm ? 0 : 5) ? " on" : ""}" style="--c:${c}" data-colour="${c}" aria-label="Colour"></button>`).join("")}</div>
       <div class="row"><button type="button" class="btn small-btn" data-pic>Add a picture</button><span class="muted small" data-picnote></span></div>
+      <div class="row"><span class="small muted">From D&amp;D Beyond</span><button type="button" class="btn small-btn" data-ddb="link">Paste link</button><button type="button" class="btn small-btn" data-ddb="pdf">Upload PDF</button></div>
       <button class="btn primary" type="submit">Put it on the map</button>
     </form>`;
-    let c = TOKEN_COLOURS[dm ? 0 : 5];
+    let c = TOKEN_COLOURS[dm ? 0 : 5], ddbSpeed = null, ddbHp = null;
     const form = box.querySelector("form");
     box.hidden = false;
     form.elements.name.focus();
@@ -3790,6 +3886,18 @@
       if (!b) return;
       if (b.dataset.close != null) closeModal("tokenForm");
       else if (b.dataset.colour) { c = b.dataset.colour; form.querySelectorAll(".sw").forEach(x => x.classList.toggle("on", x === b)); }
+      else if (b.dataset.ddb) {
+        const c = await (b.dataset.ddb === "pdf" ? ddbFromPdf() : ddbFromLink());
+        if (!c) return;
+        const F = form.elements;
+        if (c.name) F.name.value = c.name;
+        if (c.mhp != null) F.hp.value = c.mhp;
+        if (c.ac != null) F.ac.value = c.ac;
+        if (c.init != null) F.init.value = c.init;
+        ddbSpeed = c.speed ?? null; ddbHp = c.hp ?? null;
+        if (c.img) { try { newTokPic = (await shrink(await (await fetch(c.img)).blob(), 256, true)).url; form.querySelector("[data-picnote]").textContent = "Picture from D&D Beyond"; } catch { /* no picture then */ } }
+        note(`Filled in ${c.name || "the character"} from D&D Beyond. Check it, then put it on the map.`);
+      }
       else if (b.dataset.pic != null) {
         const f = await pickFile();
         if (!f) return;
@@ -3811,6 +3919,8 @@
         ac: F.ac.value === "" ? null : Number(F.ac.value), init: F.init.value === "" ? null : Number(F.init.value),
       };
       if (ch) tok.char = ch.id;
+      if (ddbSpeed != null) tok.speed = ddbSpeed;
+      if (ddbHp != null && tok.mhp != null && ddbHp <= tok.mhp) tok.hp = ddbHp;
       if (dm && F.hidden.checked) tok.hidden = true;
       const ready = F.monster && MONSTERS[F.monster.value];
       if (ready && F.name.value.trim().startsWith(ready[0])) {

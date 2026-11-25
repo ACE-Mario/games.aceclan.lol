@@ -51,6 +51,9 @@ import secrets
 import shutil
 import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 
 SAVE_DIR = os.environ.get("ACE_DND_DIR") or os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "saved", "dnd")
@@ -362,6 +365,106 @@ SAVED_KEYS = ("name", "slug", "owner", "created", "dms", "dmcode", "names", "sce
               "chars", "notes", "mine", "log", "init", "settings", "assets", "logn", "lib", "pops", "popn", "fakes", "items", "enc", "world", "board")
 
 
+# ---- D&D Beyond: a public character's share link fills in a token -------------------------------------
+# There's no official API: this reads the same JSON the character page does, so it can break if they change it.
+DDB_JSON = "https://character-service.dndbeyond.com/character/v5/character/{}"
+DDB_PIC_HOSTS = ("www.dndbeyond.com", "media.dndbeyond.com", "media-waterdeep.cursecdn.com")
+DDB_STATS = ("strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma")
+
+
+def _get(url, limit):
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (ACE Tabletop)", "Accept": "*/*"})
+    with urllib.request.urlopen(req, timeout=12) as r:
+        body = r.read(limit + 1)
+        if len(body) > limit:
+            raise ValueError("too big")
+        return body, r.headers.get("Content-Type", "")
+
+
+def ddb_character(link):
+    """A D&D Beyond share link (or the number in it) -> {"ok": True, "char": {name, mhp, ac, ...}}, or an error
+    that says what to do."""
+    m = re.search(r"(?:dndbeyond\.com/(?:profile/[^/]+/)?characters/|^)(\d{3,12})(?:\b|$)", link.strip())
+    if not m:
+        return {"ok": False, "error": "That isn't a D&D Beyond character link. It looks like dndbeyond.com/characters/12345678."}
+    try:
+        body, _ = _get(DDB_JSON.format(m.group(1)), 4_000_000)
+        raw = json.loads(body)
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403, 404):
+            return {"ok": False, "error": "D&D Beyond won't share that character. On D&D Beyond, open the character, "
+                    "go to Home > Character Settings and set Character Privacy to Public, then try again."}
+        return {"ok": False, "error": f"D&D Beyond said no ({e.code}). Try again in a minute, or use the PDF instead."}
+    except Exception:
+        return {"ok": False, "error": "Couldn't reach D&D Beyond. Try again in a minute, or use the PDF instead."}
+    d = raw.get("data") if isinstance(raw, dict) else None
+    if not isinstance(d, dict) or not d.get("name"):
+        return {"ok": False, "error": "D&D Beyond sent something this doesn't understand. Use the PDF instead."}
+    try:
+        out = ddb_parse(d)
+    except Exception:
+        return {"ok": False, "error": "Couldn't read that character. Use the PDF instead."}
+    pic = ((d.get("decorations") or {}).get("avatarUrl") or "")
+    if pic.startswith("https://") and urllib.parse.urlparse(pic).hostname in DDB_PIC_HOSTS:
+        try:
+            img, ctype = _get(pic, 3_000_000)
+            if ctype.split(";")[0] in ("image/png", "image/jpeg", "image/webp", "image/gif"):
+                out["img"] = f"data:{ctype.split(';')[0]};base64," + base64.b64encode(img).decode()
+        except Exception:
+            pass
+    return {"ok": True, "char": out}
+
+
+def ddb_parse(d):
+    """The numbers a token needs, from D&D Beyond's character JSON: best effort, the DM can fix anything."""
+    def each_mod():
+        for group in (d.get("modifiers") or {}).values():
+            for mo in group or []:
+                if isinstance(mo, dict):
+                    yield mo
+    level = sum(int(c.get("level") or 0) for c in d.get("classes") or []) or 1
+    score = {}
+    for i, key in enumerate(DDB_STATS, 1):
+        base = next((st.get("value") for st in d.get("stats") or [] if st.get("id") == i), None) or 10
+        bonus = next((st.get("value") for st in d.get("bonusStats") or [] if st.get("id") == i), None) or 0
+        over = next((st.get("value") for st in d.get("overrideStats") or [] if st.get("id") == i), None)
+        extra = sum(int(mo.get("value") or 0) for mo in each_mod() if mo.get("type") == "bonus" and mo.get("subType") == key + "-score")
+        score[key] = over if over else base + bonus + extra
+    mod = {k: (v - 10) // 2 for k, v in score.items()}
+    if d.get("overrideHitPoints"):
+        mhp = int(d["overrideHitPoints"])
+    else:
+        per = sum(int(mo.get("value") or 0) for mo in each_mod() if mo.get("type") == "bonus" and mo.get("subType") == "hit-points-per-level")
+        mhp = int(d.get("baseHitPoints") or 0) + int(d.get("bonusHitPoints") or 0) + (mod["constitution"] + per) * level
+    hp = max(0, mhp - int(d.get("removedHitPoints") or 0))
+    worn = [it.get("definition") or {} for it in d.get("inventory") or [] if it.get("equipped")]
+    armour = next((a for a in worn if a.get("armorTypeId") in (1, 2, 3)), None)
+    shield = next((a for a in worn if a.get("armorTypeId") == 4), None)
+    classes = [((c.get("definition") or {}).get("name") or "") for c in d.get("classes") or []]
+    if armour:
+        t = armour["armorTypeId"]
+        ac = int(armour.get("armorClass") or 10) + (mod["dexterity"] if t == 1 else min(2, mod["dexterity"]) if t == 2 else 0)
+    elif "Barbarian" in classes:
+        ac = 10 + mod["dexterity"] + mod["constitution"]
+    elif "Monk" in classes and not shield:
+        ac = 10 + mod["dexterity"] + mod["wisdom"]
+    else:
+        ac = 10 + mod["dexterity"]
+    if shield:
+        ac += int(shield.get("armorClass") or 2)
+    worn_ids = {a.get("id") for a in worn}
+    for group, mods in (d.get("modifiers") or {}).items():      # +1 armour, a ring of protection...: only if it's worn
+        for mo in mods or []:
+            if isinstance(mo, dict) and mo.get("type") == "bonus" and mo.get("subType") == "armor-class":
+                if group != "item" or mo.get("componentId") in worn_ids:
+                    ac += int(mo.get("value") or 0)
+    race = d.get("race") or {}
+    speed = (((race.get("weightSpeeds") or {}).get("normal") or {}).get("walk")) or 30
+    return {"name": str(d.get("name"))[:40], "mhp": mhp, "hp": hp, "ac": ac, "speed": speed, "init": mod["dexterity"],
+            "level": level, "race": race.get("fullName") or "", "cls": " / ".join(f"{n} {c.get('level')}" for n, c in zip(classes, d.get("classes") or [])),
+            "stats": [score[k] for k in DDB_STATS]}
+
+
 class Tabletop:
     id = "dnd"
     name = "ACE Tabletop"
@@ -621,6 +724,12 @@ class Tabletop:
         for ch in s["chars"].values():
             ch.setdefault("slots", [[0, 0] for _ in range(9)])
             ch.setdefault("hd", "")
+
+    def lookup(self, kind, args):
+        """Things the page asks the server to fetch for it: kind "ddb" is a public D&D Beyond character."""
+        if kind != "ddb":
+            return {"ok": False, "error": "Unknown lookup."}
+        return ddb_character(str(args.get("u") or ""))
 
     def listing(self, online):
         out = [{"name": m.get("name") or slug, "slug": slug, "scenes": m.get("scenes", 0), "chars": m.get("chars", 0),

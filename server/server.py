@@ -307,6 +307,17 @@ def game_list(game_id):
         return jsonify(listing(online))
 
 
+@app.route("/api/<game_id>/lookup/<kind>")
+def game_lookup(game_id, kind):
+    """A game looks something up on the internet for the page (ACE Tabletop: a D&D Beyond character). Runs
+    outside the lock: it can take a few seconds."""
+    game = GAMES.get(game_id)
+    lookup = getattr(game, "lookup", None)
+    if not lookup:
+        abort(404)
+    return jsonify(lookup(kind, request.args))
+
+
 @app.route("/api/<game_id>/asset/<path:key>")
 def game_asset(game_id, key):
     """Pictures a game keeps as files (ACE Tabletop's maps and tokens). Their names never change, so browsers
