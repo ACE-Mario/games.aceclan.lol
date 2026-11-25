@@ -65,6 +65,9 @@ those come back).
   the map), a turn order with rounds, character sheets you can roll from (with spell slots and rests), DM notes and
   handouts with pictures the DM can show on everyone's screen, and private notes for each person. Campaigns are named and kept like ACE Board's boards
   (`dnd/?c=<slug>`, room name `c:<slug>`). No points.
+  For now the page is just the battle map (tokens, health, fog of war, walls and doors): `EXTRAS = false` at the top of
+  `dnd/dnd.js` hides the chat and dice, turn order, character sheets and notes, which still work on the server.
+  Set it to true to bring them back.
 - `shared/cards.js`: draws playing cards for poker and canasta (corner indices and face-card art).
 - `shared/board.js` and `shared/board.css`: the clan leaderboard (Today and All time) on the results of the daily
   games ACE Mini, Squads and Map Pin (Map Pin has one board for VALORANT and one for League). Scores are kept by

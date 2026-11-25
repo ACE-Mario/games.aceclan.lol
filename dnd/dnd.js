@@ -15,6 +15,9 @@
   const ABIL = ["str", "dex", "con", "int", "wis", "cha"];
   const ABIL_NAME = { str: "Strength", dex: "Dexterity", con: "Constitution", int: "Intelligence", wis: "Wisdom", cha: "Charisma" };
   const ZMIN = 6, ZMAX = 220;
+  // For now the table is just the battle map: tokens, health and fog of war. The chat and dice, turn order,
+  // character sheets and notes are all still here (and on the server); set this to true to bring them back.
+  const EXTRAS = false;
   const MONSTERS = [
     ["Commoner", 4, 10, 0, 1], ["Kobold", 5, 12, 2, 1], ["Goblin", 7, 15, 2, 1], ["Giant rat", 7, 12, 2, 1],
     ["Cultist", 9, 12, 1, 1], ["Bandit", 11, 12, 1, 1], ["Guard", 11, 16, 1, 1], ["Wolf", 11, 13, 2, 1],
@@ -303,6 +306,7 @@
     drags.clear();
     for (const id of [...picked]) if (!tokenById(id)) picked.delete(id);
     if (sel && !picked.has(sel)) sel = [...picked].pop() || null;
+    if (firstState && !EXTRAS) { setTab(s.dm ? "scenes" : "room"); if (!s.dm) setPanel(false); }
     if (firstState || (moved && viewSc === s.active)) { fitView(); firstState = false; }
     renderAll(old);
   }
@@ -433,7 +437,7 @@
     paintWalls(sc, px);
 
     // tokens
-    const cur = S.init.cur && S.init.list.find(e => e.id === S.init.cur);
+    const cur = EXTRAS && S.init.cur && S.init.list.find(e => e.id === S.init.cur);
     for (const t of sc.tokens) paintToken(t, px, cur && cur.tok === t.id);
 
     // a token being dragged: the path and how far
@@ -1016,7 +1020,7 @@
   viewport.addEventListener("contextmenu", e => e.preventDefault());
   viewport.addEventListener("dblclick", e => {
     const t = tokenAt(worldPt(e));
-    if (t && t.char) openSheet(t.char);
+    if (t && t.char && EXTRAS) openSheet(t.char);
   });
   viewport.addEventListener("wheel", e => {
     e.preventDefault();
@@ -1178,7 +1182,7 @@
     const hpKnown = t.hp != null || t.mhp != null;
     let h = `<div class="row between card-head">${can ? `<input class="name" data-k="name" value="${esc(t.name)}" maxlength="40" aria-label="Token name">` : `<h3>${esc(t.name)}</h3>`}
       ${t.ac != null ? `<span class="badge" title="Armour class">AC ${t.ac}</span>` : ""}<button type="button" class="x" data-close aria-label="Close">✕</button></div>`;
-    if (ch) h += `<button type="button" class="link-btn" data-sheet>Open ${esc(ch.name)}'s sheet</button>`;
+    if (ch && EXTRAS) h += `<button type="button" class="link-btn" data-sheet>Open ${esc(ch.name)}'s sheet</button>`;
     if (hpKnown) {
       const f = t.mhp ? Math.max(0, Math.min(1, t.hp / t.mhp)) : 0;
       h += `<div class="hpbar"><i style="width:${f * 100}%"></i><b>${t.hp ?? "?"} / ${t.mhp ?? "?"} HP</b></div>`;
@@ -1203,11 +1207,11 @@
           <div class="row"><label class="check"><input type="checkbox" data-k="hidden"${t.hidden ? " checked" : ""}> Hidden from players</label>
             <label class="check"><input type="checkbox" data-k="showhp"${t.showhp ? " checked" : ""}> Players see its HP</label></div>
           <div class="row"><label class="small muted">Moved by <select data-k="owner"><option value="">DM only</option>${people.map(([q, n]) => `<option value="${q}"${t.owner === q ? " selected" : ""}>${esc(n)}</option>`).join("")}</select></label>
-            <label class="small muted">Sheet <select data-k="char"><option value="">None</option>${S.chars.map(c => `<option value="${c.id}"${t.char === c.id ? " selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label></div>
+            <label class="small muted extra">Sheet <select data-k="char"><option value="">None</option>${S.chars.map(c => `<option value="${c.id}"${t.char === c.id ? " selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label></div>
           <label class="small muted">Note<textarea data-k="note" rows="2" maxlength="500" placeholder="Only DMs and whoever moves it see this">${esc(t.note || "")}</textarea></label>
         </details>`;
       } else h += `<label class="small muted">Note<textarea data-k="note" rows="2" maxlength="500">${esc(t.note || "")}</textarea></label>`;
-      h += `<div class="row card-btns"><button type="button" class="btn small-btn" data-init>Initiative</button>
+      h += `<div class="row card-btns"><button type="button" class="btn small-btn extra" data-init>Initiative</button>
         <button type="button" class="btn small-btn" data-front>To front</button><button type="button" class="btn danger small-btn" data-del>Delete</button></div>`;
     } else if (t.note) h += `<p class="small">${esc(t.note)}</p>`;
     return h;
@@ -1223,7 +1227,7 @@
       const all = mine.every(t => t.conds.includes(c));
       return `<button type="button" class="chip${all ? " on" : ""}" data-gcond="${c}" data-on="${all ? "" : "1"}">${c}</button>`;
     }).join("")}</div></details>
-      <div class="row card-btns"><button type="button" class="btn small-btn" data-init>Initiative for all</button>
+      <div class="row card-btns"><button type="button" class="btn small-btn extra" data-init>Initiative for all</button>
       ${isDm() ? `<button type="button" class="btn small-btn" data-ghide="${mine.every(t => t.hidden) ? "" : "1"}">${mine.every(t => t.hidden) ? "Show all" : "Hide all"}</button>` : ""}
       <button type="button" class="btn danger small-btn" data-del>Delete all</button></div>
       <p class="muted small" style="margin:0">Shift+click a token to add it or take it out. Drag one to move them all.</p>`;
@@ -1300,7 +1304,7 @@
     const mine = S.chars.filter(c => dm || c.owner === me);
     box.innerHTML = `<form class="win narrow" autocomplete="off">
       <div class="row between"><h2 style="margin:0">Add a token</h2><button type="button" class="x" data-close aria-label="Close">✕</button></div>
-      ${mine.length ? `<label class="field">From a character<select name="char"><option value="">None, a new token</option>${mine.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select></label>` : ""}
+      ${mine.length && EXTRAS ? `<label class="field">From a character<select name="char"><option value="">None, a new token</option>${mine.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select></label>` : ""}
       ${dm ? `<label class="field">Ready-made<select name="monster"><option value="">Pick one to fill in the numbers…</option>${MONSTERS.map(([n, hp, ac], i) => `<option value="${i}">${n} (HP ${hp}, AC ${ac})</option>`).join("")}</select></label>` : ""}
       <div class="form-grid">
         <label class="field full">Name<input name="name" maxlength="40" value="${esc(prefill.name || "")}" placeholder="${dm ? "Goblin, Guard captain…" : "Your character"}"></label>
@@ -1408,9 +1412,9 @@
       while (ol.children.length > list.length) ol.firstChild.remove();
       if (added.length) {
         const r = [...added].reverse().find(e => e.kind === "roll");
-        if (r) popRoll(r);
+        if (r && EXTRAS) popRoll(r);
         const shown = [...added].reverse().find(e => e.kind === "show");
-        if (shown) openHandout(shown.note);
+        if (shown && EXTRAS) openHandout(shown.note);
         if (added.some(e => e.kind === "roll")) FX.sound("roll");
         else if (added.some(e => e.kind === "chat" && e.by !== me)) FX.sound("tick");
         if (tab !== "chat") $$tab("chat").classList.add("ping");
@@ -1475,6 +1479,7 @@
 
   // ---- Turn order ----------------------------------------------------------------------------
   function renderTurnBanner() {
+    if (!EXTRAS) return;
     const b = $("turnBanner"), init = S.init;
     if (!init.cur) { b.hidden = true; return; }
     const cur = init.list.find(e => e.id === init.cur);
@@ -1958,6 +1963,7 @@
 
   // ---- Start ---------------------------------------------------------------------------------
   function init() {
+    document.body.classList.toggle("extras", EXTRAS);
     document.querySelectorAll(".tt-tools [data-tool]").forEach(b => b.addEventListener("click", () => setTool(b.dataset.tool)));
     $("addTokenBtn").addEventListener("click", () => openTokenForm());
     $("tokenForm").addEventListener("click", e => { if (e.target === $("tokenForm")) closeModal("tokenForm"); });
@@ -1975,6 +1981,7 @@
     initScenes();
     initRoom();
     setTool("select");
+    if (!EXTRAS) setTab("room");
     initStart();
   }
   init();

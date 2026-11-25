@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="../shared/site.css?v=20261123">
 <link rel="stylesheet" href="../shared/room.css?v=20261123">
 <link rel="stylesheet" href="../shared/fx.css?v=20261123">
-<link rel="stylesheet" href="style.css?v=20261125b">
+<link rel="stylesheet" href="style.css?v=20261125c">
 </head>
 <body>
 <header class="sitebar">
@@ -24,8 +24,8 @@
 <main id="startView" class="wrap start">
   <section class="start-hero">
     <h1>ACE Tabletop</h1>
-    <p class="muted">An online table for your roleplaying campaign. Battle maps with tokens and fog of war, dice everyone
-      can trust, a turn order, character sheets and the DM's notes, all live for the whole party.</p>
+    <p class="muted">A live battle map for your roleplaying campaign: tokens with health, fog of war, walls and doors,
+      and a ruler, all live for the whole party.</p>
   </section>
   <div class="start-grid">
     <div class="start-col">
@@ -60,10 +60,10 @@
         <li><b>Fog of war</b>: the DM paints squares in or out, or lets it clear by itself as the party explores. Monsters under the fog aren't sent to players at all.</li>
         <li><b>Walls and doors</b>: the DM traces the map's walls; sight stops at them. Anyone can open a door (unless the DM locked it).</li>
         <li><b>Ruler, drawings and pings</b>: measure moves, draw spell areas (circles, cones, squares, lines) and ping a spot so everyone looks.</li>
-        <li><b>Dice</b>: rolled on the server, so nobody can fake one. Type <code>2d6+3</code>, <code>1d20+5 adv</code> or <code>4d6kh3</code>, or roll straight from a character sheet. Rolls can go to the DM only.</li>
-        <li><b>Turn order</b>: roll initiative for tokens and step through the rounds.</li>
-        <li><b>Character sheets</b>: abilities, saves, skills, HP, attacks, spell slots, rests and gear. Click anything to roll it.</li>
-        <li><b>Notes</b>: the DM's private notes, handouts with pictures the DM can show on everyone's screen, and your own notes.</li>
+        <li class="extra"><b>Dice</b>: rolled on the server, so nobody can fake one. Type <code>2d6+3</code>, <code>1d20+5 adv</code> or <code>4d6kh3</code>, or roll straight from a character sheet. Rolls can go to the DM only.</li>
+        <li class="extra"><b>Turn order</b>: roll initiative for tokens and step through the rounds.</li>
+        <li class="extra"><b>Character sheets</b>: abilities, saves, skills, HP, attacks, spell slots, rests and gear. Click anything to roll it.</li>
+        <li class="extra"><b>Notes</b>: the DM's private notes, handouts with pictures the DM can show on everyone's screen, and your own notes.</li>
       </ul>
       <p class="muted small">Moving around: drag empty space or use the middle mouse button, and the scroll wheel zooms. On a phone, drag with one finger and pinch to zoom.</p>
     </details>
@@ -87,7 +87,7 @@
     <button id="showScene" class="btn primary small-btn" type="button" hidden>Show players</button>
   </div>
 
-  <div id="turnBanner" class="tt-turn tt-float" hidden></div>
+  <div id="turnBanner" class="tt-turn tt-float extra" hidden></div>
 
   <div class="tt-tools tt-float" role="toolbar" aria-label="Map tools">
     <button class="tb on" type="button" data-tool="select" title="Select and move (V)" aria-label="Select and move">
@@ -119,10 +119,10 @@
   <button id="panelBtn" class="tt-panel-btn tt-float" type="button" aria-expanded="true" aria-controls="panel">Panel</button>
   <aside id="panel" class="tt-panel tt-float" aria-label="Campaign panel">
     <nav class="tt-tabs" role="tablist">
-      <button type="button" data-tab="chat" class="on">Chat</button>
-      <button type="button" data-tab="turns">Turns</button>
-      <button type="button" data-tab="party">Party</button>
-      <button type="button" data-tab="notes">Notes</button>
+      <button type="button" data-tab="chat" class="on extra">Chat</button>
+      <button type="button" data-tab="turns" class="extra">Turns</button>
+      <button type="button" data-tab="party" class="extra">Party</button>
+      <button type="button" data-tab="notes" class="extra">Notes</button>
       <button type="button" data-tab="scenes" class="dm-only">Scenes</button>
       <button type="button" data-tab="room">Room</button>
     </nav>
@@ -222,7 +222,7 @@
 
   <div id="sheet" class="tt-modal" hidden role="dialog" aria-modal="true" aria-labelledby="sheetName"></div>
   <div id="handout" class="tt-modal" hidden role="dialog" aria-modal="true" aria-label="Handout"></div>
-  <div id="rollPop" class="tt-pop" hidden aria-hidden="true"></div>
+  <div id="rollPop" class="tt-pop extra" hidden aria-hidden="true"></div>
   <div id="tokenForm" class="tt-modal" hidden role="dialog" aria-modal="true" aria-label="Add a token"></div>
 
   <div class="tt-notes-pop">
@@ -237,6 +237,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 <script src="../shared/live.js?v=20261123"></script>
 <script src="../shared/fx.js?v=20261123"></script>
-<script src="dnd.js?v=20261125b"></script>
+<script src="dnd.js?v=20261125c"></script>
 </body>
 </html>
