@@ -243,6 +243,8 @@ def on_action(data):
         else:
             err = room.game.handle(room, pid, str(data.get("type", "")), data)
         room.touched = time.time()
+        if isinstance(err, dict):                        # an answer with data that changes nothing (ACE Tabletop's export)
+            return {"ok": True, **err}
         if not err:
             broadcast(room)
             closed = getattr(room.game, "closed", None)

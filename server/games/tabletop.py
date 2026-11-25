@@ -41,6 +41,7 @@ updates only carry their names. Campaigns are saved a few seconds after each cha
 There are no points: only the daily games have those.
 """
 import base64
+import copy
 import json
 import os
 import random
@@ -111,6 +112,10 @@ TRIG_DO = ("tell", "text", "scene", "reveal", "open", "give")   # give: a loot c
 # "ask": the trigger doesn't do anything by itself; the DM is told, has the player roll (off the site), then sets it
 # off or skips it from the right-click menu ("pending" until then).
 MAX_ITEMS = 100
+EXPORT_KEYS = ("name", "scenes", "order", "active", "chars", "notes", "init", "settings", "lib", "items", "enc", "world", "board")
+EXPORT_ASSET = re.compile(r"^[A-Za-z0-9]{16}\.(png|jpg|webp|gif)$")
+MAX_IMPORT_CHARS = 180_000_000    # a whole campaign file, pictures and all
+MAX_IMPORT_PART = 600_000         # one piece of it (socket.io takes about 1 MB a message)
 MAX_MARKS = 80                    # places on the world map
 MAX_BOARD = 80                    # notes pinned on the handout board
 MAX_HP = 9999
@@ -464,6 +469,79 @@ class Tabletop:
                 s[k] = body[k]
         s["slug"] = slug
         s["dirty"] = False
+        self._fix(s)
+        return s
+
+    def _export(self, s):
+        """Everything a DM made, to save as a file: scenes and maps with hidden things, triggers, items, the
+        world map, the board. The pictures go in by name; the page fetches them and puts them in the file."""
+        camp = copy.deepcopy({k: s[k] for k in EXPORT_KEYS if k in s})
+        return {"ace_tabletop": 1, "exported": int(time.time()), "campaign": camp, "assets": sorted(s["assets"])}
+
+    def _import(self, room, s, pid, blob):
+        """Swap this campaign's insides for a file's. If anything in it doesn't work, nothing changes."""
+        try:
+            f = json.loads(blob)
+        except ValueError:
+            return "That file isn't an ACE Tabletop campaign."
+        if not isinstance(f, dict) or f.get("ace_tabletop") != 1 or not isinstance(f.get("campaign"), dict):
+            return "That file isn't an ACE Tabletop campaign."
+        camp, pics = f["campaign"], f.get("assets") if isinstance(f.get("assets"), dict) else {}
+        if not isinstance(camp.get("scenes"), dict) or not camp["scenes"] or not isinstance(camp.get("order"), list):
+            return "That file has no scenes in it."
+        old = copy.deepcopy({k: s[k] for k in (*SAVED_KEYS, "playas")})
+        rename = {}
+        try:
+            for name, src in pics.items():
+                if EXPORT_ASSET.match(str(name)) and isinstance(src, str):
+                    new, err = self._store_image(s, src)
+                    if err:
+                        raise ValueError(err)
+                    rename[name] = new
+
+            def swap(v):
+                if isinstance(v, str):
+                    return rename.get(v, v)
+                if isinstance(v, list):
+                    return [swap(x) for x in v]
+                if isinstance(v, dict):
+                    return {k: swap(x) for k, x in v.items()}
+                return v
+            camp = swap(camp)
+            for k in EXPORT_KEYS:
+                if k == "name":
+                    continue
+                if k in camp:
+                    s[k] = camp[k]
+            s["order"] = [i for i in s["order"] if i in s["scenes"]] or list(s["scenes"])
+            s["at"], s["playas"], s["pops"] = {}, {}, []
+            self._fix(s)
+            for sc in s["scenes"].values():
+                for k in ("tokens", "lines", "walls", "props", "labels", "trig"):
+                    if not isinstance(sc.get(k), dict):
+                        raise ValueError(k)
+                n = sc["cols"] * sc["rows"]
+                if len(sc["tiles"]) != n or len(sc.get("seen") or "") != n:
+                    raise ValueError("size")
+                self._scene_view(s, sc, True)
+                self._scene_view(s, sc, False)
+            self._view(room, pid)
+            self._tidy_assets(s)
+        except Exception as e:                         # a broken file: put everything back as it was
+            for k, v in old.items():
+                s[k] = v
+            for name in rename.values():
+                if name not in s["assets"]:
+                    try:
+                        os.remove(os.path.join(_asset_dir(s["slug"]), name))
+                    except OSError:
+                        pass
+            return str(e) if isinstance(e, ValueError) and " " in str(e) else "Something in that file is broken, so nothing was changed."
+        self._sys(s, f"{s['names'].get(pid, 'The DM')} loaded a campaign file.")
+        return None
+
+    def _fix(self, s):
+        """Fill in anything an older save (or an imported file) is missing."""
         if not s["order"]:
             sc = self._scene("The first map", 24, 16)
             s["scenes"][sc["id"]] = sc
@@ -503,7 +581,6 @@ class Tabletop:
         for ch in s["chars"].values():
             ch.setdefault("slots", [[0, 0] for _ in range(9)])
             ch.setdefault("hd", "")
-        return s
 
     def listing(self, online):
         out = [{"name": m.get("name") or slug, "slug": slug, "scenes": m.get("scenes", 0), "chars": m.get("chars", 0),
@@ -1634,6 +1711,29 @@ class Tabletop:
             return None
 
         # -- Map maker --
+        if action == "export":                        # DMs only: the whole campaign, hidden things and all
+            if not dm:
+                return need_dm
+            return {"camp": self._export(s)}
+        if action == "import_part":                   # a campaign file, sent in pieces; the last one loads it
+            if not dm:
+                return need_dm
+            up, i, n = str(data.get("up", ""))[:20], num(data.get("i"), 0, 10_000), num(data.get("n"), 1, 10_000)
+            part = data.get("part")
+            if not up or i is None or not n or i >= n or not isinstance(part, str) or len(part) > MAX_IMPORT_PART:
+                return "Couldn't read that file."
+            if n * MAX_IMPORT_PART > MAX_IMPORT_CHARS + MAX_IMPORT_PART:
+                return "That file is too big."
+            ups = self.__dict__.setdefault("_uploads", {})
+            key = (s["slug"], pid)
+            u = ups.get(key)
+            if not u or u["up"] != up:
+                u = ups[key] = {"up": up, "n": n, "parts": {}}
+            u["parts"][i] = part
+            if len(u["parts"]) < u["n"]:
+                return {"got": len(u["parts"])}
+            del ups[key]
+            return self._import(room, s, pid, "".join(u["parts"][k] for k in range(u["n"])))
         if action in ("break_set", "break_hit"):     # breakable walls and doors: HP the DM sets and knocks off
             if not dm:
                 return need_dm

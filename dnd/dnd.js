@@ -301,6 +301,87 @@
     }
   }
 
+  // ---- Campaign files: export everything to one file, import it back ------------------------
+  let pendingImport = null;
+  function pickCampFile() {
+    return new Promise(ok => {
+      const f = $("campFileIn");
+      f.value = "";
+      f.onchange = () => ok(f.files[0] || null);
+      f.click();
+    });
+  }
+  async function readCampFile() {
+    const f = await pickCampFile();
+    if (!f) return null;
+    try {
+      const text = await f.text(), j = JSON.parse(text);
+      if (j.ace_tabletop !== 1 || !j.campaign) throw new Error();
+      return { text, name: String(j.campaign.name || f.name.replace(/\.acetable\.json$|\.json$/i, "")).slice(0, 40) };
+    } catch { alert("That file isn't an ACE Tabletop campaign file."); return null; }
+  }
+  const blobData = b => new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = bad; r.readAsDataURL(b); });
+  function exportCamp() {
+    note("Packing up the campaign…");
+    socket.timeout(30000).emit("action", { type: "export" }, async (err, res) => {
+      if (err || !res || res.error || !res.camp) return note((res && res.error) || "The server didn't answer. Try again.");
+      const f = res.camp, names = f.assets || [], pics = {};
+      let done = 0, missed = 0;
+      for (const name of names) {
+        try {
+          const r = await fetch(assetUrl(name));
+          if (!r.ok) throw new Error();
+          pics[name] = await blobData(await r.blob());
+        } catch { missed++; }
+        if (++done % 5 === 0) note(`Packing pictures ${done} of ${names.length}…`);
+      }
+      f.assets = pics;
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(f)], { type: "application/json" }));
+      a.download = `${cleanSlug(S.camp.name.replace(/\s+/g, "-")) || "campaign"}-${new Date().toISOString().slice(0, 10)}.acetable.json`;
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      note(missed ? `Saved, but ${missed} picture${missed > 1 ? "s" : ""} couldn't be fetched.` : "Campaign saved to a file.");
+    });
+  }
+  async function uploadCamp(text) {
+    const up = Math.random().toString(36).slice(2, 12), size = 300000, n = Math.max(1, Math.ceil(text.length / size));
+    for (let i = 0; i < n; i++) {
+      const res = await new Promise(ok => socket.timeout(60000).emit("action", { type: "import_part", up, i, n, part: text.slice(i * size, (i + 1) * size) },
+        (err, r) => ok(err ? { error: "The server didn't answer. Try the import again." } : r || {})));
+      if (res.error) { note(res.error); return false; }
+      if (n > 1) note(`Loading the campaign… ${Math.round((i + 1) / n * 100)}%`);
+    }
+    viewSc = S.active;
+    fitView();
+    redraw();
+    note("Campaign loaded from the file.");
+    return true;
+  }
+  function initCampFiles() {
+    $("exportCamp").addEventListener("click", () => { if (isDm()) exportCamp(); });
+    $("importCamp").addEventListener("click", async () => {
+      if (!isDm()) return;
+      const f = await readCampFile();
+      if (!f) return;
+      if (!confirm(`Replace EVERYTHING in "${S.camp.name}" with "${f.name}" from the file? Every scene, token, item and note here now is swapped for the file's. Export this one first if you want to keep it.`)) return;
+      uploadCamp(f.text);
+    });
+    $("importNew").addEventListener("click", async () => {
+      if (!needName()) return;
+      const f = await readCampFile();
+      if (!f) return;
+      const slugOf = n => n.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+      const taken = new Set(camps.map(c => c.slug));
+      let name = $("campName").value.trim() || f.name || "Imported campaign";
+      for (let i = 2, base = name.slice(0, 34); taken.has(slugOf(name)) && i < 100; i++) name = `${base} ${i}`;
+      pendingImport = f.text;
+      play({ create: name });
+    });
+  }
+
   // ---- Connection ----------------------------------------------------------------------------
   let playing = false, leave = null;
   function play(opts) {
@@ -320,6 +401,7 @@
       socket.disconnect();
       socket = null;
       playing = false;
+      pendingImport = null;
       S = null;
       firstState = true;
       sel = null;
@@ -413,6 +495,7 @@
     drags.clear();
     for (const id of [...picked]) if (!tokenById(id)) picked.delete(id);
     if (sel && !picked.has(sel)) sel = [...picked].pop() || null;
+    if (pendingImport && s.dm && slug) { const t = pendingImport; pendingImport = null; setTimeout(() => uploadCamp(t), 0); }
     if (firstState && !EXTRAS) { setTab(s.dm ? "scenes" : "room"); if (!s.dm) setPanel(false); }
     if (firstState || switched || (moved && viewSc === s.active)) { fitView(); firstState = false; }
     renderAll(old);
@@ -4308,6 +4391,7 @@
     initTurns();
     initParty();
     initItems();
+    initCampFiles();
     initWorld();
     initBoard();
     initSheet();

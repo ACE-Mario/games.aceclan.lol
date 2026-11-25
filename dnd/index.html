@@ -39,6 +39,7 @@
           <input id="campName" maxlength="40" placeholder="e.g. The Sunken Keep">
         </label>
         <button id="createBtn" class="btn primary" type="submit">Start campaign</button>
+        <button id="importNew" class="btn small-btn" type="button" title="Start a new campaign from a file you exported">Start from a campaign file…</button>
         <p class="muted small">You'll be its DM. Campaigns are kept on the ACE server with their own link to send the party.</p>
         <p id="startError" class="error" role="alert" hidden></p>
       </form>
@@ -242,6 +243,10 @@
           <span class="row"><input id="perSq" type="number" min="1" class="num"><input id="unit" maxlength="8" class="num" placeholder="ft"></span>
         </label>
         <button id="clearChat" class="btn small-btn" type="button">Clear chat</button>
+        <h3>Campaign file</h3>
+        <p class="muted small">Save everything to one file: every scene and map, hidden traps and walls, triggers, tokens, items, the world map and the board. Load one to bring it all back.</p>
+        <div class="row"><button id="exportCamp" class="btn small-btn" type="button">Export campaign</button><button id="importCamp" class="btn small-btn" type="button">Import a file…</button></div>
+        <input id="campFileIn" type="file" accept=".json,application/json" hidden>
       </div>
       <form id="claimForm" class="row player-only" autocomplete="off">
         <input id="claimCode" maxlength="8" placeholder="DM code" aria-label="DM code">
