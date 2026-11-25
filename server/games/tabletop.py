@@ -61,12 +61,14 @@ MAX_LABELS = 200
 # Map maker squares: . nothing (solid rock on a drawn map; the picture or blank grid shows through), f stone floor,
 # o wooden floor, g grass, d dirt, s water, l lava, p pit, w solid wall, D door (it sits across a gap in the walls).
 # Indoor floors (and doors) get walls round them by themselves wherever they meet nothing or solid wall, so the DM
-# just draws rooms and corridors. Grass and dirt (outdoors) only get walls where they meet solid wall.
+# just draws rooms and corridors ("Walls round it" can be turned off for open ground).
 # S is a secret door: players see plain wall there (and get no door) until the DM turns it into a D.
 TILES = ".fogdslpwDS"
 OPEN_TILES = "fogdslpDS"
-INDOOR_TILES = "foslpDS"                      # everything but grass and dirt gets walled in
 SOLID_TILES = ".w"
+# Whether a painted square gets walls where it meets rock is up to the DM ("Walls round it" in the map maker):
+# one "1" or "0" a square in "wl". Doors always do. Maps from before "wl" walled stone and wood only.
+OLD_WALLED = "foDS"
 PROPS = ("table", "chair", "barrel", "crate", "chest", "bed", "shelf", "pillar", "statue", "stairs", "torch",
          "campfire", "altar", "well", "tree", "bush", "rock", "rubble", "rug", "web", "trap")
 DM_PROPS = ("trap",)                                # players never get these
@@ -312,7 +314,8 @@ class Tabletop:
     def _scene(self, name, cols, rows):
         return {"id": new_id(), "name": name, "img": None, "cols": cols, "rows": rows, "ox": 0.0, "oy": 0.0,
                 "grid": True, "gc": "#000000", "fog": False, "auto": False, "seen": "0" * (cols * rows),
-                "tokens": {}, "lines": {}, "walls": {}, "tiles": "." * (cols * rows), "props": {}, "labels": {}}
+                "tokens": {}, "lines": {}, "walls": {}, "tiles": "." * (cols * rows), "wl": "1" * (cols * rows),
+                "props": {}, "labels": {}}
 
     def default_seat(self, room):
         return {}
@@ -400,8 +403,8 @@ class Tabletop:
             sc.setdefault("tiles", "." * (sc["cols"] * sc["rows"]))
             sc.setdefault("props", {})
             sc.setdefault("labels", {})
-            if sc["tiles"].strip("."):
-                self._auto_walls(sc)                   # the rules for which squares get walls can change
+            if len(sc.get("wl") or "") != len(sc["tiles"]):
+                sc["wl"] = "".join("1" if t in OLD_WALLED or t == "." else "0" for t in sc["tiles"])
         for ch in s["chars"].values():
             ch.setdefault("slots", [[0, 0] for _ in range(9)])
             ch.setdefault("hd", "")
@@ -463,13 +466,15 @@ class Tabletop:
 
     # ---- Scenes and fog ----------------------------------------------------------------------
     def _resize(self, sc, cols, rows):
-        old, oldt = sc["seen"], sc.get("tiles") or "." * (sc["cols"] * sc["rows"])
-        seen, tiles = ["0"] * (cols * rows), ["."] * (cols * rows)
+        n = sc["cols"] * sc["rows"]
+        old, oldt, oldw = sc["seen"], sc.get("tiles") or "." * n, sc.get("wl") or "1" * n
+        seen, tiles, wl = ["0"] * (cols * rows), ["."] * (cols * rows), ["1"] * (cols * rows)
         for y in range(min(rows, sc["rows"])):
             for x in range(min(cols, sc["cols"])):
                 seen[y * cols + x] = old[y * sc["cols"] + x]
                 tiles[y * cols + x] = oldt[y * sc["cols"] + x]
-        sc["cols"], sc["rows"], sc["seen"], sc["tiles"] = cols, rows, "".join(seen), "".join(tiles)
+                wl[y * cols + x] = oldw[y * sc["cols"] + x]
+        sc["cols"], sc["rows"], sc["seen"], sc["tiles"], sc["wl"] = cols, rows, "".join(seen), "".join(tiles), "".join(wl)
         sc["props"] = {k: v for k, v in sc.get("props", {}).items() if v["x"] < cols and v["y"] < rows}
         self._auto_walls(sc)
 
@@ -482,12 +487,18 @@ class Tabletop:
         T, cols, rows = sc.get("tiles", ""), sc["cols"], sc["rows"]
         if not T.strip("."):
             return
+        W = sc.get("wl") or "1" * len(T)
 
         def tile(x, y):
             return T[y * cols + x] if 0 <= x < cols and 0 <= y < rows else "."
 
-        def edge(a, b):
-            return ((a in INDOOR_TILES and b in SOLID_TILES) or (b in INDOOR_TILES and a in SOLID_TILES)
+        def walled(x, y):
+            t = tile(x, y)
+            return t in OPEN_TILES and (t in "DS" or W[y * cols + x] == "1")
+
+        def wall_between(x1, y1, x2, y2):
+            a, b = tile(x1, y1), tile(x2, y2)
+            return ((walled(x1, y1) and b in SOLID_TILES) or (walled(x2, y2) and a in SOLID_TILES)
                     or (a == "w" and b in OPEN_TILES) or (b == "w" and a in OPEN_TILES))
 
         made = 0
@@ -503,7 +514,7 @@ class Tabletop:
         for y in range(rows + 1):                       # edges along the top of row y
             start = None
             for x in range(cols + 1):
-                on = x < cols and edge(tile(x, y - 1), tile(x, y))
+                on = x < cols and wall_between(x, y - 1, x, y)
                 if on and start is None:
                     start = x
                 elif not on and start is not None:
@@ -512,7 +523,7 @@ class Tabletop:
         for x in range(cols + 1):                       # edges along the left of column x
             start = None
             for y in range(rows + 1):
-                on = y < rows and edge(tile(x - 1, y), tile(x, y))
+                on = y < rows and wall_between(x - 1, y, x, y)
                 if on and start is None:
                     start = y
                 elif not on and start is not None:
@@ -581,9 +592,10 @@ class Tabletop:
                     if any(not any(crosses(cx, cy, px, py, w) for w in near) for px, py in pts):
                         seen[i] = "1"
         T = sc.get("tiles", "")
-        if T.strip("."):                       # on a drawn map, the rock just outside what they see shows too
+        W = sc.get("wl") or "1" * len(T)
+        if T.strip("."):                       # on a drawn map, the rock just outside walled rooms they see shows too
             for i, t in enumerate(T):
-                if seen[i] == "1" and t in INDOOR_TILES:
+                if seen[i] == "1" and t in OPEN_TILES and (t in "DS" or W[i] == "1"):
                     x, y = i % cols, i // cols
                     for yy in range(max(0, y - 1), min(rows, y + 2)):
                         for xx in range(max(0, x - 1), min(cols, x + 2)):
@@ -1117,18 +1129,19 @@ class Tabletop:
             if not sc:
                 return "That scene isn't there any more."
             cols, rows = sc["cols"], sc["rows"]
-            if action == "tiles":                     # [[x, y, tile], ...]
+            if action == "tiles":                     # [[x, y, tile, walls], ...]
                 edits = data.get("edits")
                 if not isinstance(edits, list) or len(edits) > cols * rows:
                     return "Couldn't read that."
-                tiles = list(sc["tiles"])
+                tiles, wl = list(sc["tiles"]), list(sc.get("wl") or "1" * (cols * rows))
                 for e in edits:
-                    if not isinstance(e, list) or len(e) != 3 or len(str(e[2])) != 1 or str(e[2]) not in TILES:
+                    if not isinstance(e, list) or len(e) not in (3, 4) or len(str(e[2])) != 1 or str(e[2]) not in TILES:
                         continue
                     x, y = num(e[0], -1, MAX_GRID), num(e[1], -1, MAX_GRID)
                     if x is not None and y is not None and 0 <= x < cols and 0 <= y < rows:
                         tiles[y * cols + x] = str(e[2])
-                sc["tiles"] = "".join(tiles)
+                        wl[y * cols + x] = "0" if len(e) == 4 and not e[3] else "1"
+                sc["tiles"], sc["wl"] = "".join(tiles), "".join(wl)
                 self._auto_walls(sc)
                 self._reveal(sc)
                 return None
@@ -1140,10 +1153,12 @@ class Tabletop:
                     if (nc, nr) != (cols, rows):
                         self._resize(sc, nc, nr)
                         cols, rows = nc, nr
-                tiles = str(data.get("tiles", ""))
+                tiles, wl = str(data.get("tiles", "")), str(data.get("wl") or "")
                 if len(tiles) != cols * rows or any(c not in TILES for c in set(tiles)):
                     return "Couldn't read that map."
-                sc["tiles"] = tiles
+                if len(wl) != len(tiles) or set(wl) - {"0", "1"}:
+                    wl = "1" * len(tiles)
+                sc["tiles"], sc["wl"] = tiles, wl
                 sc["props"] = {}
                 for pr in (data.get("props") or [])[:MAX_PROPS]:
                     if isinstance(pr, dict) and pr.get("k") in PROPS:
@@ -1572,6 +1587,7 @@ class Tabletop:
         if not dm and sc["fog"] and tiles.strip("."):
             tiles = "".join(t if seen[i] == "1" else "?" for i, t in enumerate(tiles))
         out["tiles"] = tiles
+        out["wl"] = sc.get("wl") or "1" * len(tiles)
         if dm:
             out["props"] = list(sc.get("props", {}).values())
         else:                                          # players don't get traps, or where stairs go unless they may use them

@@ -82,9 +82,9 @@
   const drags = new Map();                  // token id -> { x, y, t } (other people dragging)
   const pings = [];                         // { x, y, t, c }
   const fogLocal = new Map();               // cell index -> "0"/"1", painted but not confirmed yet
-  const tilesLocal = new Map();             // cell index -> map maker square, painted but not confirmed yet
+  const tilesLocal = new Map();             // cell index -> square + "1"/"0" (walls round it), painted but not confirmed yet
   let tilesLocalSc = null;
-  const build = { mode: "room", tile: "f", brush: 1, prop: "barrel", rot: 0, dmLabel: false, size: "", kind: "dungeon", secret: false };
+  const build = { mode: "room", tile: "f", brush: 1, prop: "barrel", rot: 0, dmLabel: false, size: "", kind: "dungeon", secret: false, walls: true };
   let act = null;                           // what the pointer is doing right now
   let noteTimer = 0, spaceDown = false;
 
@@ -485,7 +485,7 @@
     const T = tilesOf(sc), drawn = /[^.?]/.test(T);
     if (drawn) {
       ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(tileLayer(sc, T, !!img), 0, 0, sc.cols, sc.rows);
+      ctx.drawImage(tileLayer(sc, T, wallsOf(sc), !!img), 0, 0, sc.cols, sc.rows);
       for (const pr of sc.props || []) paintProp(ctx, pr);
     }
     if (cam.z > 12) for (const pr of sc.props || []) {          // where stairs lead
@@ -753,7 +753,7 @@
 
   // ---- The map maker's drawing: paper, ink walls, hatching round the rock ----------------------
   const PAPER = "#f2ede1", INKC = "#1c1a18";
-  const OPEN = "fogdslpDS", INDOOR = "foslpDS";   // grass and dirt are outdoors: no walls round them
+  const OPEN = "fogdslpDS";
   const solidT = t => t === "." || t === "w";
   const TILE_INFO = [["f", "Stone", "#f7f4ec"], ["o", "Wood", "#d9b483"], ["g", "Grass", "#c9dea0"], ["d", "Dirt", "#dcc59a"],
     ["s", "Water", "#94c2e4"], ["l", "Lava", "#f08a3c"], ["p", "Pit", "#34302c"], ["w", "Wall", "#5c554d"]];
@@ -768,24 +768,22 @@
     h = Math.imul(h ^ (h >>> 13), 1274126177);
     return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
   }
-  function tilesOf(sc) {
-    let T = sc.tiles || "";
-    if (T.length !== sc.cols * sc.rows) T = ".".repeat(sc.cols * sc.rows);
+  // The squares (k = 0) or whether each gets walls (k = 1), with what's been painted but not confirmed yet.
+  function layerOf(sc, k) {
+    const n = sc.cols * sc.rows;
+    let T = k ? sc.wl || "" : sc.tiles || "";
+    if (T.length !== n) T = (k ? "1" : ".").repeat(n);
     const live = act && act.kind === "paint" ? act.cells : null;
     const mine = tilesLocalSc === sc.id && tilesLocal.size;
     if (!mine && !(live && live.size)) return T;
     const a = T.split("");
-    if (mine) for (const [i, t] of tilesLocal) a[i] = t;
-    if (live) for (const [i, t] of live) a[i] = t;
+    if (mine) for (const [i, v] of tilesLocal) a[i] = v[k];
+    if (live) for (const [i, v] of live) a[i] = v[k];
     return a.join("");
   }
-  function wallEdge(a, b) {
-    if (a === "?" || b === "?") return false;
-    return (INDOOR.includes(a) && solidT(b)) || (INDOOR.includes(b) && solidT(a)) ||
-      (a === "w" && OPEN.includes(b)) || (b === "w" && OPEN.includes(a));
-  }
-  function tileLayer(sc, T, hasImg) {
-    const key = `${sc.id}|${sc.cols}|${hasImg ? 1 : 0}|${sc.grid ? 1 : 0}|${T}`;
+  const tilesOf = sc => layerOf(sc, 0), wallsOf = sc => layerOf(sc, 1);
+  function tileLayer(sc, T, W, hasImg) {
+    const key = `${sc.id}|${sc.cols}|${hasImg ? 1 : 0}|${sc.grid ? 1 : 0}|${T}|${W}`;
     if (tileCache.key === key) return tileCache.canvas;
     const cols = sc.cols, rows = sc.rows;
     const R = Math.max(8, Math.min(64, Math.floor(4096 / Math.max(cols, rows)), Math.floor(Math.sqrt(14e6 / (cols * rows)))));
@@ -796,6 +794,12 @@
     g.setTransform(R, 0, 0, R, 0, 0);
     const at = (x, y) => (x < 0 || y < 0 || x >= cols || y >= rows ? "." : T[y * cols + x]);
     const isOpen = t => OPEN.includes(t);
+    const walled = (x, y) => { const t = at(x, y); return isOpen(t) && (t === "D" || t === "S" || W[y * cols + x] === "1"); };
+    const wallEdge = (x1, y1, x2, y2) => {             // the same rule the server uses for sight
+      const a = at(x1, y1), b = at(x2, y2);
+      if (a === "?" || b === "?") return false;
+      return (walled(x1, y1) && solidT(b)) || (walled(x2, y2) && solidT(a)) || (a === "w" && isOpen(b)) || (b === "w" && isOpen(a));
+    };
     if (!hasImg) { g.fillStyle = PAPER; g.fillRect(0, 0, cols, rows); }
 
     // hatching on the rock round the rooms (it fades out two squares away)
@@ -848,10 +852,10 @@
     // thick ink walls wherever a room meets rock
     g.beginPath();
     for (let y = 0; y <= rows; y++) for (let x = 0; x < cols; x++) {
-      if (wallEdge(at(x, y - 1), at(x, y))) { g.moveTo(x, y); g.lineTo(x + 1, y); }
+      if (wallEdge(x, y - 1, x, y)) { g.moveTo(x, y); g.lineTo(x + 1, y); }
     }
     for (let x = 0; x <= cols; x++) for (let y = 0; y < rows; y++) {
-      if (wallEdge(at(x - 1, y), at(x, y))) { g.moveTo(x, y); g.lineTo(x, y + 1); }
+      if (wallEdge(x - 1, y, x, y)) { g.moveTo(x, y); g.lineTo(x, y + 1); }
     }
     g.strokeStyle = INKC;
     g.lineWidth = 0.16;
@@ -1310,7 +1314,7 @@
   function delLabelAt(lb) { const q = (scene().labels || []).find(x => x.x === lb.x && x.y === lb.y && x.text === lb.text); if (q) action("label_del", { sc: viewSc, id: q.id }); }
   function setMap(sc, payload, what) {
     const before = {
-      sc: sc.id, tiles: (sc.tiles || "").length === sc.cols * sc.rows ? sc.tiles : ".".repeat(sc.cols * sc.rows),
+      sc: sc.id, tiles: (sc.tiles || "").length === sc.cols * sc.rows ? sc.tiles : ".".repeat(sc.cols * sc.rows), wl: sc.wl,
       props: (sc.props || []).map(propSnap), labels: true, cols: sc.cols, rows: sc.rows,
     };
     const oldLabels = (sc.labels || []).map(lb => ({ x: lb.x, y: lb.y, text: lb.text, dm: lb.dm }));
@@ -1326,24 +1330,24 @@
     const sc = scene();
     if (!sc || !edits.length) return;
     if (record) {
-      const T = tilesOf(sc), prev = [], now = [];
-      for (const [x, y, t] of edits) {
-        const old = T[y * sc.cols + x];
-        if (old !== t) { prev.push([x, y, old]); now.push([x, y, t]); }
+      const T = tilesOf(sc), W = wallsOf(sc), prev = [], now = [];
+      for (const [x, y, t, w = 1] of edits) {
+        const i = y * sc.cols + x, old = T[i], oldW = +W[i];
+        if (old !== t || oldW !== +w) { prev.push([x, y, old, oldW]); now.push([x, y, t, +w]); }
       }
       if (!now.length) return;
       edits = now;
       remember({ what: "drawing", undo: () => sendTiles(prev, false), redo: () => sendTiles(now, false) });
     }
     if (tilesLocalSc !== sc.id) { tilesLocal.clear(); tilesLocalSc = sc.id; }
-    for (const [x, y, t] of edits) tilesLocal.set(y * sc.cols + x, t);
+    for (const [x, y, t, w = 1] of edits) tilesLocal.set(y * sc.cols + x, t + (w ? "1" : "0"));
     action("tiles", { sc: sc.id, edits });
     redraw();
   }
   function paintTileAt(p) {
     const sc = scene(), c = cellAt(p), o = Math.floor(build.brush / 2);
     for (let y = c.y - o; y < c.y - o + build.brush; y++) for (let x = c.x - o; x < c.x - o + build.brush; x++) {
-      if (inScene(sc, x, y)) act.cells.set(y * sc.cols + x, act.code);
+      if (inScene(sc, x, y)) act.cells.set(y * sc.cols + x, act.code + act.w);
     }
     redraw();
   }
@@ -1377,6 +1381,7 @@
       else if (t === "." || t === "?") { build.mode = "erase"; what = "Erase"; }
       else {
         build.tile = t;
+        build.walls = wallsOf(sc)[c.y * sc.cols + c.x] === "1";
         if (build.mode !== "room" && build.mode !== "brush") build.mode = "brush";
         what = (TILE_INFO.find(x => x[0] === t) || [0, t])[1];
       }
@@ -1387,9 +1392,10 @@
   }
   function buildDown(e, p) {
     const sc = scene(), c = cellAt(p), rub = e.button === 2;
-    if (build.mode === "room") { act = { kind: "room", a: p, b: p, code: rub ? "." : build.tile }; redraw(); return; }
+    const w = rub || build.mode === "erase" || build.walls ? "1" : "0";
+    if (build.mode === "room") { act = { kind: "room", a: p, b: p, code: rub ? "." : build.tile, w }; redraw(); return; }
     if (build.mode === "brush" || build.mode === "erase") {
-      act = { kind: "paint", code: rub || build.mode === "erase" ? "." : build.tile, cells: new Map() };
+      act = { kind: "paint", code: rub || build.mode === "erase" ? "." : build.tile, w, cells: new Map() };
       paintTileAt(p);
       return;
     }
@@ -1449,10 +1455,10 @@
   }
   function buildUp(a) {
     const sc = scene();
-    if (a.kind === "paint") sendTiles([...a.cells].map(([i, t]) => [i % sc.cols, Math.floor(i / sc.cols), t]));
+    if (a.kind === "paint") sendTiles([...a.cells].map(([i, v]) => [i % sc.cols, Math.floor(i / sc.cols), v[0], +v[1]]));
     else if (a.kind === "room") {
       const [x0, y0, x1, y1] = boxCells(a.a, a.b), edits = [];
-      for (let y = Math.max(0, y0); y <= Math.min(sc.rows - 1, y1); y++) for (let x = Math.max(0, x0); x <= Math.min(sc.cols - 1, x1); x++) edits.push([x, y, a.code]);
+      for (let y = Math.max(0, y0); y <= Math.min(sc.rows - 1, y1); y++) for (let x = Math.max(0, x0); x <= Math.min(sc.cols - 1, x1); x++) edits.push([x, y, a.code, +a.w]);
       sendTiles(edits);
     }
   }
@@ -1498,7 +1504,7 @@
         else if (r < 0.29) put("rock", xx, yy, ri(0, 3));
       }
       for (let k = 0; k < 3; k++) put("rock", cx + ri(-2, 2), cy + (R() < 0.5 ? -2 : 2), ri(0, 3));
-      return { tiles: T.join(""), props };
+      return { tiles: T.join(""), wl: T.map(t => (t === "g" || t === "d" || t === "s" ? "0" : "1")).join(""), props };
     }
 
     if (kind === "house") {
@@ -1557,7 +1563,7 @@
         else if (r < 0.14) put("bush", x, y);
       }
       put("well", Math.max(0, hx - 3), Math.min(rows - 2, hy + h + 1));
-      return { tiles: T.join(""), props };
+      return { tiles: T.join(""), wl: T.map(t => (t === "g" || t === "d" || t === "s" ? "0" : "1")).join(""), props };
     }
 
     // a dungeon: rooms, then corridors joining each to the nearest one already joined, then doors
@@ -1610,7 +1616,7 @@
       }
     }
     // furniture: stairs in the first room, treasure in the one furthest from it, the rest dressed at random
-    const free = (x, y) => INDOOR.includes(get(x, y)) && get(x, y) !== "D" && !taken.has(y * cols + x) && inRoom.has(y * cols + x)
+    const free = (x, y) => "fo".includes(get(x, y)) && !taken.has(y * cols + x) && inRoom.has(y * cols + x)
       && !near(x, y, t => t === "D") && !near(x, y, t => t === "s" || t === "p") &&
       ![[-1, 0], [1, 0], [0, -1], [0, 1]].some(([dx, dy]) => corr.has((y + dy) * cols + x + dx));
     const corners = r => [[r.x, r.y], [r.x + r.w - 1, r.y], [r.x, r.y + r.h - 1], [r.x + r.w - 1, r.y + r.h - 1]];
@@ -1630,7 +1636,7 @@
       }
     }
     for (const i of corr) if (R() < 0.04) put(R() < 0.5 ? "rubble" : "web", i % cols, Math.floor(i / cols), ri(0, 3));
-    return { tiles: T.join(""), props };
+    return { tiles: T.join(""), wl: "1".repeat(T.length), props };
   }
 
   function openLinkForm(pr) {
@@ -2087,6 +2093,12 @@
         r.append(b);
       }
       box.append(r);
+      const l = document.createElement("label");
+      l.className = "check small";
+      l.title = "Walls go where what you paint meets rock. Turn this off for open ground: fields, a pond, a forest";
+      l.innerHTML = `<input type="checkbox" ${build.walls ? "checked" : ""}> Walls round it`;
+      l.querySelector("input").addEventListener("change", e => { build.walls = e.target.checked; });
+      box.append(l);
     }
     if (build.mode === "brush" || build.mode === "erase") {
       const r = row();
@@ -2126,8 +2138,8 @@
       box.append(l);
     }
     box.append(p({
-      room: "Drag out a room. Walls go round it by themselves, and rooms that touch join up. Right-drag to dig it back out.",
-      brush: "Paint corridors, pools or a river. Grass and dirt don't get walls, so use them outdoors. Right-drag rubs out.",
+      room: "Drag out a room. Walls go round it by themselves (untick Walls round it for open ground), and rooms that touch join up. Right-drag to dig it back out.",
+      brush: "Paint corridors, pools or a river. Turn off Walls round it for open ground like fields and ponds. Right-drag rubs out.",
       erase: "Drag to rub squares back out to solid rock.",
       door: build.secret ? "Players see plain wall where a secret door is, until you click it with Door picked to reveal it."
         : "Click a square in a gap between walls to put a door there, and click it again to take it away. Click a secret door to reveal it.",
@@ -2151,7 +2163,7 @@
       if (cols < 12 || rows < 10) return note("Make the scene at least 12 × 10 squares first.");
       if ((/[^.]/.test(sc.tiles || "") || (sc.props || []).length) && !confirm("Swap the map you've drawn for a new one?")) return;
       const m = makeMap(build.kind, cols, rows);
-      setMap(sc, { sc: sc.id, tiles: m.tiles, props: m.props, labels: true, cols, rows }, "the random map");
+      setMap(sc, { sc: sc.id, tiles: m.tiles, wl: m.wl, props: m.props, labels: true, cols, rows }, "the random map");
     }));
     box.append(r);
     const r2 = row();
@@ -2159,7 +2171,7 @@
     if (sc.img) r2.append(btn("Take the picture off", "btn small-btn", () => action("scene_img", { sc: sc.id, src: "" })));
     r2.append(btn("Clear what I've drawn", "btn danger small-btn", () => {
       const sc = scene();
-      if (confirm("Clear the floors, props and labels you've drawn on this scene? (Ctrl+Z brings them back.)")) setMap(sc, { sc: sc.id, tiles: ".".repeat(sc.cols * sc.rows), props: [], labels: true }, "clearing the map");
+      if (confirm("Clear the floors, props and labels you've drawn on this scene? (Ctrl+Z brings them back.)")) setMap(sc, { sc: sc.id, tiles: ".".repeat(sc.cols * sc.rows), wl: "1".repeat(sc.cols * sc.rows), props: [], labels: true }, "clearing the map");
     }));
     box.append(r2);
     if (!sc.fog || !sc.auto) {
