@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Town of ACE</title>
+<meta name="description" content="Secret roles, night kills and day trials. Find the wolves hiding in ACE Clan before they take over the town.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../shared/site.css?v=20261119">
+<link rel="stylesheet" href="../shared/room.css?v=20261119">
+<link rel="stylesheet" href="../shared/fx.css?v=20261119">
+<link rel="stylesheet" href="style.css?v=20261127">
+</head>
+<body>
+<header class="sitebar">
+  <div class="wrap sitebar-inner">
+    <a class="ace" href="../">ACE<span>.</span><small>Games</small></a>
+    <nav>
+      <a href="../">Games</a>
+    </nav>
+  </div>
+</header>
+
+<main id="startView" class="wrap start" hidden></main>
+
+<main id="gameView" class="wrap layout" hidden>
+  <section class="board-col" aria-label="Town">
+    <div id="town" class="town" hidden>
+      <div class="tw-head">
+        <span id="twIcon" class="tw-icon" aria-hidden="true"></span>
+        <div class="tw-title">
+          <b id="twPhase"></b>
+          <span id="twSub"></span>
+        </div>
+        <span id="twClock" class="tw-clock" aria-label="Time left"></span>
+      </div>
+
+      <div id="twRole" class="tw-role">
+        <button id="twRoleToggle" class="tw-peek" type="button">Hide my role</button>
+        <div class="tw-role-body">
+          <small>Your role</small>
+          <b id="twRoleName"></b>
+          <span id="twTeam" class="tw-team"></span>
+          <p id="twAbout"></p>
+          <p id="twGoal" class="muted small"></p>
+          <p id="twPack" class="tw-pack small" hidden></p>
+        </div>
+      </div>
+
+      <div id="twTrial" class="tw-trial" hidden></div>
+
+      <div id="twActions" class="actions tw-actions" hidden></div>
+      <ul id="twGrid" class="tw-grid" aria-label="Players"></ul>
+
+      <div class="tw-chat">
+        <div id="twTabs" class="tw-tabs" role="tablist"></div>
+        <ol id="twChat" class="tw-log" aria-live="polite"></ol>
+        <form id="twForm" class="guess-row" autocomplete="off">
+          <label class="sr" for="twText">Message</label>
+          <input id="twText" maxlength="300" placeholder="Say something…">
+          <button class="btn primary" type="submit">Send</button>
+        </form>
+      </div>
+
+      <div class="tw-two">
+        <div class="box">
+          <h2>Your notebook <small>only you see this</small></h2>
+          <ol id="twNotes" class="tw-notes"></ol>
+        </div>
+        <div class="box">
+          <h2>Last will <small>read out when you die</small></h2>
+          <textarea id="twWill" maxlength="400" rows="5" placeholder="Night 1: checked Bot 2, not a wolf…"></textarea>
+          <p id="twWillNote" class="muted small"></p>
+        </div>
+      </div>
+    </div>
+
+    <div id="twEnd" class="box tw-end" hidden>
+      <h2>Who was who</h2>
+      <ul id="twEndList" class="tw-end-list"></ul>
+    </div>
+    <div id="twSetup" class="box" hidden>
+      <h2>In this town</h2>
+      <p id="twSetupText" class="small"></p>
+    </div>
+  </section>
+  <aside id="panel" class="panel"></aside>
+</main>
+
+<footer class="site-foot wrap">ACE Clan · Town of ACE</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<script src="../shared/live.js?v=20261119"></script>
+<script src="../shared/fx.js?v=20261119"></script>
+<script src="../shared/room.js?v=20261119"></script>
+<script src="town.js?v=20261127"></script>
+</body>
+</html>

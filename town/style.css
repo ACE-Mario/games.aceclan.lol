@@ -1,0 +1,173 @@
+/* Town of ACE: phase header, role card, player cards, trial box, chat, notebook and will. */
+:root { --wolf: #ff4655; --townc: #3fdc8a; --neutral: #f5a524; --night: #6f86ff; }
+body { transition: background-color .8s; }
+body.tw-live #status { display: none; }  /* the phase header below says the same thing */
+body.is-night {
+  background: radial-gradient(ellipse at 50% -10%, rgba(80, 100, 220, .22), transparent 60%), #080a14;
+  background-attachment: fixed;
+}
+body.is-trial {
+  background: radial-gradient(ellipse at 50% -10%, rgba(255, 70, 85, .14), transparent 60%), var(--bg);
+  background-attachment: fixed;
+}
+
+.town { display: flex; flex-direction: column; gap: 12px; }
+.tw-head {
+  display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: var(--radius);
+  border: 1px solid var(--line); background: linear-gradient(120deg, #2a2412, var(--card) 60%);
+}
+.town.ph-night .tw-head { background: linear-gradient(120deg, #141b3d, var(--card) 65%); border-color: #2c3770; }
+.town.ph-defence .tw-head, .town.ph-judgement .tw-head, .town.ph-verdict .tw-head, .town.ph-hunter .tw-head {
+  background: linear-gradient(120deg, #3a1218, var(--card) 65%); border-color: #5a2029;
+}
+.tw-icon { width: 44px; height: 44px; flex: none; }
+.tw-icon svg { width: 100%; height: 100%; display: block; }
+.town.ph-night .tw-icon { animation: bob 4s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(-3px) rotate(-6deg); } }
+.tw-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tw-title b { font: 700 1.6rem/1.05 var(--display); letter-spacing: 2px; text-transform: uppercase; }
+.tw-title span { color: var(--muted); font-size: .92rem; }
+.tw-clock { font: 700 1.7rem/1 var(--display); color: var(--gold); font-variant-numeric: tabular-nums; min-width: 2.5ch; text-align: right; }
+.tw-clock.low { color: var(--red); }
+
+/* Role card */
+.tw-role {
+  position: relative; padding: 14px 16px; border-radius: var(--radius); background: var(--card);
+  border: 1px solid var(--line); border-left: 5px solid var(--tc, var(--muted));
+}
+.tw-role.team-town { --tc: var(--townc); }
+.tw-role.team-wolves { --tc: var(--wolf); }
+.tw-role.team-neutral { --tc: var(--neutral); }
+.tw-role.dead { opacity: .75; }
+.tw-role-body { display: flex; flex-direction: column; gap: 2px; padding-right: 110px; }
+.tw-role-body small { color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px; font-size: .72rem; }
+.tw-role-body b { font: 700 1.6rem/1.1 var(--display); color: var(--tc); }
+.tw-role-body p { margin: 4px 0 0; }
+.tw-team {
+  align-self: flex-start; font-size: .75rem; font-weight: 700; padding: 1px 8px; border-radius: 99px;
+  background: color-mix(in srgb, var(--tc) 20%, transparent); color: var(--tc);
+}
+.tw-pack { color: var(--wolf); font-weight: 600; }
+.tw-peek {
+  position: absolute; top: 10px; right: 10px; font-size: .78rem; padding: 4px 10px; border-radius: 99px;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--muted); cursor: pointer;
+}
+.tw-role.hidden-role .tw-role-body { filter: blur(9px); user-select: none; pointer-events: none; }
+
+/* Trial */
+.tw-trial {
+  display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center; padding: 16px;
+  border-radius: var(--radius); background: var(--card); border: 1px solid #5a2029;
+}
+.tw-accused { display: flex; align-items: center; gap: 12px; }
+.tw-accused div { display: flex; flex-direction: column; align-items: flex-start; }
+.tw-accused b { font: 700 1.5rem/1.1 var(--display); }
+.tw-accused small { color: var(--muted); }
+.tw-judge { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center; }
+.tw-judge .btn { font-size: 1.05rem; padding: 10px 22px; }
+.tw-judge p { margin: 0; }
+.btn.guilty { border-color: var(--red); color: #ffb3b9; }
+.btn.innocent { border-color: var(--townc); color: #b4f5d2; }
+.btn.guilty.on { background: var(--red); color: #fff; }
+.btn.innocent.on { background: #23885a; color: #fff; border-color: #23885a; }
+.tw-verdict { display: flex; flex-direction: column; gap: 4px; animation: pop .4s cubic-bezier(.2, 1.4, .4, 1); }
+.tw-verdict b { font: 700 1.8rem/1.1 var(--display); text-transform: uppercase; letter-spacing: 2px; }
+.tw-verdict.guilty b { color: var(--red); }
+.tw-verdict.innocent b { color: var(--townc); }
+.tw-verdict small { color: var(--muted); }
+@keyframes pop { from { transform: scale(.7); opacity: 0; } }
+
+.tw-actions .btn.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, var(--card)); }
+.btn.gold { border-color: var(--gold); color: var(--gold); }
+
+/* Player cards */
+.tw-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.tw-card {
+  position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px;
+  border-radius: var(--radius); background: var(--card); border: 1px solid var(--line); min-height: 62px;
+}
+.tw-card .avatar.md { width: 34px; height: 34px; font-size: 1rem; }
+.tw-card.me { border-color: var(--accent); }
+.tw-card.away { opacity: .7; }
+.tw-card.team-wolves { box-shadow: inset 3px 0 0 var(--wolf); }
+.tw-card.team-town { box-shadow: inset 3px 0 0 var(--townc); }
+.tw-card.team-neutral { box-shadow: inset 3px 0 0 var(--neutral); }
+.tw-card.dead { background: var(--bg2); opacity: .6; }
+.tw-card.dead .avatar { filter: grayscale(1); }
+.tw-card.dead b { text-decoration: line-through; text-decoration-color: var(--red); }
+.tw-card.fresh { animation: fresh 1.4s ease-out; }
+@keyframes fresh { 0% { background: #5a1a22; } }
+.tw-card.accused { border-color: var(--red); box-shadow: 0 0 0 1px var(--red), 0 0 18px rgba(255, 70, 85, .3); }
+.tw-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tw-info b { overflow-wrap: anywhere; }
+.tw-info small { color: var(--muted); font-size: .78rem; }
+.tw-info .tw-votefor { color: var(--gold); }
+.tw-info .tw-wolfpick { color: var(--wolf); }
+.tw-count {
+  min-width: 26px; height: 26px; padding: 0 6px; border-radius: 99px; display: grid; place-items: center;
+  background: var(--gold); color: #1a1405; font: 700 .95rem/1 var(--display);
+}
+.tw-act { padding: 6px 12px; font-size: .9rem; }
+.tw-act.on { background: var(--purple); border-color: var(--purple); }
+.tw-act.kill { border-color: var(--wolf); color: #ffb3b9; }
+.tw-act.kill.on { background: var(--wolf); color: #fff; }
+.tw-will { flex-basis: 100%; font-size: .85rem; }
+.tw-will summary { cursor: pointer; color: var(--gold); }
+.tw-will p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); }
+
+/* Chat */
+.tw-chat { display: flex; flex-direction: column; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+.tw-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.tw-tabs:empty { display: none; }
+.tw-tab { padding: 4px 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--bg2); color: var(--muted); cursor: pointer; font-size: .85rem; }
+.tw-tab.on { color: var(--text); border-color: var(--accent); }
+.tw-log {
+  list-style: none; margin: 0; padding: 8px 10px; height: 220px; overflow-y: auto; background: var(--bg2);
+  border-radius: 8px; display: flex; flex-direction: column; gap: 3px; font-size: .95rem;
+}
+.tw-log li { overflow-wrap: anywhere; }
+.tw-log li.m-sys, .tw-log li.m-vote { color: var(--muted); font-style: italic; }
+.tw-log li.m-night { color: var(--night); font-weight: 600; }
+.tw-log li.m-day { color: var(--gold); font-weight: 600; }
+.tw-log li.m-death { color: var(--red); font-weight: 700; }
+.tw-log li.m-good { color: var(--townc); font-weight: 600; }
+.tw-log li.m-trial { color: #ff8a94; font-weight: 600; }
+.tw-log li.m-win { color: var(--gold); font-weight: 700; }
+.guess-row { display: flex; gap: 8px; }
+.guess-row input { flex: 1; min-width: 0; }
+
+/* Notebook and will */
+.tw-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.tw-notes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; max-height: 220px; overflow-y: auto; font-size: .9rem; }
+.tw-notes li { padding: 5px 8px; border-radius: 6px; background: var(--bg2); border-left: 3px solid var(--line); }
+.tw-notes li small { color: var(--muted); margin-right: 4px; }
+.tw-notes li.n-good { border-left-color: var(--townc); }
+.tw-notes li.n-bad { border-left-color: var(--red); }
+.tw-notes li.n-wolf { border-left-color: var(--wolf); color: #ffb3b9; }
+.tw-notes li.n-role { border-left-color: var(--accent); font-weight: 600; }
+#twWill { width: 100%; resize: vertical; font: inherit; background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.tw-two .box p { margin: 0; }
+
+/* End of game */
+.tw-end-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; }
+.tw-end-list li { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; background: var(--bg2); border-left: 3px solid var(--line); }
+.tw-end-list li b { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.tw-end-list li span { font-size: .85rem; }
+.tw-end-list li.team-wolves { border-left-color: var(--wolf); }
+.tw-end-list li.team-wolves span { color: var(--wolf); }
+.tw-end-list li.team-town { border-left-color: var(--townc); }
+.tw-end-list li.team-neutral { border-left-color: var(--neutral); }
+.tw-end-list li.team-neutral span { color: var(--neutral); }
+.tw-end-list li.dead { opacity: .75; }
+
+@media (max-width: 640px) {
+  .tw-two { grid-template-columns: 1fr; }
+  .tw-grid { grid-template-columns: 1fr 1fr; }
+  .tw-card { padding: 8px; gap: 6px; }
+  .tw-card .tw-act { flex-basis: 100%; }
+  .tw-role-body { padding-right: 0; padding-top: 22px; }
+  .tw-title b { font-size: 1.3rem; }
+  .tw-log { height: 170px; }
+}
+@media (max-width: 380px) { .tw-grid { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .town.ph-night .tw-icon, .tw-verdict, .tw-card.fresh { animation: none; } }
