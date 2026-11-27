@@ -870,6 +870,15 @@
       }
     };
     $("submit") && ($("submit").onclick = submit);
+    // In Discord: no name to type. Your score goes on the board under your Discord name when you finish.
+    if (ACT && !save.submitted) {
+      $("submitRow").hidden = true;
+      $("submitNote").textContent = "Adding your score as your Discord name…";
+      ACT.ready.then(u => {
+        if (u) { $("name").value = u.name.slice(0, 20); submit().then(() => { if (!save.submitted) $("submitRow").hidden = false; }); }
+        else { $("submitRow").hidden = false; $("submitNote").textContent = "Add your score to see where you rank."; }
+      });
+    }
     $("name")?.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
     loadBoard();
 
