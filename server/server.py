@@ -21,6 +21,7 @@ import time
 from flask import Flask, abort, jsonify, request, send_file, send_from_directory
 from flask_socketio import SocketIO, join_room
 
+import discord_auth
 import songbank
 from games import GAMES
 
@@ -34,6 +35,9 @@ ALLOWED_ORIGINS = [
     "https://games.aceclan.lol", "http://games.aceclan.lol", "https://play.aceclan.lol",
     f"http://localhost:{PORT}", f"http://127.0.0.1:{PORT}",
 ]
+DISCORD_APP = discord_auth.load(HERE)              # ACEdle as a Discord Activity (server/discord.env)
+if DISCORD_APP:                                    # pages inside Discord come from <app id>.discordsays.com
+    ALLOWED_ORIGINS.append(f"https://{DISCORD_APP}.discordsays.com")
 MAX_ROOMS = 60
 MAX_PLAYERS = 30
 ROOM_IDLE_SECONDS = 6 * 60 * 60                   # rooms nobody has touched for 6 hours are removed
@@ -48,6 +52,9 @@ songbank.register(app, HERE)       # song.aceclan.lol's songs (/api/songs/...)
 
 def log(msg):
     print(time.strftime("%H:%M:%S"), msg, flush=True)
+
+
+discord_auth.register(app, log)    # /api/discord/token: Discord sign-in for the ACEdle activity
 
 
 # ---- Rooms ---------------------------------------------------------------------------------

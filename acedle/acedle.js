@@ -11,8 +11,11 @@
   const HERE = document.currentScript?.src || location.href;     // champions.txt and agents.txt sit beside this file
   const FX = window.AceFX || { sound() {}, confetti() {}, soundButton() {} };
   const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
-  const RIOT = LOCAL ? "http://localhost:5080" : "https://riot.aceclan.lol";
-  const DD = "https://ddragon.leagueoflegends.com";
+  // Inside Discord (activity.js) every outside address goes through Discord's proxy; elsewhere these do nothing.
+  const ACT = window.AceActivity || null;
+  const PX = ACT ? ACT.url : u => u;
+  const RIOT = LOCAL ? "http://localhost:5080" : PX("https://riot.aceclan.lol");
+  const DD = PX("https://ddragon.leagueoflegends.com");
 
   // The clan's day: midnight in Adelaide (UTC+10:30), the same as the leaderboard uses.
   const START = Date.UTC(2026, 10, 18), OFFSET = 10.5 * 3600e3, DAY_MS = 86400e3;
@@ -91,7 +94,11 @@
   const pick = (list, r) => list[Math.floor(r() * list.length)];
 
   // ---- Data ------------------------------------------------------------------------------
-  const getJSON = async u => { const r = await fetch(u); if (!r.ok) throw new Error(r.status); return r.json(); };
+  const getJSON = async u => {
+    const r = await fetch(PX(u));
+    if (!r.ok) throw new Error(r.status);
+    return ACT ? JSON.parse(ACT.rewrite(await r.text())) : r.json();     // picture links inside the data too
+  };
   const data = {};
   const ready = {
     league: (async () => {
@@ -194,7 +201,7 @@
         data.clan = (await getJSON(RIOT + "/clan")).members;
       } catch {
         // Live stats are off: read the players list straight from the clan site instead.
-        const html = await (await fetch("https://aceclan.lol/")).text();
+        const html = await (await fetch(PX("https://aceclan.lol/"))).text();
         const block = html.match(/const players = \[([\s\S]*?)\n\s*\];/)[1];
         data.clan = new Function(`"use strict"; return [${block}];`)().map(p => ({ ...p, roles: p.roles || [], topChamp: null }));
       }
@@ -263,6 +270,14 @@
       return `<li class="${cls}"${open}><span class="ic">${st.icon}</span><span class="nm">${esc(st.name)}</span><span class="pt">${pt}</span></li>`;
     }).join("");
     $("total").textContent = STAGES.reduce((a, st) => a + points(st, save.results[st.key]), 0);
+    ACT?.progress({                                  // the Discord call sees how far you've got (never the answers)
+      day: DAY, current: cur?.key || "", done: !cur,
+      all: STAGES.map(st => ({ key: st.key, name: st.name, icon: st.icon })),
+      stages: STAGES.filter(st => save.results[st.key]).map(st => {
+        const r = save.results[st.key];
+        return { key: st.key, name: st.name, solved: !!r.solved, skipped: !!r.skipped, guesses: r.guesses || 0, points: points(st, r) };
+      }),
+    });
   }
 
   // Tap a finished stage (in the strip or the score breakdown) to see its guesses and answer again.
@@ -786,7 +801,7 @@
       FX.sound("win");
       if (total >= 300) FX.confetti();
     }
-    const name = save.name || store.get("acedle-name", "");
+    const name = save.name || ACT?.user?.name.slice(0, 20) || store.get("acedle-name", "");
     el.innerHTML = `<h2>Run complete</h2>
       <div class="big">${total} <small style="font-size:1.1rem;color:var(--muted)">/ ${MAX_POINTS}</small></div>
       <ul class="breakdown">${STAGES.map(st => { const r = save.results[st.key];
