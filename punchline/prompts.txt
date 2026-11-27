@@ -1,0 +1,119 @@
+# ACE Punchline prompts. The server reads this file (restart it after editing).
+# A line in [square brackets] starts a pack: [key] Name shown to the leader.
+# One prompt per line. {player} becomes the name of someone else in the game.
+# Lines starting with # are notes and are skipped.
+
+[league] League of Legends
+The real reason the jungler never came top
+A new item that would make League even more unfair
+What Teemo actually keeps in his mushrooms
+The worst possible name for a new champion
+The most toxic thing you can type without getting banned
+A rejected voice line for Yasuo
+What Baron Nashor thinks about all day
+A secret 15th rule of the Summoner's Code
+The worst thing to hear in champ select
+What the minions talk about on the way to lane
+The real reason Riot keeps nerfing your main
+A champion ability that would only work in real life
+The most useless summoner spell idea ever
+What the ward sees when nobody is looking
+A new skin line nobody asked for
+The worst possible place to flash
+What your support is really doing while you die
+The excuse you give after going 0/10
+A new objective Riot should add to Summoner's Rift
+The worst advice to give a brand new League player
+What Blitzcrank's hook is secretly looking for
+A terrible name for a League team
+What actually happens in the fountain after you die
+The most dramatic way to say "ff 15"
+A champion's ultimate that would just ruin a dinner party
+What the Rift Herald does on its day off
+The first thing a poro would say if it could talk
+The worst thing your duo can say right before a game
+A loading screen tip that would help nobody
+What {player} is really doing when they go AFK in a game
+{player}'s champion pool, described in three words
+The champion {player} should be banned from playing
+What {player} types in all chat after losing lane
+
+[valorant] VALORANT
+The worst possible callout for a spot on the map
+A new agent ability that would get nerfed in a day
+What Sage is really thinking when she revives you
+The worst possible thing to say on a 1v4 clutch
+A rejected name for a VALORANT map
+What Reyna eats for breakfast
+The worst reason to buy an Operator
+A gun skin nobody would ever pay for
+What the spike says right before it goes off
+The most annoying thing a teammate can do in a pistol round
+A terrible way to celebrate an ace
+What Jett is running away from
+Something you never want to hear on comms
+A new game mode that would break the game
+The real reason you whiffed that shot
+What Killjoy's turret mutters under its breath
+The worst way to spend your ult points
+What {player} says after missing every shot in a round
+{player}'s secret rank-up strategy
+The agent {player} should never be allowed to pick
+
+[clan] Clan life
+The real reason ACE was started
+The worst possible clan motto
+What really happens in the Discord at 3 AM
+The most ACE way to lose a game
+A rule every clan game night needs
+Something you should never say in the voice call
+The excuse for missing game night that nobody believes
+A terrible prize for winning clan trivia
+What the clan group chat is mostly made of
+The worst name for a new Discord channel
+A sign someone has been in the call too long
+What Jerry the bot secretly thinks of everyone
+The first thing to do if you win the lottery, ACE edition
+An achievement that should exist just for this clan
+What {player} would bring to a desert island
+{player}'s autobiography title
+The worst possible thing {player} could cook for the clan
+What {player} is famous for in the group chat
+A warning label that should come with {player}
+{player}'s worst ever gaming take
+The job {player} would have in a fantasy world
+If {player} was a boss, their final attack would be called
+What {player} says when the game crashes
+The reason {player} was late this time
+{player}'s secret talent nobody knows about
+The theme song that plays when {player} joins the call
+
+[everyday] Everyday stuff
+The worst thing to find in your pocket
+A terrible name for a pet goldfish
+The worst flavour of chips
+Something you should never say on a first date
+A terrible slogan for a dentist
+The most useless superpower
+What the cat is actually thinking
+A bad name for a boat
+The worst thing to shout in a library
+A rejected Olympic sport
+The worst possible gift for your teacher
+What aliens would find most confusing about Earth
+A terrible thing to put on a pizza
+The worst excuse for being late to school
+What your fridge would say if it could talk
+A bad idea for a theme park ride
+The most dramatic way to quit a job
+A terrible name for a new energy drink
+The worst thing to hear from your pilot
+A rejected flavour of ice cream
+Something you shouldn't bring to a sleepover
+The worst possible bedtime story
+A new law that would make everyone angry
+What pigeons are planning
+The worst thing to say at a wedding
+A fortune cookie message that would ruin your day
+The worst possible name for a gym
+A terrible thing to write in a birthday card
