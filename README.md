@@ -23,6 +23,13 @@ those come back).
 - `shared/fx.js` and `shared/fx.css`: effects every game uses: sounds made in the browser (with the Sound
   on/off button in the top bar), cards and chips sliding between places, confetti and the end-of-game
   banner, and player avatars. They respect the "reduce motion" setting.
+- `punchline/`: ACE Punchline, a writing party game for 3 to 12 players. Each round everyone answers two prompts;
+  each prompt goes to two players and everyone else (watchers too) votes between the two answers without knowing who
+  wrote which. Votes share 1,000 points a matchup (times the round number), plus a clean sweep bonus; "Pick for me"
+  gives a stock answer for half points; the same answer twice is a jinx. The last round, the Last Laugh, gives one
+  prompt to everybody. Players can add their own prompts in the lobby (`{player}` becomes someone's name).
+  - `prompts.txt`: the built-in prompt packs (`[key] Name` starts a pack, one prompt per line). The server reads
+    this file too; restart it after editing.
 - `agents/`: Ace Agents, a two-team word game.
   - `index.html`: start screen, board, online panels and the one-screen key view.
   - `main.js`: picks the mode from the link (`?room=KQTZ` online, `?code=FALCON-42` one screen).
@@ -97,6 +104,7 @@ those come back).
   - `games/base.py`: lobby, seats and admin panel shared by the seated games.
   - `games/snakes.py`: Snakes & Ladders rules. The server rolls the die.
   - `games/trivia.py`: Clan Trivia rules. The server runs the timers and keeps answers secret until time's up.
+  - `games/punchline.py`: ACE Punchline rules. Who wrote which answer stays on the server until each reveal.
   - `games/poker.py`: poker rules: dealing, blinds, betting rounds, side pots and hand ranking. Hole cards
     only go to their owner until a showdown.
   - `games/canasta.py`: Canasta rules: melds, wild cards, the frozen pile, red and black 3s, going out and scoring.

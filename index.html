@@ -2,10 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<script>
-  // Discord opens the ACEdle Activity at the top of the site; send it on to ACEdle (keeping Discord's details).
-  if (new URLSearchParams(location.search).has("frame_id")) location.replace("acedle/" + location.search);
-</script>
+<script src="shared/discord-start.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ACE Games</title>
 <meta name="description" content="Party games for ACE Clan game nights.">
@@ -155,6 +152,20 @@
       <h2>Town of ACE</h2>
       <p>Secret roles, night kills and day trials. Seers, healers and hunters try to find the wolves before the wolves take the town.</p>
       <div class="tags"><span>4–16 players</span><span>Social deduction</span><span>Party</span></div>
+    </a>
+    <a class="game" href="punchline/">
+      <svg class="icon" viewBox="0 0 110 66" aria-hidden="true">
+        <rect x="2" y="4" width="48" height="30" rx="8" fill="#7c3aed"/><path d="M12 34 L10 44 L22 34 Z" fill="#7c3aed"/>
+        <rect x="60" y="4" width="48" height="30" rx="8" fill="#d9a21b"/><path d="M98 34 L100 44 L88 34 Z" fill="#d9a21b"/>
+        <g fill="#fff"><rect x="10" y="13" width="32" height="4" rx="2"/><rect x="10" y="21" width="22" height="4" rx="2"/>
+          <rect x="68" y="13" width="32" height="4" rx="2"/><rect x="68" y="21" width="26" height="4" rx="2"/></g>
+        <text x="55" y="25" text-anchor="middle" font-family="Rajdhani, sans-serif" font-weight="700" font-size="11" fill="#9ca3af">VS</text>
+        <g fill="#2fa565"><circle cx="36" cy="56" r="6"/><circle cx="50" cy="56" r="6"/><circle cx="64" cy="56" r="6"/></g>
+        <circle cx="78" cy="56" r="6" fill="#2a2f3c"/>
+      </svg>
+      <h2>ACE Punchline</h2>
+      <p>Everyone gets prompts and writes the funniest answer they can. Answers go head to head and everyone votes. The crowd decides who's funny.</p>
+      <div class="tags"><span>3–12 players</span><span>Writing</span><span>Party</span></div>
     </a>
     <a class="game" href="agents/">
       <div class="mini" aria-hidden="true">

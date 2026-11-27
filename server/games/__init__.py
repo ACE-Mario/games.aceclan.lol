@@ -6,10 +6,12 @@ from .agents import Agents
 from .board import Board
 from .canasta import Canasta
 from .poker import Poker
+from .punchline import Punchline
 from .sketch import Sketch
 from .snakes import Snakes
 from .tabletop import Tabletop
 from .town import Town
 from .trivia import Trivia
 
-GAMES = {g.id: g for g in (Agents(), Snakes(), Trivia(), Poker(), Canasta(), Sketch(), Board(), Tabletop(), Acedle(), Town())}
+GAMES = {g.id: g for g in (Agents(), Snakes(), Trivia(), Poker(), Canasta(), Sketch(), Board(), Tabletop(), Acedle(),
+                            Punchline(), Town())}
