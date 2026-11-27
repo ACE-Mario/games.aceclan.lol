@@ -1,6 +1,7 @@
 """Games the live server can host. Add a new game by writing a module like agents.py
 (new_state, default_seat, handle, view) and listing it here. Seated turn-based games can
 build on base.SeatedGame, which already handles the lobby, seats and admin panel."""
+from .acedle import Acedle
 from .agents import Agents
 from .board import Board
 from .canasta import Canasta
@@ -10,4 +11,4 @@ from .snakes import Snakes
 from .tabletop import Tabletop
 from .trivia import Trivia
 
-GAMES = {g.id: g for g in (Agents(), Snakes(), Trivia(), Poker(), Canasta(), Sketch(), Board(), Tabletop())}
+GAMES = {g.id: g for g in (Agents(), Snakes(), Trivia(), Poker(), Canasta(), Sketch(), Board(), Tabletop(), Acedle())}

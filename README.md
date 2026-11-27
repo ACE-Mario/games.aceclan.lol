@@ -85,6 +85,12 @@ those come back).
   RIOT API (`riot.aceclan.lol`, the same program as ACEdle's leaderboard), which works the points out again from
   what the page sends. Its rules for each game are in `riot.aceclan.lol/server.py`, under "Daily game leaderboards".
   Sound Check has no board: it's endless and just for fun.
+- `acedle/`: ACEdle, the daily puzzle run (scores go to RIOT API). It is also a **Discord Activity**: played inside
+  a voice call, signed in with Discord, with an "In this call" panel showing everyone's progress (stages, guesses,
+  points, never answers). See "ACEdle in Discord" below.
+  - `activity.js`: the Discord part. Only loaded when Discord opens the page (the link has `frame_id`).
+  - `vendor/`: Discord's Embedded App SDK 2.5.0 (built into one file) and the Socket.IO client, kept here because
+    a page inside Discord can't load scripts from other sites.
 - `server/`: the live server.
   - `server.py`: rooms, players and the Socket.IO connection. Also serves this folder for local testing.
   - `games/agents.py`: Ace Agents rules. The server checks every move and only sends the key to spymasters.
@@ -97,6 +103,8 @@ those come back).
   - `games/tabletop.py`: ACE Tabletop. Players only get what they may see: no hidden tokens, no monsters under the
     fog, no DM notes, no DM-only rolls. Campaigns are saved to `server/saved/dnd/<slug>.json`, with their pictures
     as files in `server/saved/dnd/<slug>/`, served at `/api/dnd/asset/<slug>/<file>`.
+  - `games/acedle.py`: ACEdle's Discord call rooms (one per call). Only shares progress, never guesses.
+  - `discord_auth.py`: Discord sign-in for the activity (`/api/discord/token`); the secret is in `server/discord.env`.
   - `games/board.py`: ACE Board. Keeps every item, lets people change only their own (the leader can delete
     anyone's), and caps picture sizes (700 KB each, 30 MB of pictures a board; there's no limit on how many things a board holds). Changes go out as live messages; the whole board
     is only sent to a tab that doesn't have it yet. A board's room name is `b:<slug>` (picked by the game through
@@ -151,3 +159,34 @@ python server/server.py --local
 ```
 
 Then open http://localhost:5050. `--local` skips the tunnel, so nobody outside your PC can join.
+
+## ACEdle in Discord
+
+ACEdle runs as a Discord Activity (the rocket button in a voice call). Discord shows the page from
+`https://<app id>.discordsays.com` and only lets it reach addresses through that proxy, so the app's
+**URL Mappings** in the Discord Developer Portal (Activities > URL Mappings) must be:
+
+| Prefix | Target |
+| --- | --- |
+| `/` | `games.aceclan.lol` |
+| `/play` | `play.aceclan.lol` |
+| `/riot` | `riot.aceclan.lol` |
+| `/clan` | `aceclan.lol` |
+| `/ddragon` | `ddragon.leagueoflegends.com` |
+| `/meeps` | `universe-meeps.leagueoflegends.com` |
+| `/valapi` | `valorant-api.com` |
+| `/valmedia` | `media.valorant-api.com` |
+| `/dcdn` | `cdn.discordapp.com` |
+
+Discord opens `/`, and the root `index.html` sends it on to `acedle/`. The games server needs the app's id and
+secret in `server/discord.env` (never committed):
+
+```
+DISCORD_CLIENT_ID=123456789012345678
+DISCORD_CLIENT_SECRET=the secret from OAuth2 in the portal
+```
+
+Without that file everything else works as before; the activity just says sign-in isn't set up. Progress in
+Discord is saved separately from the website (a different address), and the leaderboard name fills in with your
+Discord name.
+
