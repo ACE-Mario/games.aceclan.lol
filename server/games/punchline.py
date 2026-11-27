@@ -9,6 +9,7 @@ The server keeps who wrote what to itself until each matchup is revealed. Player
 seated (watchers) can vote too. Prompts come from punchline/prompts.txt; the leader can also
 let players add their own prompts in the lobby. {player} in a prompt becomes someone's name.
 """
+import json
 import os
 import random
 import re
@@ -18,6 +19,11 @@ from .base import SeatedGame
 
 SITE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PROMPTS_TXT = os.path.join(SITE, "punchline", "prompts.txt")
+SAVE_DIR = os.environ.get("ACE_PUNCHLINE_DIR") or os.path.join(SITE, "server", "saved", "punchline")
+OWN_FILE = os.path.join(SAVE_DIR, "ace-custom.json")    # the ACE Custom pack (not in git)
+OWN_KEY = "own"
+OWN_NAME = "ACE Custom"
+MAX_OWN = 1000
 READY_SECONDS = 4
 VOTE_SECONDS = 20
 FINAL_VOTE_SECONDS = 30
@@ -38,8 +44,27 @@ SAFETY = [                    # "Pick for me": a stock answer for half points (b
 ]
 
 
+def load_own():
+    """The ACE Custom pack: prompts the leader types in on the site, kept for every game."""
+    try:
+        with open(OWN_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        return [{"id": str(p["id"]), "text": str(p["text"])[:200]} for p in data.get("prompts", []) if p.get("text")]
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return []
+
+
+def save_own(prompts):
+    os.makedirs(SAVE_DIR, exist_ok=True)
+    tmp = OWN_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"prompts": prompts}, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, OWN_FILE)
+
+
 def load_packs():
-    """Read punchline/prompts.txt: [key] Name lines start a pack, then one prompt per line."""
+    """Read punchline/prompts.txt ([key] Name lines start a pack, then one prompt per line), plus the
+    saved ACE Custom pack, which is always listed so the leader can tick it."""
     try:
         with open(PROMPTS_TXT, encoding="utf-8") as f:
             lines = f.read().splitlines()
@@ -56,7 +81,9 @@ def load_packs():
             continue
         if cur is not None:
             cur["prompts"].append(line[:200])
-    return {k: p for k, p in packs.items() if p["prompts"]}
+    packs = {k: p for k, p in packs.items() if p["prompts"]}
+    packs[OWN_KEY] = {"name": OWN_NAME, "prompts": [p["text"] for p in load_own()]}
+    return packs
 
 
 def clean(text, limit):
@@ -81,7 +108,8 @@ class Punchline(SeatedGame):
     @property
     def options(self):
         packs = load_packs()
-        choices = [(k, f"{p['name']} ({len(p['prompts'])})") for k, p in packs.items()]
+        choices = [(k, f"{p['name']} ({len(p['prompts'])})" if k != OWN_KEY else f"{OWN_NAME} (your saved prompts)")
+                   for k, p in packs.items()]
         return {
             "pack": choices or [("none", "No prompts found")],
             "rounds": [("2", "2 rounds + Last Laugh"), ("1", "1 round + Last Laugh"), ("3", "3 rounds + Last Laugh")],
@@ -108,6 +136,10 @@ class Punchline(SeatedGame):
             s["custom"].append({"id": "c" + "".join(random.choice("abcdefghjkmnpqrstuvwxyz23456789") for _ in range(8)),
                                 "text": text, "by": pid})
             return None
+        if action in ("pack_add", "pack_edit", "pack_remove"):
+            if not room.is_host(pid):
+                return f"Only the leader can change the {OWN_NAME} pack."
+            return self._edit_own(action, data)
         if action == "remove_prompt":
             c = next((c for c in s["custom"] if c["id"] == data.get("id")), None)
             if not c:
@@ -118,6 +150,44 @@ class Punchline(SeatedGame):
             return None
         return super().handle(room, pid, action, data)
 
+    def _edit_own(self, action, data):
+        own = load_own()
+        if action == "pack_add":                     # one prompt per line, so a whole list can be pasted in
+            lines = [clean(x, 200) for x in str(data.get("text") or "").splitlines()]
+            lines = [x for x in lines if len(x) >= 3]
+            if not lines:
+                return "Type a prompt first."
+            have = {re.sub(r"[^a-z0-9]", "", p["text"].lower()) for p in own}
+            added = 0
+            for text in lines:
+                k = re.sub(r"[^a-z0-9]", "", text.lower())
+                if k in have:
+                    continue
+                if len(own) >= MAX_OWN:
+                    break
+                have.add(k)
+                own.append({"id": "p" + "".join(random.choice("abcdefghjkmnpqrstuvwxyz23456789") for _ in range(10)),
+                            "text": text})
+                added += 1
+            if not added:
+                return "Those prompts are already in the pack." if len(own) < MAX_OWN else f"The pack is full ({MAX_OWN})."
+        else:
+            p = next((p for p in own if p["id"] == data.get("id")), None)
+            if not p:
+                return "That prompt isn't in the pack any more."
+            if action == "pack_remove":
+                own.remove(p)
+            else:
+                text = clean(data.get("text"), 200)
+                if len(text) < 3:
+                    return "Type the prompt first."
+                p["text"] = text
+        try:
+            save_own(own)
+        except OSError as e:
+            return f"Couldn't save the pack ({e.strerror or e})."
+        return None
+
     # ---- Game flow -------------------------------------------------------------------------
     def begin(self, room, s):
         packs = load_packs()
@@ -126,6 +196,8 @@ class Punchline(SeatedGame):
         if s["options"]["custom"] == "on":
             pool += [c["text"] for c in s["custom"]]
         if len(pool) < 2:
+            if pick == [OWN_KEY]:
+                return f"The {OWN_NAME} pack needs at least 2 prompts. Add some in the lobby first."
             return "There aren't enough prompts. Tick another pack or add some of your own."
         random.shuffle(pool)
         s.update({
@@ -481,7 +553,9 @@ class Punchline(SeatedGame):
         return out
 
     def game_view(self, room, s, pid):
+        own = load_own()
         out = {"packs": {k: p["name"] for k, p in load_packs().items()},
+               "own": own if room.is_host(pid) and not s["started"] else None, "ownCount": len(own),
                "custom": [{"id": c["id"], "text": c["text"], "mine": c["by"] == pid,
                            "by": self._name(room, c["by"])} for c in s.get("custom", [])]}
         if not s["started"]:

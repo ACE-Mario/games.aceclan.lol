@@ -38,7 +38,17 @@
           <button class="btn" type="submit">Add</button>
         </form>
         <p class="muted small">Tip: write <code>{player}</code> and it becomes someone's name in the game.</p>
-        <ul id="customList" class="custom-list"></ul>`;
+        <ul id="customList" class="custom-list"></ul>
+        <section class="own-pack">
+          <h3>ACE Custom pack</h3>
+          <p id="ownNote" class="muted small"></p>
+          <form id="ownForm" class="own-add" autocomplete="off" hidden>
+            <label class="sr" for="ownText">New prompts for the ACE Custom pack</label>
+            <textarea id="ownText" rows="3" maxlength="20000" placeholder="Type prompts here, one per line. Paste a whole list if you like."></textarea>
+            <button class="btn primary" type="submit">Add to pack</button>
+          </form>
+          <ul id="ownList" class="custom-list own-list"></ul>
+        </section>`;
       $("addForm").addEventListener("submit", e => {
         e.preventDefault();
         const text = $("addText").value.trim();
@@ -46,7 +56,16 @@
         send("add_prompt", { text });
         $("addText").value = "";
       });
+      $("ownForm").addEventListener("submit", e => {
+        e.preventDefault();
+        const text = $("ownText").value.trim();
+        if (!text) return;
+        send("pack_add", { text });
+        $("ownText").value = "";
+      });
+      ownKey = null;
     }
+    ownPack(s);
     const list = $("customList");
     list.innerHTML = "";
     const on = (s.options || {}).custom !== "off";
@@ -67,6 +86,47 @@
       list.appendChild(li);
     });
     if (s.custom.length && !on) list.insertAdjacentHTML("afterbegin", '<li class="muted">The leader has player prompts switched off for this game.</li>');
+  }
+
+  // The saved ACE Custom pack: the leader adds, edits and deletes prompts; it's kept for every game.
+  // Redrawn only when the pack changes, so an edit being typed isn't wiped by other updates.
+  let ownKey = null, editing = null;
+  function ownPack(s) {
+    const mine = Array.isArray(s.own);
+    const ticked = String((s.options || {}).pack || "").split(",").includes("own");
+    $("ownNote").textContent = mine
+      ? `Your own prompts, saved for every game (${s.ownCount}). Tick "ACE Custom" in the Leader box to play with them.${ticked ? " It's ticked." : ""}`
+      : `${s.ownCount} saved prompt${s.ownCount === 1 ? "" : "s"}${ticked ? ", in play this game" : ""}. The leader can add and edit them.`;
+    $("ownForm").hidden = !mine;
+    const key = mine ? JSON.stringify(s.own) + "|" + editing : "-";
+    if (key === ownKey) return;
+    ownKey = key;
+    const list = $("ownList");
+    list.innerHTML = "";
+    if (!mine) return;
+    if (!s.own.length) list.innerHTML = '<li class="muted">Nothing in the pack yet.</li>';
+    s.own.slice().reverse().forEach(p => {
+      const li = document.createElement("li");
+      if (editing === p.id) {
+        li.innerHTML = `<form class="own-edit" autocomplete="off"><input maxlength="200"><button class="btn primary" type="submit">Save</button><button class="link-btn" type="button">Cancel</button></form>`;
+        const input = li.querySelector("input");
+        input.value = p.text;
+        li.querySelector("form").addEventListener("submit", e => {
+          e.preventDefault();
+          editing = null;
+          send("pack_edit", { id: p.id, text: input.value });
+        });
+        li.querySelector(".link-btn").addEventListener("click", () => { editing = null; ownPack(state); });
+        list.appendChild(li);
+        setTimeout(() => input.focus(), 0);
+        return;
+      }
+      li.innerHTML = `<span class="ct"></span><button class="link-btn" type="button">Edit</button><button class="link-btn del" type="button">Delete</button>`;
+      li.querySelector(".ct").textContent = p.text;
+      li.querySelector(".link-btn").addEventListener("click", () => { editing = p.id; ownPack(state); });
+      li.querySelector(".del").addEventListener("click", () => send("pack_remove", { id: p.id }));
+      list.appendChild(li);
+    });
   }
 
   // ---- Writing ---------------------------------------------------------------------------------
@@ -356,7 +416,7 @@
         <li>Write the same thing as your opponent and it's a jinx: no points for either of you.</li>
         <li>The Last Laugh: one prompt for everybody. Vote for your favourite; each vote is 300 points. Most points wins.</li>
       </ol>
-      <p class="muted small">In the lobby anyone can add their own prompts; <code>{player}</code> in a prompt becomes someone's name. Built-in prompts live in <code>punchline/prompts.txt</code>.</p>`,
+      <p class="muted small">In the lobby anyone can add prompts for that room, and the leader can fill the <b>ACE Custom</b> pack, which is saved for every game; <code>{player}</code> in a prompt becomes someone's name. Built-in prompts live in <code>punchline/prompts.txt</code>.</p>`,
       render(s, a) {
         api = a;
         send = a.send;
@@ -377,6 +437,7 @@
       else if (cur) cur.n++;
     }
     const choices = packs.filter(p => p.n).map(p => [p.key, `${p.name} (${p.n})`]);
+    choices.push(["own", "ACE Custom (your saved prompts)"]);
     start(choices.length ? choices : [["league", "League of Legends"], ["valorant", "VALORANT"], ["clan", "Clan life"], ["everyday", "Everyday stuff"]]);
   });
 })();

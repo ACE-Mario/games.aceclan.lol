@@ -114,3 +114,19 @@
   .ans, .prompt-card { transition: none; }
   .ans.pop-in, .prompt-card.pop-in, .ans.win, .step, .st-clock.low { animation: none; }
 }
+
+/* The saved ACE Custom pack (lobby) */
+.own-pack { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+.own-pack h3 { margin: 0; font-size: 1.1rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold); }
+.own-pack p { margin: 0; }
+.own-add { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.own-add textarea {
+  width: 100%; resize: vertical; font: inherit; color: var(--text); background: var(--bg2);
+  border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px;
+}
+.own-add textarea:focus { border-color: var(--accent); outline: none; }
+.own-list { max-height: 340px; }
+.own-list li { align-items: center; }
+.own-list .del { color: var(--red); }
+.own-edit { display: flex; gap: 8px; flex: 1; align-items: center; flex-wrap: wrap; }
+.own-edit input { flex: 1 1 200px; min-width: 0; }

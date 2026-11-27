@@ -30,6 +30,9 @@ those come back).
   prompt to everybody. Players can add their own prompts in the lobby (`{player}` becomes someone's name).
   - `prompts.txt`: the built-in prompt packs (`[key] Name` starts a pack, one prompt per line). The server reads
     this file too; restart it after editing.
+  - The **ACE Custom** pack is the leader's own prompts, typed in on the site (lobby: add one per line, edit,
+    delete). It is saved on the PC in `server/saved/punchline/ace-custom.json` (not in git) and kept for every game;
+    tick "ACE Custom" in the Leader box to play with it.
 - `agents/`: Ace Agents, a two-team word game.
   - `index.html`: start screen, board, online panels and the one-screen key view.
   - `main.js`: picks the mode from the link (`?room=KQTZ` online, `?code=FALCON-42` one screen).
