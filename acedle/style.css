@@ -179,3 +179,5 @@
   .call-people li { grid-template-columns: 1.2em 24px minmax(60px, 1fr) 3em; }
   .call-people .strip { grid-column: 2 / -1; flex-wrap: wrap; }
 }
+.call-people .initial { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--purple, #7c3aed); font-weight: 700; font-size: .9rem; }

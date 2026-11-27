@@ -59,6 +59,15 @@ window.AceActivity = (() => {
   panel.innerHTML = `<h3>In this call <span class="call-state" id="callState">Signing in with Discord…</span></h3><ul class="call-people" id="callPeople"></ul><ul class="call-feed" id="callFeed"></ul>`;
   const place = () => { const top = document.querySelector(".acedle .top"); if (top && !panel.isConnected) top.after(panel); };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", place); else place();
+  // A profile picture that won't load (no /dcdn mapping) becomes the person's initial.
+  panel.addEventListener("error", e => {
+    const img = e.target;
+    if (img.tagName !== "IMG") return;
+    const s = document.createElement("span");
+    s.className = "initial";
+    s.textContent = (img.dataset.name || "?").trim().charAt(0).toUpperCase() || "?";
+    img.replaceWith(s);
+  }, true);
   const setState = t => { const el = document.getElementById("callState"); if (el) el.textContent = t; };
 
   function avatar(p) {
@@ -78,7 +87,7 @@ window.AceActivity = (() => {
         return `<i class="${cls}" title="${esc(tip)}">${st.icon}</i>`;
       }).join("");
       return `<li class="${p.id === me ? "me" : ""}${p.online ? "" : " away"}">
-        <span class="rank">${i + 1}</span><img src="${esc(avatar(p))}" alt="">
+        <span class="rank">${i + 1}</span><img src="${esc(avatar(p))}" alt="" data-name="${esc(p.name)}">
         <span class="who"><b>${esc(p.name)}</b>${p.done ? `<small>finished</small>` : p.online ? "" : `<small>left</small>`}</span>
         <span class="strip">${strip}</span><span class="pts">${p.total}</span></li>`;
     }).join("") || `<li class="muted">Nobody else yet. Others in the call can join from the rocket button.</li>`;
